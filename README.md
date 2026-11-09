@@ -53,6 +53,8 @@ npm run build
 
 Health check: `GET /health` returns `{"status":"ok"}`.
 
+Install the commit hook once: `uvx pre-commit install`.
+
 ## Docs
 
 - [Decisions](docs/decisions.md)
