@@ -55,5 +55,6 @@ Health check: `GET /health` returns `{"status":"ok"}`.
 
 ## Docs
 
+- [Decisions](docs/decisions.md)
 - [Architecture](docs/architecture.md)
 - [How docs are written](docs/conventions.md)
