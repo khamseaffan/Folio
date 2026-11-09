@@ -25,3 +25,4 @@
 - Use LLMs to interpret meaning in unstructured content such as email, resumes, and free text. Deterministic code may enforce identity, authorization, tenant scope, allowed IDs, schemas, idempotency, evidence provenance, state integrity, and persistence, but must not impose exact phrasing or transport-format assumptions or reinterpret content semantics.
 - Ground interpreted content in the current authorized source, tolerate presentation-only normalization, represent ambiguity explicitly, and isolate unsupported fields instead of rejecting an otherwise valid message.
 - `main` is protected. PR + squash-merge. CI is a merge gate.
+- Never add "Made with Cursor", "Made with Claude", or any LLM or harness attribution. Not in code, commits, pull requests, docs, or UI.
