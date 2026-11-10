@@ -5,6 +5,7 @@ About 25 people, with room for a few hundred. One region: `us-central1`.
 ```mermaid
 flowchart LR
   person[Person]
+  firebase["Firebase Authentication"]
   drive["Google Drive"]
   webapp["Next.js on Vercel"]
   api["Cloud Run API"]
@@ -18,6 +19,8 @@ flowchart LR
   publicweb["Public web"]
 
   person -->|HTTPS| webapp
+  person -->|sign in| firebase
+  webapp -->|sign in| firebase
   webapp -->|calls| api
   drive -->|"read-only import"| api
   api -->|"read and write"| sql
@@ -36,3 +39,4 @@ flowchart LR
 - Research may read the public web. A scheduled run may not.
 - A model key and a file prefix belong to one account.
 - Vercel hosts the web app. Google Cloud holds data, jobs, keys, and the API.
+- Firebase Authentication holds the sign-in. Postgres holds the account.

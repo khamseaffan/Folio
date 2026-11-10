@@ -68,7 +68,7 @@ Each model call writes the usage record in `docs/product/models.md`. Missing usa
 
 A `browser_submit` without a matching unused confirmation waits and does not send. Committed work stays.
 
-Deleting an account stops an in-flight run and removes waiting questions, unused confirmations, knowledge files, abilities, other files, the Drive token, and schedules. It does not remove the platform model keys.
+Deleting an account stops an in-flight run and removes the Firebase sign-in, waiting questions, unused confirmations, knowledge files, abilities, other files, the Drive token, and schedules. It does not remove the platform model keys.
 
 # Placement
 
@@ -125,7 +125,7 @@ flowchart LR
 - A provider failure on a queued run retries. A stopped account does not.
 - A cost entry records missing usage when the provider returns none.
 - A scheduled run may open a remembered ability. A `browser_submit` from that run still requires a confirmation of that exact submit.
-- Deleting the account removes the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, and the schedules. It does not remove the platform model keys.
+- Deleting the account removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, and the schedules. It does not remove the platform model keys.
 
 # Product rules
 

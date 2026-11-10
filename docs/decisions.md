@@ -38,7 +38,8 @@
 
 ## Data
 
-- Postgres is the source of truth. Reads and writes use the primary.
+- Postgres is the source of truth for the account and everything after sign-in. Reads and writes use the primary.
+- Firebase Authentication holds the sign-in.
 - The queue delivers at least once. The job id is the identity of the report or message.
 - A file is visible after the bytes are stored and the database row commits. Upload and task-file bytes are counted per account. Detail is in `docs/product/files.md`.
 - A report's text and its ready status commit together.
@@ -47,13 +48,13 @@
 ## Security
 
 - An account requires an invite.
-- Passwords use Argon2id. The session cookie is HttpOnly, Secure, and SameSite.
+- Firebase Authentication holds the sign-in. The account stores no password. Session rules are in `docs/product/access.md`.
 - Every row and file prefix has an owner.
 - Model keys and Drive refresh tokens are envelope-encrypted with Cloud KMS.
 - Secret Manager holds app secrets only.
 - Cloud SQL has a private IP.
 - Scheduler and Cloud Tasks call Cloud Run with Google identity tokens.
-- Deleting an account removes sessions, rows, files, keys, and schedules.
+- Deleting an account removes the Firebase sign-in, sessions, rows, files, keys, and schedules.
 
 ## Capacity
 

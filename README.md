@@ -18,6 +18,7 @@ Personal AI agent. Each invited person has a private account, their own model ke
 | Web | Next.js on Vercel |
 | API and worker | Python, FastAPI, Cloud Run |
 | Data | Cloud SQL for Postgres, Cloud Storage |
+| Sign-in | Firebase Authentication |
 | Jobs | Cloud Tasks, Cloud Scheduler |
 | Secrets | Cloud KMS for model keys. Secret Manager for app secrets. |
 | Infrastructure | Terraform, Google Cloud, `us-central1` |
