@@ -1,0 +1,62 @@
+# Sakana
+
+Personal AI agent. Each invited person has a private account, their own model key, and their own memory, files, research, and scheduled runs.
+
+## Product
+
+- Conversation with any connected model.
+- Deep research reports the person can leave and reopen.
+- Voice, file, and read-only Google Drive input.
+- Long-term memory used in later answers.
+- Scheduled runs that leave a message or a report in the app.
+- Accounts: create, log in, log out, delete.
+
+## Stack
+
+| Layer | Choice |
+| --- | --- |
+| Web | Next.js on Vercel |
+| API and worker | Python, FastAPI, Cloud Run |
+| Data | Cloud SQL for Postgres, Cloud Storage |
+| Jobs | Cloud Tasks, Cloud Scheduler |
+| Secrets | Cloud KMS for model keys. Secret Manager for app secrets. |
+| Infrastructure | Terraform, Google Cloud, `us-central1` |
+| CI | GitHub Actions |
+
+## Status
+
+| Present | Not built |
+| --- | --- |
+| API health check and tests | Accounts, chat, memory, research, files, schedules |
+| Web app shell | Google Cloud and Vercel deploy |
+
+## Run
+
+API, from `backend/`:
+
+```bash
+uv sync --all-groups
+uv run uvicorn app.main:app --reload
+uv run ruff check .
+uv run pytest
+```
+
+Web, from `frontend/`:
+
+```bash
+npm ci
+npm run dev
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Health check: `GET /health` returns `{"status":"ok"}`.
+
+Install the commit hook once: `uvx pre-commit install`.
+
+## Docs
+
+- [Decisions](docs/decisions.md)
+- [Architecture](docs/architecture.md)
+- [How docs are written](docs/conventions.md)

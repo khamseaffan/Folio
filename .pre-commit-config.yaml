@@ -1,0 +1,30 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff
+        args: ["--config=backend/pyproject.toml"]
+        files: ^backend/
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: uv run --directory backend pytest
+        language: system
+        pass_filenames: false
+        files: ^backend/
+
+      - id: frontend-lint
+        name: frontend lint
+        entry: npm run lint --prefix frontend
+        language: system
+        pass_filenames: false
+        files: ^frontend/
+
+      - id: frontend-typecheck
+        name: frontend typecheck
+        entry: npm run typecheck --prefix frontend
+        language: system
+        pass_filenames: false
+        files: ^frontend/
