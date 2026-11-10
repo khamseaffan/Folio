@@ -40,7 +40,7 @@
 
 - Postgres is the source of truth. Reads and writes use the primary.
 - The queue delivers at least once. The job id is the identity of the report or message.
-- A file is visible after the bytes are stored and the database row commits.
+- A file is visible after the bytes are stored and the database row commits. Upload and task-file bytes are counted per account. Detail is in `docs/product/files.md`.
 - A report's text and its ready status commit together.
 - Memory rows commit with the chat turn that created them.
 

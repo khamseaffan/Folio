@@ -127,7 +127,7 @@
       model: "The person's own provider key: OpenAI, Anthropic, Gemini, or an OpenAI-compatible endpoint. A short chat calls from the API. Research and scheduled runs call from the worker. Each call records cost. Missing usage is stored as missing.",
       publicWeb: "Read during research, and during a scheduled run when the task needs it. Sending still goes through browser_submit and a confirmation of that exact submit.",
       postgres: "Cloud SQL in us-central1, private IP, primary for reads and writes. This is the record of the account, the thread, the profile, the report, and the scheduled run. The tables and columns are not designed yet.",
-      files: "Cloud Storage. Bytes for one account live under that account's prefix. A file is visible only after the bytes are stored and the database row commits.",
+      files: "Cloud Storage. Bytes for one account live under that account's prefix. A file is visible only after the bytes are stored and the database row commits. Uploads and task files are counted, and the count stops at 5 GB. Knowledge files and Drive copies are outside that count.",
       keys: "Cloud KMS envelope-encrypts model keys and Drive refresh tokens. Secret Manager holds app secrets only. Deleting an account removes the keys with the rows, files, and schedules."
     };
 

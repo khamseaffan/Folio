@@ -48,7 +48,7 @@ The built-in tools are file read, file write, Drive-copy read, public web read, 
 
 The model opens a remembered ability when the task needs it. This build runs the built-in tools. It does not run model-written code.
 
-Knowledge files are specified in `docs/product/profile.md`. Abilities are specified in `docs/product/abilities.md`. Submit confirmations are specified in `docs/product/confirmations.md`.
+Knowledge files are specified in `docs/product/profile.md`. Abilities are specified in `docs/product/abilities.md`. Uploads and task files are specified in `docs/product/files.md`. Submit confirmations are specified in `docs/product/confirmations.md`.
 
 # Waiting
 
@@ -120,6 +120,7 @@ flowchart LR
 - A confirmation from another account, a missing confirmation, a used confirmation, and a confirmation whose site, field, value, or amount differs do not send.
 - A knowledge file is absent until its bytes and its ownership row commit.
 - A file is absent until its bytes and its row commit.
+- An upload over 50 MB is refused. A file that would make the account's upload and task-file count exceed 5 GB is refused. Knowledge files and Drive copies are outside that count.
 - A report is not ready until its text commits with its ready status.
 - A provider failure on a queued run retries. A stopped account does not.
 - A cost entry records missing usage when the provider returns none.
@@ -128,7 +129,7 @@ flowchart LR
 
 # Product rules
 
-Access is `docs/product/access.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 
