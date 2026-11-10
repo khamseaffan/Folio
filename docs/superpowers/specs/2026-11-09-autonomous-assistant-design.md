@@ -46,9 +46,9 @@ The reply, any file, and any report commit with the turn that created them. A kn
 
 The built-in tools are file read, file write, Drive-copy read, public web read, browser read, `browser_submit`, and knowledge search. Knowledge search matches words and opens at most five files. It does not return every file.
 
-The model does not receive every ability or every tool list. Code checks an ability's allowed tool names when a tool runs. This build does not run model-written code.
+The model opens a remembered ability when the task needs it. This build runs the built-in tools. It does not run model-written code.
 
-Knowledge files and abilities are specified in `docs/product/profile.md`. Submit confirmations are specified in `docs/product/confirmations.md`.
+Knowledge files are specified in `docs/product/profile.md`. Abilities are specified in `docs/product/abilities.md`. Submit confirmations are specified in `docs/product/confirmations.md`.
 
 # Waiting
 
@@ -68,7 +68,7 @@ Each model call writes the usage record in `docs/product/models.md`. Missing usa
 
 A `browser_submit` without a matching unused confirmation waits and does not send. Committed work stays.
 
-Deleting an account stops an in-flight run and removes waiting questions, unused confirmations, knowledge files, other files, the Drive token, and schedules. It does not remove the platform model keys.
+Deleting an account stops an in-flight run and removes waiting questions, unused confirmations, knowledge files, abilities, other files, the Drive token, and schedules. It does not remove the platform model keys.
 
 # Placement
 
@@ -123,11 +123,12 @@ flowchart LR
 - A report is not ready until its text commits with its ready status.
 - A provider failure on a queued run retries. A stopped account does not.
 - A cost entry records missing usage when the provider returns none.
-- Deleting the account removes the waiting run, unused confirmations, the knowledge files, the other files, the Drive token, and the schedules. It does not remove the platform model keys.
+- A scheduled run may open a remembered ability. A `browser_submit` from that run still requires a confirmation of that exact submit.
+- Deleting the account removes the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, and the schedules. It does not remove the platform model keys.
 
 # Product rules
 
-Access is `docs/product/access.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 

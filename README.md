@@ -64,6 +64,7 @@ Install the commit hook once: `uvx pre-commit install`.
 - [Models](docs/product/models.md)
 - [Conversations](docs/product/conversations.md)
 - [Profile](docs/product/profile.md)
+- [Abilities](docs/product/abilities.md)
 - [Submit confirmations](docs/product/confirmations.md)
 - [Later](docs/product/later.md)
 - [How docs are written](docs/conventions.md)

@@ -17,5 +17,3 @@ The person can open the files, read them, edit them, delete one fact, and delete
 When two facts disagree, the assistant says so and names which one it believes should go. It deletes one only after the person confirms.
 
 Deleting a thread does not delete these files.
-
-An ability is a Markdown file the model opens when it needs that ability. The file states what it does and which built-in tools it may use. Those tool names are not pasted into every call. Code checks the names when a tool runs. This build does not let the model write or run new code.
