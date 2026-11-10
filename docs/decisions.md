@@ -34,7 +34,7 @@
 
 - Voice is speech turned into a chat message.
 - A Drive import is read-only and private.
-- A Drive import is a copy from that moment. Later Drive edits wait for another import.
+- A Drive import is a copy from that moment. Later Drive edits wait for another import. Detail is in `docs/product/drive.md`.
 
 ## Data
 

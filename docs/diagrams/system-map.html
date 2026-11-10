@@ -118,7 +118,7 @@
     const copy = {
       person: "An invited account. Sign-in is Firebase Authentication, with Google or a magic link. The person types, or speaks and that speech becomes a message. Memory, files, Drive, research, and scheduled runs belong to this account and are not shared.",
       web: "Next.js on Vercel. It is the only surface the person uses. It calls the API. It does not hold the database, the files, or the keys.",
-      drive: "A read-only import. The copy is from that moment and is private. Later edits at the source wait for another import. The refresh token is envelope-encrypted.",
+      drive: "A read-only import of one file the person picks in Google's picker. The copy is from that moment and is private. Later edits at the source wait for another import. The refresh token is envelope-encrypted. Disconnecting removes the token and leaves the copies.",
       api: "Cloud Run. A short chat turn runs here: it reads the profile and this account's files, calls the model, and returns the reply. Browser work, a long web read, and research are enqueued instead.",
       scheduler: "Cloud Scheduler. When a scheduled run is due, it enqueues one queue task. The run then uses the same loop as any other turn.",
       queue: "Cloud Tasks. Delivery is at least once. The run id is the identity of the report or the waiting question. A second delivery does not ask again and does not repeat a finished action.",
