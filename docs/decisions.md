@@ -10,25 +10,24 @@
 
 ## People
 
-- Access is invite-only.
+- Access is invite-only. The allowlist, sign-in, and sessions are in `docs/access.md`.
 - Each invited person has a private account.
 - Memory, files, Drive, research, and scheduled runs are not shared across accounts.
 
 ## Models
 
-- Each person brings their own provider key and pays that provider.
-- Built-in clients: OpenAI, Anthropic, Gemini.
-- Any OpenAI-compatible endpoint is allowed.
-- A model with another protocol gets its own client.
+- The platform holds the provider keys.
+- The current model is Gemini. The person cannot change it.
+- The call goes through one internal interface. Detail is in `docs/models.md`.
 
 ## Harness
 
 - The loop is project code in the API and the worker.
 - OpenClaw, Hermes, and an agent framework are not the core.
-- Chat runs in the API request. It reads memory and the current thread.
+- Chat runs in the API request. It reads `profile.md`, the thread window, and files it looks up.
 - Research runs on the worker. It may read that person's files and the public web, then writes one report.
 - A scheduled run uses the same worker. It may read memory and files, then writes a message or a report.
-- A scheduled run does not send email, write to Drive, or open the web.
+- A scheduled run does not send email or write to Drive. It may open the web when the task needs it and the guard allows the action.
 
 ## Inputs
 

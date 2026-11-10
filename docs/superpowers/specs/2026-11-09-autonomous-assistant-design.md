@@ -8,7 +8,7 @@ Chat, deep research, voice, files, Drive import, and scheduled runs remain requi
 
 A direct request starts the work. The assistant does not ask permission for the task the person just requested.
 
-The assistant asks when a missing answer would change the result. The stored answer is a short declarative form of what the person said. It keeps the substance and drops the rest. Code writes that answer in the turn where the person confirmed it.
+The assistant asks when a missing answer would change the result. The stored fact is a short declarative form of what the person said. It keeps the substance and drops the rest. The assistant writes it into the fitting knowledge file without asking.
 
 A later gap reuses the stored answer, rewrites it for the new situation, or returns to the person because the situation changed. When reuse is uncertain, the assistant shows a draft and asks whether to keep it or regenerate it.
 
@@ -22,7 +22,7 @@ The assistant does the requested work. It speaks in short sentences. It asks one
 
 It does not perform a character, a mood, or a specialty.
 
-The voice stays fixed as the profile grows. Manner and working preferences are stored when the person states them. Those preferences are included in every model call. Other answers are not.
+The voice stays fixed as the profile grows. Manner and working preferences live in `profile.md` and are included in every model call. Other knowledge files are not.
 
 # Guard
 
@@ -38,37 +38,19 @@ A grant row stores the kind in the person's words, whether it is active, and whe
 
 Chat, research, and scheduled runs use one loop.
 
-The loop loads the profile and the task, then calls the account's model. Code checks the guard before a tool runs. A missing fact is taken from the profile or asked. Tool results return to the model. The loop repeats until the task is done or it is waiting on the person.
+The loop loads `profile.md` and the task, then calls the platform model. Code checks the guard before a tool runs. A missing fact is looked up or asked. Tool results return to the model. The loop repeats until the task is done or it is waiting on the person.
 
-The model decides whether a stored answer still fits. Code decides whether a tool may run.
+The model decides whether a stored fact still fits. Code decides whether a tool may run.
 
-The reply, any file, any report, and any new profile row commit with the turn that created them.
+The reply, any file, and any report commit with the turn that created them. A knowledge file is visible after its bytes are stored and its ownership row commits.
 
 # Tools
 
-The built-in tools are file read, file write, Drive-copy read, public web read, browser read, `browser_submit`, and answer lookup. Answer lookup searches and opens the answer files the task needs. It does not return every answer.
+The built-in tools are file read, file write, Drive-copy read, public web read, browser read, `browser_submit`, and knowledge search. Knowledge search matches words and opens at most five files. It does not return every file.
 
-The model does not write the profile. Code writes an answer, a grant, or an ability in the turn where the person confirmed it.
+The model does not receive every ability or every tool list. Code checks an ability's allowed tool names when a tool runs. This build does not run model-written code.
 
-An ability stores what it does, how it works, and which built-in tools it may use. It exists after the person confirms it. The same loop calls it. It runs no private code.
-
-# Profile
-
-The product language is English.
-
-There is no cap on how many answers an account may keep.
-
-Each answer is one text file for that account. The words live in the file. A database row records the owner and that the file exists, so the person can list, edit, and delete one answer, and so one account cannot read another's file. Deleting a thread does not delete these files.
-
-The model is not given every answer. It looks up the files the task needs. Manner and working preferences are the exception: that file is included in every model call.
-
-The person can open the profile, read what is stored, edit an answer by hand, and delete any answer.
-
-When two answers disagree, the assistant tells the person and says which one it believes should go. It deletes an answer only after the person confirms. The person may name the old one, the new one, or confirm the assistant's choice.
-
-A grant is a database row. It stores the sensitive kind, its active state, and the time of the change.
-
-An ability stores the confirmed definition.
+Knowledge files, grants, and abilities are specified in `docs/profile.md`.
 
 # Waiting
 
@@ -88,7 +70,7 @@ Each model call writes a cost entry naming the account, the feature (`chat`, `re
 
 On the next tool check, an inactive grant stops the run and leaves the question. Committed work stays.
 
-Deleting an account stops an in-flight run and removes waiting questions, profile rows, files, keys, and schedules.
+Deleting an account stops an in-flight run and removes waiting questions, knowledge files, other files, the Drive token, and schedules. It does not remove the platform model keys.
 
 # Placement
 
@@ -139,54 +121,16 @@ flowchart LR
 - A sensitive tool runs only for an active grant id owned by that account.
 - Another account's grant, a missing grant, and a revoked grant do not run the tool.
 - `browser_submit` without a cited grant does not send.
-- An answer row exists only after the confirming turn commits.
+- A knowledge file is absent until its bytes and its ownership row commit.
 - A file is absent until its bytes and its row commit.
 - A report is not ready until its text commits with its ready status.
 - A provider failure on a queued run retries. A stopped account does not.
 - A cost entry records missing usage when the provider returns none.
-- Deleting the account removes the waiting run, the profile, the files, the keys, and the schedules.
+- Deleting the account removes the waiting run, the knowledge files, the other files, the Drive token, and the schedules. It does not remove the platform model keys.
 
-# Model keys
+# Product rules
 
-The platform owns the provider keys. A person does not bring a key, store a key, or replace a key.
-
-The platform has one default model. Chat, research, and scheduled runs use that model. The person cannot change it.
-
-Every model call writes a usage record for that account. An internal tool can read that usage and stop an account. A stopped account cannot start a chat turn, a research run, or a scheduled run.
-
-# Access
-
-An account requires an email address. One email holds one account.
-
-An account can be created only for one named address the owner supplies, or for an address at `sakana.ai`.
-
-Any account may create an invite. An invite is one person and one use. It expires after one week. It can be revoked before use.
-
-The person signs in with Google or a magic link. The email is verified by that sign-in. The account stores no password.
-
-The person sets a display name.
-
-A session ends after 30 minutes of inactivity. An account may have two sessions at once. The person can see those sessions and end one.
-
-Accounts are personal. There is no admin who can open another account's data.
-
-# Conversations
-
-An account has many threads. The person can create a thread, name it, rename it, and delete it.
-
-Deleting a thread does not delete profile answers.
-
-A chat reply is streamed as tokens arrive. The person can stop a turn while it is streaming. The provider call stops. The partial reply is kept.
-
-A thread has one summary. When the thread is summarized again, the new summary replaces the old one. The new summary is written from the old summary plus the turns being folded in.
-
-The model receives the summary and the latest 20 messages in full. Older messages stay in the thread and are not sent again in full.
-
-# Later
-
-One account may later have several named bots. That is not part of this build. One email still holds one account.
-
-Thread search, a limit on the length of one message, and editing an earlier message are not part of this build.
+Access is `docs/access.md`. Models and usage are `docs/models.md`. Threads are `docs/conversations.md`. Knowledge files are `docs/profile.md`. Later work is `docs/later.md`.
 
 # Decision updates
 
