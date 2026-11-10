@@ -26,13 +26,11 @@ The voice stays fixed as the profile grows. Manner and working preferences live 
 
 # Guard
 
-The assistant does not take a financial action, cause physical harm, or disclose PII or PHI unless that kind is allowed on the profile.
+A public page read, a file read, a file write inside the account, and a Drive-copy read run without a confirmation.
 
-An allow lasts until the person revokes it. One kind does not allow another kind.
+`browser_submit` is the only tool that sends data. It runs only for a confirmation of that exact submit. The card, the match, and the record are in `docs/product/confirmations.md`.
 
-A grant row stores the kind in the person's words, whether it is active, and when it changed. The model cites a grant by id. Code runs the sensitive call only when that id exists, belongs to this account, and is active. Code does not decide that two situations are the same kind.
-
-`browser_submit` is the only tool that sends data. It is a sensitive call. A public page read, a file read, a file write inside the account, and a Drive-copy read are not. There is no tool that moves money or touches the physical world except through `browser_submit`. With no cited grant, the run asks and does not send. A task that would cause physical harm stops and asks.
+A task that would cause physical harm stops and asks.
 
 # Loop
 
@@ -50,7 +48,7 @@ The built-in tools are file read, file write, Drive-copy read, public web read, 
 
 The model does not receive every ability or every tool list. Code checks an ability's allowed tool names when a tool runs. This build does not run model-written code.
 
-Knowledge files, grants, and abilities are specified in `docs/product/profile.md`.
+Knowledge files and abilities are specified in `docs/product/profile.md`. Submit confirmations are specified in `docs/product/confirmations.md`.
 
 # Waiting
 
@@ -68,9 +66,9 @@ A down provider is retried on a queued run. In chat, the person sees a short fai
 
 Each model call writes the usage record in `docs/product/models.md`. Missing usage is stored as missing.
 
-On the next tool check, an inactive grant stops the run and leaves the question. Committed work stays.
+A `browser_submit` without a matching unused confirmation waits and does not send. Committed work stays.
 
-Deleting an account stops an in-flight run and removes waiting questions, knowledge files, other files, the Drive token, and schedules. It does not remove the platform model keys.
+Deleting an account stops an in-flight run and removes waiting questions, unused confirmations, knowledge files, other files, the Drive token, and schedules. It does not remove the platform model keys.
 
 # Placement
 
@@ -118,23 +116,22 @@ flowchart LR
 - The system prompt states the habit, the guard, and the steady voice, and names no task domain and no biography.
 - A direct request creates no permission question.
 - A missing fact creates one question. A second delivery of the same run creates no second question.
-- A sensitive tool runs only for an active grant id owned by that account.
-- Another account's grant, a missing grant, and a revoked grant do not run the tool.
-- `browser_submit` without a cited grant does not send.
+- `browser_submit` runs only when an unused confirmation for this account matches the site and the fields.
+- A confirmation from another account, a missing confirmation, a used confirmation, and a confirmation whose site, field, value, or amount differs do not send.
 - A knowledge file is absent until its bytes and its ownership row commit.
 - A file is absent until its bytes and its row commit.
 - A report is not ready until its text commits with its ready status.
 - A provider failure on a queued run retries. A stopped account does not.
 - A cost entry records missing usage when the provider returns none.
-- Deleting the account removes the waiting run, the knowledge files, the other files, the Drive token, and the schedules. It does not remove the platform model keys.
+- Deleting the account removes the waiting run, unused confirmations, the knowledge files, the other files, the Drive token, and the schedules. It does not remove the platform model keys.
 
 # Product rules
 
-Access is `docs/product/access.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 
-A scheduled run may use the public web and the browser when the task needs them and the guard allows the action.
+A scheduled run may use the public web and the browser when the task needs them. A browser submit still requires a confirmation of that exact submit.
 
 A chat turn may read the profile and this account's files, and may enqueue the worker for browser, web, and research work.
 

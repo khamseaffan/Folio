@@ -18,6 +18,4 @@ When two facts disagree, the assistant says so and names which one it believes s
 
 Deleting a thread does not delete these files.
 
-A grant is a database row: the kind in the person's words, whether it is active, and when it changed. The model cites a grant by id. Code allows the sensitive call only when that id exists, belongs to this account, and is active.
-
 An ability is a Markdown file the model opens when it needs that ability. The file states what it does and which built-in tools it may use. Those tool names are not pasted into every call. Code checks the names when a tool runs. This build does not let the model write or run new code.

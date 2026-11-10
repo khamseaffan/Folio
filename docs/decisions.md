@@ -27,7 +27,7 @@
 - Chat runs in the API request. It reads `profile.md`, the thread window, and files it looks up.
 - Research runs on the worker. It may read that person's files and the public web, then writes one report.
 - A scheduled run uses the same worker. It may read memory and files, then writes a message or a report.
-- A scheduled run does not send email or write to Drive. It may open the web when the task needs it and the guard allows the action.
+- A scheduled run does not send email or write to Drive. It may open the web when the task needs it. A browser submit runs only for a confirmation of that exact submit. Detail is in `docs/product/confirmations.md`.
 
 ## Inputs
 
