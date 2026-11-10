@@ -10,7 +10,7 @@
 
 ## People
 
-- Access is invite-only. The allowlist, sign-in, and sessions are in `docs/access.md`.
+- Access is invite-only. The allowlist, sign-in, and sessions are in `docs/product/access.md`.
 - Each invited person has a private account.
 - Memory, files, Drive, research, and scheduled runs are not shared across accounts.
 
@@ -18,7 +18,7 @@
 
 - The platform holds the provider keys.
 - The current model is Gemini. The person cannot change it.
-- The call goes through one internal interface. Detail is in `docs/models.md`.
+- The call goes through one internal interface. Detail is in `docs/product/models.md`.
 
 ## Harness
 

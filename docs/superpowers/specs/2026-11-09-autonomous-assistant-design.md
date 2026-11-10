@@ -50,7 +50,7 @@ The built-in tools are file read, file write, Drive-copy read, public web read, 
 
 The model does not receive every ability or every tool list. Code checks an ability's allowed tool names when a tool runs. This build does not run model-written code.
 
-Knowledge files, grants, and abilities are specified in `docs/profile.md`.
+Knowledge files, grants, and abilities are specified in `docs/product/profile.md`.
 
 # Waiting
 
@@ -66,7 +66,7 @@ If a browser action may already have completed, the run waits and tells the pers
 
 A down provider is retried on a queued run. In chat, the person sees a short failure and can send again. A stopped account is not retried.
 
-Each model call writes the usage record in `docs/models.md`. Missing usage is stored as missing.
+Each model call writes the usage record in `docs/product/models.md`. Missing usage is stored as missing.
 
 On the next tool check, an inactive grant stops the run and leaves the question. Committed work stays.
 
@@ -130,7 +130,7 @@ flowchart LR
 
 # Product rules
 
-Access is `docs/access.md`. Models and usage are `docs/models.md`. Threads are `docs/conversations.md`. Knowledge files are `docs/profile.md`. Later work is `docs/later.md`.
+Access is `docs/product/access.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 

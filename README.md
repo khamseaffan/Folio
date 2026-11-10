@@ -59,4 +59,10 @@ Install the commit hook once: `uvx pre-commit install`.
 
 - [Decisions](docs/decisions.md)
 - [Architecture](docs/architecture.md)
+- [System map](docs/diagrams/system-map.html)
+- [Access](docs/product/access.md)
+- [Models](docs/product/models.md)
+- [Conversations](docs/product/conversations.md)
+- [Profile](docs/product/profile.md)
+- [Later](docs/product/later.md)
 - [How docs are written](docs/conventions.md)
