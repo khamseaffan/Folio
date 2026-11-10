@@ -66,7 +66,7 @@ If a browser action may already have completed, the run waits and tells the pers
 
 A down provider is retried on a queued run. In chat, the person sees a short failure and can send again. A stopped account is not retried.
 
-Each model call writes a cost entry naming the account, the feature (`chat`, `research`, or `schedule`), the operation (`model_call`), the provider, and the model. Missing usage is stored as missing.
+Each model call writes the usage record in `docs/models.md`. Missing usage is stored as missing.
 
 On the next tool check, an inactive grant stops the run and leaves the question. Committed work stays.
 
