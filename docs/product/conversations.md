@@ -2,11 +2,11 @@
 
 An account has many threads. A new thread is named "New thread". The person tells the agent to rename a thread or to delete it, and the agent does so.
 
-A message block is one Enter from the person, or one reply from the assistant. Several Enters before a reply are several person blocks.
+A message block is one Enter from the person, or one reply from the assistant. Several Enters before a reply are several person blocks. A message has no length limit.
 
-The model is sent the thread summary, when one exists, plus the latest 10 person blocks and the latest 10 assistant blocks.
+One call is sent the system prompt, `profile.md`, the thread summary when one exists, and as many of the newest blocks as fit in that call. The latest 10 person blocks and the latest 10 assistant blocks are included.
 
-The first summary is written when the thread reaches 80 message blocks. It covers the blocks older than that window. A later summary replaces the earlier one and is written from the earlier summary plus the blocks being folded in. Until the first summary exists, blocks outside the window are stored and are not sent.
+Blocks that do not fit stay stored. They are folded into the summary before the call. A later summary replaces the earlier one and is written from the earlier summary plus the blocks being folded in. The person is not told a message is too long.
 
 The person cannot see or edit the summary.
 
