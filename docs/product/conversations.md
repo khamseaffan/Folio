@@ -14,4 +14,4 @@ Deleting a thread removes its message blocks, its summary, its name, and its sch
 
 A reply is streamed as tokens arrive. The person can stop a turn while it is streaming. The provider call stops. The partial reply is kept. Ending a session does not stop that call.
 
-The thread name shows a status mark while a run is working or waiting. A waiting question appears in that thread. Inside the thread the person sees the assistant's messages.
+The thread name shows a status mark while a run is working or waiting. A waiting question appears in that thread. Inside the thread the person sees the assistant's messages. A failed run leaves one line in that thread, that the run failed. Detail is in `docs/product/failure.md`.

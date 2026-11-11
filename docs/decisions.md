@@ -44,7 +44,7 @@
 
 - Postgres is the source of truth for the account and everything after sign-in. Reads and writes use the primary.
 - Firebase Authentication holds the sign-in.
-- The queue delivers at least once. The job id is the identity of the report or message.
+- The queue delivers at least once. The job id is the identity of the report or message. A queued run retries a dead provider three times after the first attempt, then the failed run stays on a dead letter queue. Detail is in `docs/product/failure.md`.
 - A file is visible after the bytes are stored and the database row commits. Upload and task-file bytes are counted per account. Detail is in `docs/product/files.md`.
 - A report's text, its source list, and its ready status commit together.
 - Memory rows commit with the chat turn that created them.
@@ -58,7 +58,7 @@
 - Secret Manager holds app secrets only.
 - Cloud SQL has a private IP.
 - Scheduler and Cloud Tasks call Cloud Run with Google identity tokens.
-- Deleting an account removes the Firebase sign-in, sessions, rows, files, the Drive token, browser cookies, and schedules. It does not remove the platform model keys.
+- Deleting an account is immediate and cannot be restored. It removes the Firebase sign-in, sessions, rows, files, the Drive token, browser cookies, and schedules. It does not remove the platform model keys.
 
 ## Capacity
 
@@ -66,6 +66,7 @@
 - One region, `us-central1`. Cloud SQL regional failover is for outage, not for reads.
 - A second live region is out of scope.
 - If the database primary is lost: minutes of data loss, minutes to fail over.
+- While Postgres is unavailable, the app stops and shows that the system is down.
 
 ## Hand-in
 

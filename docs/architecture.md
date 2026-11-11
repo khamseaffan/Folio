@@ -29,13 +29,14 @@ flowchart LR
   api -->|enqueue| tasks
   scheduler -->|"when due"| tasks
   tasks -->|retry| worker
+  tasks -->|after three retries| dead["Dead letter queue"]
   worker -->|model| model
   worker -->|"when the task needs it"| publicweb
   worker -->|"save result"| sql
 ```
 
 - Chat returns on the API request.
-- Research and scheduled runs go through the queue.
+- Research and scheduled runs go through the queue. A dead provider is retried three times after the first attempt. The failed run then stays on the dead letter queue.
 - Research and a scheduled run may read the public web when the task needs it.
 - A file prefix belongs to one account. The platform holds the model keys.
 - Vercel hosts the web app. Google Cloud holds data, jobs, keys, and the API.

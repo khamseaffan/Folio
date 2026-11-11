@@ -16,6 +16,6 @@ A session ends after 30 minutes in which the person sends nothing and the assist
 
 Ending a session does not stop a running reply. The reply continues on the server. Another browser, or a refresh, shows the stream still running or the finished reply.
 
-Deleting the account removes the Firebase sign-in.
+Deleting the account is immediate and cannot be restored. It removes the Firebase sign-in. Detail is in `docs/product/failure.md`.
 
 Accounts are personal. `khamseaffan@gmail.com` can open the usage tool, raise one account's token cap, and stop an account. That account cannot read another account's threads, files, or knowledge.

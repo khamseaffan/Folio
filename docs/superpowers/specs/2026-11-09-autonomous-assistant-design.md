@@ -60,15 +60,17 @@ On a queued run, the run is marked waiting and the question is left in the app. 
 
 A file is visible after its bytes are stored and its row commits. A report is ready when its text, its source list, and its ready status commit together. A failed attempt leaves the last ready result in place. Cancelling a research run discards the partial text.
 
-If a browser action may already have completed, the run waits and tells the person. It does not repeat that action.
+If a browser action may already have completed, the run tells the person in the thread and does not repeat that action. When nothing was sent, the agent decides the next step, and it can ask the person whether to try again.
 
-A down provider is retried on a queued run. In chat, the person sees a short failure and can send again. A stopped account is not retried.
+A down provider is retried three times after the first attempt on a queued run. The failed run then stays on a dead letter queue for developers. In the thread, the person sees one line that the run failed. A stopped account is not retried.
+
+When Postgres is unavailable, the app stops and shows that the system is down.
 
 Each model call writes the usage record in `docs/product/models.md`. Missing usage is stored as missing. An account stops when its recorded total tokens reach its cap. The default cap is 10 million.
 
 A send on a website without a matching unused confirmation waits and does not send. Committed work stays.
 
-Deleting an account stops an in-flight run and removes the Firebase sign-in, waiting questions, unused confirmations, knowledge files, abilities, other files, the Drive token, browser cookies, and schedules. It does not remove the platform model keys.
+Deleting an account is immediate and cannot be restored. It stops an in-flight run and removes the Firebase sign-in, waiting questions, unused confirmations, knowledge files, abilities, other files, the Drive token, browser cookies, and schedules. It does not remove the platform model keys.
 
 # Placement
 
@@ -123,15 +125,15 @@ flowchart LR
 - An upload over 50 MB is refused. A file that would make the account's upload and task-file count exceed 5 GB is refused. Knowledge files and Drive copies are outside that count.
 - A report is not ready until its text and its source list commit with its ready status.
 - A research run opens at most 20 sources and stops after 30 minutes of work. Waiting on the person does not count. Cancelling discards the partial text and leaves the last ready report.
-- A provider failure on a queued run retries. A stopped account does not.
+- A provider failure on a queued run retries three times after the first attempt. The failed run then stays on a dead letter queue. A stopped account does not retry. The person sees one line in the thread that the run failed.
 - A cost entry records missing usage when the provider returns none. That record adds nothing to the token cap. The default cap is 10 million recorded total tokens, and it can be raised for one account.
 - A scheduled run may open a remembered ability. A send on a website from that run still requires the person to confirm that exact send.
 - Deleting a thread deletes its schedules. A schedule has no count cap. When a scheduled run is waiting on the person, the next occurrence is skipped.
-- Deleting the account removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, browser cookies, and the schedules. It does not remove the platform model keys.
+- Deleting the account is immediate and cannot be restored. It removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, browser cookies, and the schedules. It does not remove the platform model keys.
 
 # Product rules
 
-Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Screens are `docs/product/screens.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. The browser is `docs/product/browser.md`. Voice is `docs/product/voice.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Screens are `docs/product/screens.md`. Failure is `docs/product/failure.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. The browser is `docs/product/browser.md`. Voice is `docs/product/voice.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 
