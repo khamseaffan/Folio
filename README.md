@@ -65,6 +65,7 @@ Install the commit hook once: `uvx pre-commit install`.
 - [Control](docs/product/control.md)
 - [Screens](docs/product/screens.md)
 - [Failure](docs/product/failure.md)
+- [Records](docs/product/records.md)
 - [Models](docs/product/models.md)
 - [Conversations](docs/product/conversations.md)
 - [Profile](docs/product/profile.md)

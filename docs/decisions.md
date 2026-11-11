@@ -42,9 +42,9 @@
 
 ## Data
 
-- Postgres is the source of truth for the account and everything after sign-in. Reads and writes use the primary.
+- Postgres is the source of truth for the account and everything after sign-in. Reads and writes use the primary. The record rules are in `docs/product/records.md`.
 - Firebase Authentication holds the sign-in.
-- The queue delivers at least once. The job id is the identity of the report or message. A queued run retries a dead provider three times after the first attempt, then the failed run stays on a dead letter queue. Detail is in `docs/product/failure.md`.
+- The queue delivers at least once. A queued run is its own row, and its id is the job id. The report or the message points at that run. A queued run retries a dead provider three times after the first attempt, then the failed run stays on a dead letter queue. Detail is in `docs/product/records.md` and `docs/product/failure.md`.
 - A file is visible after the bytes are stored and the database row commits. Upload and task-file bytes are counted per account. Detail is in `docs/product/files.md`.
 - A report's text, its source list, and its ready status commit together.
 - Memory rows commit with the chat turn that created them.

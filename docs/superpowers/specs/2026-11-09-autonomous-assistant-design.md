@@ -54,7 +54,7 @@ Knowledge files are specified in `docs/product/profile.md`. Abilities are specif
 
 In chat, the question is that turn's reply. The task stays open on the thread. The person's answer continues the same task.
 
-On a queued run, the run is marked waiting and the question is left in the app. The run id is unchanged. A second delivery does not ask again and does not run the tool again. The run resumes when the person answers that question.
+On a queued run, the run is its own row and is marked waiting, and the question is left in the app. The run id is unchanged. The report or the message points at that run. A second delivery does not ask again and does not run the tool again. The run resumes when the person answers that question.
 
 # Failure
 
@@ -133,7 +133,7 @@ flowchart LR
 
 # Product rules
 
-Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Screens are `docs/product/screens.md`. Failure is `docs/product/failure.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. The browser is `docs/product/browser.md`. Voice is `docs/product/voice.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Screens are `docs/product/screens.md`. Failure is `docs/product/failure.md`. Records are `docs/product/records.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. The browser is `docs/product/browser.md`. Voice is `docs/product/voice.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 
