@@ -6,7 +6,7 @@ Plain text is read as text, a spreadsheet as cells, a PDF as a document, and an 
 
 The assistant writes a task file when the person's task needs that file as its result. A reply that stays in the thread writes no task file. Knowledge files are specified in `docs/product/profile.md`.
 
-The person can download one uploaded file or one task file, and can delete one of them. Deleting a file leaves the messages that mentioned it.
+The person can download one uploaded file or one task file. The person tells the agent to delete one, and the agent deletes it. Deleting a file leaves the messages that mentioned it.
 
 An upload is a file after its bytes are stored and its ownership row commits. An unfinished upload is discarded after 24 hours.
 

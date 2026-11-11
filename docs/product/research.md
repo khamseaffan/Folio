@@ -1,8 +1,8 @@
 # Research
 
-Research starts when the person asks for a report in the thread, or when a schedule the person already confirmed writes a report.
+Research starts when the person asks for a report in the thread, or when a schedule the person told the agent to run writes a report.
 
-The person can name a report and rename it later. One account can keep several reports. Each run writes one report. The person can delete one report. Other files, threads, and Drive copies stay.
+The person tells the agent to name, rename, or delete a report, and the agent does so. One account can keep several reports. Each run writes one report. Deleting a report leaves other files, threads, and Drive copies.
 
 A run may read the account's files, Drive copies, and the public web. It may open at most 20 sources, then it writes the report from those sources. It may work for at most 30 minutes, then it writes the report from what it has. Time spent waiting on the person does not count.
 
@@ -12,4 +12,4 @@ Research reads. A send on a website still requires the confirmation in `docs/pro
 
 When an answer is missing, the run waits and the question stays in the app.
 
-The person can cancel a run while it is running or waiting. Cancelling discards the partial text. The last ready report stays when one already exists.
+The person tells the agent to cancel a run while it is running or waiting, and the agent cancels it. Cancelling discards the partial text. The last ready report stays when one already exists.

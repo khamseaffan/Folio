@@ -125,12 +125,12 @@ flowchart LR
 - A research run opens at most 20 sources and stops after 30 minutes of work. Waiting on the person does not count. Cancelling discards the partial text and leaves the last ready report.
 - A provider failure on a queued run retries. A stopped account does not.
 - A cost entry records missing usage when the provider returns none.
-- A scheduled run may open a remembered ability. A `browser_submit` from that run still requires a confirmation of that exact submit.
+- A scheduled run may open a remembered ability. A send on a website from that run still requires the person to confirm that exact send.
 - Deleting the account removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, and the schedules. It does not remove the platform model keys.
 
 # Product rules
 
-Access is `docs/product/access.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 

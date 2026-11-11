@@ -1,6 +1,6 @@
 # Conversations
 
-An account has many threads. A new thread is named "New thread". The person can rename it and delete it.
+An account has many threads. A new thread is named "New thread". The person tells the agent to rename a thread or to delete it, and the agent does so.
 
 A message block is one Enter from the person, or one reply from the assistant. Several Enters before a reply are several person blocks.
 

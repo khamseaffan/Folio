@@ -12,6 +12,7 @@
 
 - Access is invite-only. The allowlist, sign-in, and sessions are in `docs/product/access.md`.
 - Each invited person has a private account.
+- The person changes product records by telling the agent in the chat. The direct controls are in `docs/product/control.md`.
 - Memory, files, Drive, research, and scheduled runs are not shared across accounts.
 
 ## Models
@@ -28,7 +29,7 @@
 - An ability is a way of working the agent remembers for that account. Detail is in `docs/product/abilities.md`.
 - Research runs on the worker and writes one report. Detail is in `docs/product/research.md`.
 - A scheduled run uses the same worker. It may read memory and files, then writes a message or a report.
-- A scheduled run does not send email or write to Drive. It may open the web when the task needs it. A browser submit runs only for a confirmation of that exact submit. Detail is in `docs/product/confirmations.md`.
+- A scheduled run does not send email or write to Drive. It may open the web when the task needs it. A send on a website runs only after the person confirms that exact send. Detail is in `docs/product/confirmations.md`.
 
 ## Inputs
 
