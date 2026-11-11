@@ -118,7 +118,7 @@ flowchart LR
 - The system prompt states the habit, the guard, and the steady voice, and names no task domain and no biography.
 - A direct request creates no permission question.
 - A missing fact creates one question. A second delivery of the same run creates no second question.
-- `browser_submit` runs only when an unused confirmation for this account matches the site and the fields.
+- `browser_submit` runs only when an unused confirmation for this account matches the site and the fields. The card expires 24 hours after it appears. An expired card does not send.
 - A confirmation from another account, a missing confirmation, a used confirmation, and a confirmation whose site, field, value, or amount differs do not send.
 - A knowledge file is absent until its bytes and its ownership row commit.
 - A file is absent until its bytes and its row commit.

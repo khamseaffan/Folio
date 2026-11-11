@@ -24,7 +24,7 @@
 20. Uploads and task files stop at 5 GB, and knowledge files and Drive copies sit outside that count.
 21. The assistant writes the file the task needs, as Markdown, PDF, or another type, and the person can download it.
 22. A Drive import is one file the person picks, stored as a private read-only copy.
-23. Chrome on the worker reads pages, and a send on a website runs only after the person confirms that exact send.
+23. Chrome on the worker reads pages, and a send on a website runs only after the person confirms that exact send. The card expires 24 hours after it appears.
 24. Speech is transcribed by Gemini into the composer, and the audio is discarded.
 25. The person sees token totals and the file byte count, and the account stops at 10 million recorded tokens unless that cap is raised.
 26. Day one has chat, reports, files, a profile panel, and settings, and the interface is English.
