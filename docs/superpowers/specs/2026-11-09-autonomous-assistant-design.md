@@ -1,14 +1,14 @@
 # Autonomous assistant
 
-Each invited account has an assistant. The person asks for a task. The assistant does the task, asks when a missing answer would change the result, stores that answer on the account profile, and uses the stored answer on a later task.
+Each invited account has an assistant. The person asks for a task. The assistant does the task, asks when a missing answer would change the result, stores that answer, and looks it up on a later task. The assistant begins work without a new message only for a schedule the person told it to run, or to say that a run finished or is waiting.
 
-Chat, deep research, voice, files, Drive import, scheduled runs, and the account's own model key remain required.
+Chat, deep research, voice, files, Drive import, and scheduled runs remain required. The platform holds the model keys. Each account has a usage record, and the platform can stop an account. Day one screens are chat, reports, files, a profile panel, and settings. Detail is in `docs/product/screens.md`.
 
 # Habit
 
 A direct request starts the work. The assistant does not ask permission for the task the person just requested.
 
-The assistant asks when a missing answer would change the result. Code stores the answer on the profile in that turn.
+The assistant asks when a missing answer would change the result. The stored fact is a short declarative form of what the person said. It keeps the substance and drops the rest. The assistant writes it into the fitting knowledge file without asking.
 
 A later gap reuses the stored answer, rewrites it for the new situation, or returns to the person because the situation changed. When reuse is uncertain, the assistant shows a draft and asks whether to keep it or regenerate it.
 
@@ -18,69 +18,59 @@ The system prompt states the habit, the guard, and the persona. It names no task
 
 The voice is steady and plain on the first conversation and on every later one.
 
-The assistant does the requested work. It speaks in short sentences. It asks one question when a missing answer would change the result. It shows a draft when reuse of a stored answer is uncertain.
+The assistant does the requested work. It speaks in short sentences. It asks one question when a missing answer would change the result. It shows a draft when reuse of a stored answer is uncertain. When it reuses or rewrites a stored answer, it says so in a short line.
 
 It does not perform a character, a mood, or a specialty.
 
-The voice stays fixed as the profile grows. A change in manner is stored only when the person states that preference, as a profile answer.
+The voice stays fixed as the profile grows. Manner and working preferences live in `profile.md` and are included in every model call. Other knowledge files are not.
 
 # Guard
 
-The assistant does not take a financial action, cause physical harm, or disclose PII or PHI unless that kind is allowed on the profile.
+A public page read, a file read, a file write inside the account, and a Drive-copy read run without a confirmation.
 
-An allow lasts until the person revokes it. One kind does not allow another kind.
+A send on a website is the only action that sends data. It runs only for a confirmation of that exact send. The card, the match, and the record are in `docs/product/confirmations.md`.
 
-A grant row stores the kind in the person's words, whether it is active, and when it changed. The model cites a grant by id. Code runs the sensitive call only when that id exists, belongs to this account, and is active. Code does not decide that two situations are the same kind.
-
-`browser_submit` is the only tool that sends data. It is a sensitive call. A public page read, a file read, a file write inside the account, and a Drive-copy read are not. There is no tool that moves money or touches the physical world except through `browser_submit`. With no cited grant, the run asks and does not send. A task that would cause physical harm stops and asks.
+A task that would cause physical harm stops and asks.
 
 # Loop
 
 Chat, research, and scheduled runs use one loop.
 
-The loop loads the profile and the task, then calls the account's model. Code checks the guard before a tool runs. A missing fact is taken from the profile or asked. Tool results return to the model. The loop repeats until the task is done or it is waiting on the person.
+The loop loads `profile.md` and the task, then calls the platform model. Code checks the guard before a tool runs. A missing fact is looked up or asked. Tool results return to the model. The loop repeats until the task is done or it is waiting on the person.
 
-The model decides whether a stored answer still fits. Code decides whether a tool may run.
+The model decides whether a stored fact still fits. Code decides whether a tool may run.
 
-The reply, any file, any report, and any new profile row commit with the turn that created them.
+The reply, any file, and any report commit with the turn that created them. A knowledge file is visible after its bytes are stored and its ownership row commits.
 
 # Tools
 
-The built-in tools are file read, file write, Drive-copy read, public web read, browser read, `browser_submit`, and profile read.
+The built-in tools are file read, file write, Drive-copy read, public web read, browser read, `browser_submit`, and knowledge search. Knowledge search matches words and opens at most five files. It does not return every file.
 
-The model does not write the profile. Code writes an answer, a grant, or an ability in the turn where the person confirmed it.
+The model opens a remembered ability when the task needs it. This build runs the built-in tools. It does not run model-written code.
 
-An ability stores what it does, how it works, and which built-in tools it may use. It exists after the person confirms it. The same loop calls it. It runs no private code.
-
-# Profile
-
-Postgres holds three row kinds per account.
-
-An answer stores the gap, the person's answer, and the situation it belonged to.
-
-A grant stores the sensitive kind, its active state, and the time of the change.
-
-An ability stores the confirmed definition.
+Knowledge files are specified in `docs/product/profile.md`. Abilities are specified in `docs/product/abilities.md`. Uploads and task files are specified in `docs/product/files.md`. Drive is specified in `docs/product/drive.md`. Research is specified in `docs/product/research.md`. Schedules are specified in `docs/product/schedules.md`. Submit confirmations are specified in `docs/product/confirmations.md`.
 
 # Waiting
 
 In chat, the question is that turn's reply. The task stays open on the thread. The person's answer continues the same task.
 
-On a queued run, the run is marked waiting and the question is left in the app. The run id is unchanged. A second delivery does not ask again and does not run the tool again. The run resumes when the person answers that question.
+On a queued run, the run is its own row and is marked waiting, and the question is left in the app. The run id is unchanged. The report or the message points at that run. A second delivery does not ask again and does not run the tool again. The run resumes when the person answers that question.
 
 # Failure
 
-A file is visible after its bytes are stored and its row commits. A report is ready when its text and ready status commit together. A failed attempt leaves the last ready result in place.
+A file is visible after its bytes are stored and its row commits. A report is ready when its text, its source list, and its ready status commit together. A failed attempt leaves the last ready result in place. Cancelling a research run discards the partial text.
 
-If a browser action may already have completed, the run waits and tells the person. It does not repeat that action.
+If a browser action may already have completed, the run tells the person in the thread and does not repeat that action. When nothing was sent, the agent decides the next step, and it can ask the person whether to try again.
 
-A down provider is retried on a queued run. In chat, the person sees a short failure and can send again. A rejected key is not retried. The person is asked to replace the key.
+A down provider is retried three times after the first attempt on a queued run. The failed run then stays on a dead letter queue for developers. In the thread, the person sees one line that the run failed. A stopped account is not retried.
 
-Each model call writes a cost entry naming the account, the feature (`chat`, `research`, or `schedule`), the operation (`model_call`), the provider, and the model. Missing usage is stored as missing.
+When Postgres is unavailable, the app stops and shows that the system is down.
 
-On the next tool check, an inactive grant stops the run and leaves the question. Committed work stays.
+Each model call writes the usage record in `docs/product/models.md`. Missing usage is stored as missing. An account stops when its recorded total tokens reach its cap. The default cap is 10 million.
 
-Deleting an account stops an in-flight run and removes waiting questions, profile rows, files, keys, and schedules.
+A send on a website without a matching unused confirmation waits and does not send. Committed work stays.
+
+Deleting an account is immediate and cannot be restored. It stops an in-flight run and removes the Firebase sign-in, waiting questions, unused confirmations, knowledge files, abilities, other files, the Drive token, browser cookies, and schedules. It does not remove the platform model keys.
 
 # Placement
 
@@ -117,30 +107,37 @@ flowchart LR
 - A short chat turn runs on `api`. It may read the profile, this account's files, and Drive copies, then return the reply.
 - A turn that needs `browser`, a long read of `web`, or research becomes one Cloud Task. The API reply says the work is in progress.
 - `worker` runs the same loop for that task and for a scheduled run.
-- `browser` runs on `worker`, one account task at a time.
+- `browser` runs on `worker`. An account may run more than one browser task. Two tasks may not drive the same signed-in site at the same time.
 - `scheduler` enqueues a scheduled run through `tasks`.
-- Voice becomes a chat message, then enters the loop.
+- Voice becomes a chat message when the person sends the transcript, then enters the loop. Detail is in `docs/product/voice.md`.
 - A Drive import is a read-only copy. The loop reads the copy.
-- A model key stays envelope-encrypted with Cloud KMS.
+- Platform model keys stay envelope-encrypted with Cloud KMS. A Drive refresh token stays encrypted the same way, and it belongs to one account.
 
 # Tests
 
 - The system prompt states the habit, the guard, and the steady voice, and names no task domain and no biography.
 - A direct request creates no permission question.
 - A missing fact creates one question. A second delivery of the same run creates no second question.
-- A sensitive tool runs only for an active grant id owned by that account.
-- Another account's grant, a missing grant, and a revoked grant do not run the tool.
-- `browser_submit` without a cited grant does not send.
-- An answer row exists only after the confirming turn commits.
+- `browser_submit` runs only when an unused confirmation for this account matches the site and the fields. The card expires 24 hours after it appears. An expired card does not send.
+- A confirmation from another account, a missing confirmation, a used confirmation, and a confirmation whose site, field, value, or amount differs do not send.
+- A knowledge file is absent until its bytes and its ownership row commit.
 - A file is absent until its bytes and its row commit.
-- A report is not ready until its text commits with its ready status.
-- A provider failure on a queued run retries. A rejected key does not.
-- A cost entry records missing usage when the provider returns none.
-- Deleting the account removes the waiting run, the profile, the files, the keys, and the schedules.
+- An upload over 50 MB is refused. A file that would make the account's upload and task-file count exceed 5 GB is refused. Knowledge files and Drive copies are outside that count.
+- A report is not ready until its text and its source list commit with its ready status.
+- A research run opens at most 20 sources and stops after 30 minutes of work. Waiting on the person does not count. Cancelling discards the partial text and leaves the last ready report.
+- A provider failure on a queued run retries three times after the first attempt. The failed run then stays on a dead letter queue. A stopped account does not retry. The person sees one line in the thread that the run failed.
+- A cost entry records missing usage when the provider returns none. That record adds nothing to the token cap. The default cap is 10 million recorded total tokens, and it can be raised for one account.
+- A scheduled run may open a remembered ability. A send on a website from that run still requires the person to confirm that exact send.
+- Deleting a thread deletes its schedules. A schedule has no count cap. When a run of the same schedule is still working or waiting, the next occurrence is skipped. A different schedule runs at the same time.
+- Deleting the account is immediate and cannot be restored. It removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, browser cookies, and the schedules. It does not remove the platform model keys.
+
+# Product rules
+
+Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Screens are `docs/product/screens.md`. Failure is `docs/product/failure.md`. Records are `docs/product/records.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. The browser is `docs/product/browser.md`. Voice is `docs/product/voice.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 
-A scheduled run may use the public web and the browser when the task needs them and the guard allows the action.
+A scheduled run may use the public web and the browser when the task needs them. A send on a website still requires a confirmation of that exact send.
 
 A chat turn may read the profile and this account's files, and may enqueue the worker for browser, web, and research work.
 

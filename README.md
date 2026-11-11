@@ -1,10 +1,10 @@
 # Sakana
 
-Personal AI agent. Each invited person has a private account, their own model key, and their own memory, files, research, and scheduled runs.
+Personal AI agent. Each invited person has a private account, and their own memory, files, research, and scheduled runs. The platform holds the model keys.
 
 ## Product
 
-- Conversation with any connected model.
+- Conversation with the platform model. The current model is Gemini. The person cannot change it.
 - Deep research reports the person can leave and reopen.
 - Voice, file, and read-only Google Drive input.
 - Long-term memory used in later answers.
@@ -18,6 +18,7 @@ Personal AI agent. Each invited person has a private account, their own model ke
 | Web | Next.js on Vercel |
 | API and worker | Python, FastAPI, Cloud Run |
 | Data | Cloud SQL for Postgres, Cloud Storage |
+| Sign-in | Firebase Authentication |
 | Jobs | Cloud Tasks, Cloud Scheduler |
 | Secrets | Cloud KMS for model keys. Secret Manager for app secrets. |
 | Infrastructure | Terraform, Google Cloud, `us-central1` |
@@ -59,4 +60,24 @@ Install the commit hook once: `uvx pre-commit install`.
 
 - [Decisions](docs/decisions.md)
 - [Architecture](docs/architecture.md)
+- [System map](docs/diagrams/system-map.html)
+- [Access](docs/product/access.md)
+- [Control](docs/product/control.md)
+- [Screens](docs/product/screens.md)
+- [Failure](docs/product/failure.md)
+- [Records](docs/product/records.md)
+- [Models](docs/product/models.md)
+- [Conversations](docs/product/conversations.md)
+- [Profile](docs/product/profile.md)
+- [Abilities](docs/product/abilities.md)
+- [Files](docs/product/files.md)
+- [Drive](docs/product/drive.md)
+- [Research](docs/product/research.md)
+- [Schedules](docs/product/schedules.md)
+- [Browser](docs/product/browser.md)
+- [Voice](docs/product/voice.md)
+- [Submit confirmations](docs/product/confirmations.md)
+- [Later](docs/product/later.md)
+- [MVP and MLP](docs/product/mvp-mlp.md)
+- [Hand-in report, draft 1](docs/hand-in/report.md)
 - [How docs are written](docs/conventions.md)

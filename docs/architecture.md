@@ -5,6 +5,7 @@ About 25 people, with room for a few hundred. One region: `us-central1`.
 ```mermaid
 flowchart LR
   person[Person]
+  firebase["Firebase Authentication"]
   drive["Google Drive"]
   webapp["Next.js on Vercel"]
   api["Cloud Run API"]
@@ -18,6 +19,8 @@ flowchart LR
   publicweb["Public web"]
 
   person -->|HTTPS| webapp
+  person -->|sign in| firebase
+  webapp -->|sign in| firebase
   webapp -->|calls| api
   drive -->|"read-only import"| api
   api -->|"read and write"| sql
@@ -26,13 +29,15 @@ flowchart LR
   api -->|enqueue| tasks
   scheduler -->|"when due"| tasks
   tasks -->|retry| worker
-  worker -->|"their key"| model
-  worker -->|"research only"| publicweb
+  tasks -->|after three retries| dead["Dead letter queue"]
+  worker -->|model| model
+  worker -->|"when the task needs it"| publicweb
   worker -->|"save result"| sql
 ```
 
 - Chat returns on the API request.
-- Research and scheduled runs go through the queue.
-- Research may read the public web. A scheduled run may not.
-- A model key and a file prefix belong to one account.
+- Research and scheduled runs go through the queue. A dead provider is retried three times after the first attempt. The failed run then stays on the dead letter queue.
+- Research and a scheduled run may read the public web when the task needs it.
+- A file prefix belongs to one account. The platform holds the model keys.
 - Vercel hosts the web app. Google Cloud holds data, jobs, keys, and the API.
+- Firebase Authentication holds the sign-in. Postgres holds the account.
