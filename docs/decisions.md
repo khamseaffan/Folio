@@ -13,6 +13,7 @@
 - Access is invite-only. The allowlist, sign-in, and sessions are in `docs/product/access.md`.
 - Each invited person has a private account.
 - The person changes product records by telling the agent in the chat. The direct controls are in `docs/product/control.md`.
+- Day one screens are chat, reports, files, a profile panel, and settings. Detail is in `docs/product/screens.md`.
 - Memory, files, Drive, research, and scheduled runs are not shared across accounts.
 
 ## Models

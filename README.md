@@ -63,6 +63,7 @@ Install the commit hook once: `uvx pre-commit install`.
 - [System map](docs/diagrams/system-map.html)
 - [Access](docs/product/access.md)
 - [Control](docs/product/control.md)
+- [Screens](docs/product/screens.md)
 - [Models](docs/product/models.md)
 - [Conversations](docs/product/conversations.md)
 - [Profile](docs/product/profile.md)

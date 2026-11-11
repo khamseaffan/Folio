@@ -4,7 +4,7 @@ An ability is a way of working the agent remembers for one account. The agent wr
 
 The agent updates an ability when the person says to change it. The agent removes an ability when the person says to remove it.
 
-An account may have any number of abilities.
+An account may have any number of abilities. The profile panel lists them for reading. Detail is in `docs/product/screens.md`.
 
 A schedule the person told the agent to run may use a remembered ability. An ability runs while the person is away only as part of that schedule.
 

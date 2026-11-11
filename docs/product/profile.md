@@ -12,7 +12,7 @@ The assistant writes that fact into the fitting file without asking.
 
 The model is not given every file. It searches the words in the files and opens at most five. `profile.md` is extra and always included.
 
-The person can read the files. The person tells the agent to change a fact, delete a fact, or delete the profile, and the agent does so. Deleting the profile removes the knowledge files and cannot be restored. The account remains.
+The person can read the files in the profile panel. Detail is in `docs/product/screens.md`. The person tells the agent to change a fact, delete a fact, or delete the profile, and the agent does so. Deleting the profile removes the knowledge files and cannot be restored. The account remains.
 
 When two facts disagree, the assistant says so and names which one it believes should go. It deletes one only after the person confirms.
 

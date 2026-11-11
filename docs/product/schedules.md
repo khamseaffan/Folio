@@ -1,6 +1,6 @@
 # Schedules
 
-The person says in the chat when the work should happen. The agent creates the schedule, updates it, and deletes it. There is no schedule screen.
+The person says in the chat when the work should happen. The agent creates the schedule, updates it, and deletes it. Upcoming schedules are listed in the profile panel for reading. Detail is in `docs/product/screens.md`.
 
 A schedule belongs to the thread where the person asked for it. Deleting that thread deletes the schedule. One account may have any number of schedules.
 

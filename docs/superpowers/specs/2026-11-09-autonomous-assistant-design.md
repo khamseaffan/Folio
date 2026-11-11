@@ -2,7 +2,7 @@
 
 Each invited account has an assistant. The person asks for a task. The assistant does the task, asks when a missing answer would change the result, stores that answer, and looks it up on a later task. The assistant begins work without a new message only for a schedule the person told it to run, or to say that a run finished or is waiting.
 
-Chat, deep research, voice, files, Drive import, and scheduled runs remain required. The platform holds the model keys. Each account has a usage record, and the platform can stop an account.
+Chat, deep research, voice, files, Drive import, and scheduled runs remain required. The platform holds the model keys. Each account has a usage record, and the platform can stop an account. Day one screens are chat, reports, files, a profile panel, and settings. Detail is in `docs/product/screens.md`.
 
 # Habit
 
@@ -131,7 +131,7 @@ flowchart LR
 
 # Product rules
 
-Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. The browser is `docs/product/browser.md`. Voice is `docs/product/voice.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Screens are `docs/product/screens.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. The browser is `docs/product/browser.md`. Voice is `docs/product/voice.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 
