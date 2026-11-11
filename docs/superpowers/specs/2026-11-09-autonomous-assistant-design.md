@@ -107,7 +107,7 @@ flowchart LR
 - `worker` runs the same loop for that task and for a scheduled run.
 - `browser` runs on `worker`. An account may run more than one browser task. Two tasks may not drive the same signed-in site at the same time.
 - `scheduler` enqueues a scheduled run through `tasks`.
-- Voice becomes a chat message, then enters the loop.
+- Voice becomes a chat message when the person sends the transcript, then enters the loop. Detail is in `docs/product/voice.md`.
 - A Drive import is a read-only copy. The loop reads the copy.
 - Platform model keys stay envelope-encrypted with Cloud KMS. A Drive refresh token stays encrypted the same way, and it belongs to one account.
 
@@ -131,7 +131,7 @@ flowchart LR
 
 # Product rules
 
-Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. The browser is `docs/product/browser.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. The browser is `docs/product/browser.md`. Voice is `docs/product/voice.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 

@@ -34,7 +34,7 @@
 
 ## Inputs
 
-- Voice is speech turned into a chat message.
+- Voice is speech turned into a chat message. Detail is in `docs/product/voice.md`.
 - A Drive import is read-only and private.
 - A Drive import is a copy from that moment. Later Drive edits wait for another import. Detail is in `docs/product/drive.md`.
 
