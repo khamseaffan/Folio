@@ -79,4 +79,5 @@ Install the commit hook once: `uvx pre-commit install`.
 - [Submit confirmations](docs/product/confirmations.md)
 - [Later](docs/product/later.md)
 - [MVP and MLP](docs/product/mvp-mlp.md)
+- [Hand-in report, draft 1](docs/hand-in/report.md)
 - [How docs are written](docs/conventions.md)

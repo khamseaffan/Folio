@@ -72,4 +72,5 @@
 ## Hand-in
 
 - Deliverables stay those in `Goal.md`: live URL, report, GitHub.
+- The draft report is `docs/hand-in/report.md`.
 - The report's omissions section covers only work beyond `Goal.md`.
