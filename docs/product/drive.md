@@ -10,4 +10,4 @@ The person can disconnect Drive. Disconnecting removes the token and leaves the 
 
 A schedule the person told the agent to run may read copies already imported. It does not contact Google, start an import, or write to Drive.
 
-Drive copies are outside the byte count in `docs/product/files.md`. Reading a copy does not require a submit confirmation.
+Drive copies are outside the byte count in `docs/product/files.md`. Reading a copy does not require a submit confirmation. A report or a task file leaves as a download. Drive is not written.

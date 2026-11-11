@@ -2,7 +2,7 @@
 
 Research starts when the person asks for a report in the thread, or when a schedule the person told the agent to run writes a report.
 
-The person tells the agent to name, rename, or delete a report, and the agent does so. One account can keep several reports. Each run writes one report. Deleting a report leaves other files, threads, and Drive copies.
+The person tells the agent to name, rename, or delete a report, and the agent does so. The person can download a report. One account can keep several reports. Each run writes one report. Deleting a report leaves other files, threads, and Drive copies.
 
 A run may read the account's files, Drive copies, and the public web. It may open at most 20 sources, then it writes the report from those sources. It may work for at most 30 minutes, then it writes the report from what it has. Time spent waiting on the person does not count.
 
