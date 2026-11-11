@@ -1,7 +1,7 @@
 [project]
-name = "sakana-api"
+name = "folio-api"
 version = "0.1.0"
-description = "Sakana personal agent API"
+description = "Folio personal agent API"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi>=0.115",

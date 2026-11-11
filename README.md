@@ -1,4 +1,4 @@
-# Sakana
+# Folio
 
 Personal AI agent. Each invited person has a private account, and their own memory, files, research, and scheduled runs. The platform holds the model keys.
 

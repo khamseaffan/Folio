@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sakana",
+  title: "Folio",
   description: "Personal AI agent",
 };
 

@@ -4,7 +4,7 @@ Draft version 1. The site is not deployed, and there is no live URL.
 
 ## Service overview
 
-Sakana is a private assistant for one person.
+Folio is a private assistant for one person.
 
 **Conversation**
 
@@ -91,7 +91,7 @@ You use a website. Longer work runs in the background.
 - A short chat is answered on the API request.
 - Research and a scheduled run go on a queue. A worker picks them up.
 - The worker calls Gemini, reads public pages, and can drive Chrome.
-- Google Drive is one file you pick. Sakana keeps a private copy from that moment.
+- Google Drive is one file you pick. Folio keeps a private copy from that moment.
 - If Gemini is down, the job tries again three times, then stops. You see one line in the thread. I can inspect the failed job.
 
 **Why**
@@ -147,7 +147,7 @@ Later, and not required by the assignment. One email stays one private account.
 
 **Narrower than the assignment might sound**
 
-- Drive is one file, imported as a private copy. Sakana does not write back to Drive.
+- Drive is one file, imported as a private copy. Folio does not write back to Drive.
 - Voice is dictation. The words land in the composer, you send them as a chat message, and the recording is discarded. The assistant does not speak.
 
 ## Quality assurance
