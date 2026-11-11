@@ -3,7 +3,7 @@
 ## MVP
 
 1. An invited person has a private account.
-2. An account is created for khamseaffan@gmail.com or an address at sakana.ai.
+2. An account is created for khamseaffan@gmail.com or an address at sakana.ai, and an invite to any other email is refused when it is sent.
 3. Sign-in is Firebase Authentication with Google or a one-time magic link.
 4. The person sets a display name of 1 to 40 characters.
 5. A session ends after 30 minutes of silence from the person and the assistant, and an account has at most two sessions.
@@ -19,16 +19,16 @@
 15. The person downloads a report, and the agent names, renames, or deletes it when told.
 16. The person says a schedule in the chat, the agent creates, updates, and deletes it, and deleting the thread deletes the schedule.
 17. A scheduled run uses files, imported Drive copies, the web, and a remembered ability when the task needs them.
-18. A waiting scheduled run causes the next occurrence to be skipped.
+18. When a run of the same schedule is still working or waiting, the next occurrence is skipped, and a different schedule runs at the same time.
 19. The person uploads a PDF, plain text, Markdown, CSV, XLSX, JPEG, PNG, WebP, or HEIC file of at most 50 MB.
 20. Uploads and task files stop at 5 GB, and knowledge files and Drive copies sit outside that count.
-21. The assistant writes a Markdown or PDF task file when the task needs that file, and the person can download it.
+21. The assistant writes the file the task needs, as Markdown, PDF, or another type, and the person can download it.
 22. A Drive import is one file the person picks, stored as a private read-only copy.
 23. Chrome on the worker reads pages, and a send on a website runs only after the person confirms that exact send.
 24. Speech is transcribed by Gemini into the composer, and the audio is discarded.
 25. The person sees token totals and the file byte count, and the account stops at 10 million recorded tokens unless that cap is raised.
 26. Day one has chat, reports, files, a profile panel, and settings, and the interface is English.
-27. A working or waiting run shows on the thread name, and a question or a failed run appears in that thread.
+27. A working or waiting run shows on the thread name, a question or a failed run appears in that thread, and two runs may write in that thread at the same time.
 28. When Postgres is unavailable, the app stops and says the system is down.
 29. A queued run retries a dead provider three times, then stays on a dead letter queue for the developers.
 

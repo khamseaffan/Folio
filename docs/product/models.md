@@ -18,4 +18,4 @@ Each account has a token cap of 10 million total tokens. The cap does not reset.
 
 An account may have more than one run at a time while its recorded total is inside its token cap and its file count is inside 5 GB.
 
-Reaching the cap stops the account. A stopped account sees the line "You have reached the allowed usage limit." The line has no usage figures. The current call is aborted. The partial reply is kept. Queued runs do not start. A stopped account cannot start a chat turn, a research run, or a scheduled run.
+Reaching the cap stops the account. That account sees the line "You have reached the allowed usage limit." The line has no usage figures. When `khamseaffan@gmail.com` stops an account, that account sees the line "A system admin has stopped your account. Contact khamseaffan@gmail.com." The current call is aborted. The partial reply is kept. Queued runs do not start. A stopped account cannot start a chat turn, a research run, or a scheduled run.

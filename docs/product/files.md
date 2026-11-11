@@ -4,7 +4,7 @@ A person can upload a PDF, plain text, Markdown, CSV, XLSX, JPEG, PNG, WebP, or 
 
 Plain text is read as text, a spreadsheet as cells, a PDF as a document, and an image as the image. The model receives the image.
 
-The assistant writes a task file when the person's task needs that file as its result. That file may be Markdown or PDF. A reply that stays in the thread writes no task file. Knowledge files are specified in `docs/product/profile.md`.
+The assistant writes a task file when the person's task needs that file as its result. That file is Markdown, PDF, or another type the task needs. A reply that stays in the thread writes no task file. Knowledge files are specified in `docs/product/profile.md`.
 
 The person can download one uploaded file, one task file, or one report. The person tells the agent to delete one file, and the agent deletes it. Deleting a file leaves the messages that mentioned it.
 

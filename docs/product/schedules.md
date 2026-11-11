@@ -10,4 +10,4 @@ The run writes a message in the thread or a report.
 
 A schedule runs while the account is inside its usage limit and its storage count. Detail is in `docs/product/models.md` and `docs/product/files.md`.
 
-When a run is waiting on the person and the next time comes, that next run is skipped.
+When a run of that same schedule is still working or waiting and the next time comes, that next run is skipped. A different schedule runs at the same time.

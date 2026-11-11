@@ -6,7 +6,7 @@ An account can be created for `khamseaffan@gmail.com`, or for an address at `sak
 
 `khamseaffan@gmail.com` is the first account.
 
-Any account may create an invite. The invite is sent by email. It is one person and one use. It expires after one week. It can be revoked before use.
+Any account may create an invite for any email. The invite is sent only when that email is `khamseaffan@gmail.com` or an address at `sakana.ai`. Any other email is refused with the line "This email is not an allowed account." The invite is one person and one use. It expires after one week. It can be revoked before use.
 
 The person signs in through Firebase Authentication with Google or a magic link. Firebase holds that sign-in. The Google account's email must be on the allowlist. The magic link works once and expires after 24 hours. That sign-in verifies the email. The account stores no password.
 

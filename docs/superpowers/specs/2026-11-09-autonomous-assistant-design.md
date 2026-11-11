@@ -128,7 +128,7 @@ flowchart LR
 - A provider failure on a queued run retries three times after the first attempt. The failed run then stays on a dead letter queue. A stopped account does not retry. The person sees one line in the thread that the run failed.
 - A cost entry records missing usage when the provider returns none. That record adds nothing to the token cap. The default cap is 10 million recorded total tokens, and it can be raised for one account.
 - A scheduled run may open a remembered ability. A send on a website from that run still requires the person to confirm that exact send.
-- Deleting a thread deletes its schedules. A schedule has no count cap. When a scheduled run is waiting on the person, the next occurrence is skipped.
+- Deleting a thread deletes its schedules. A schedule has no count cap. When a run of the same schedule is still working or waiting, the next occurrence is skipped. A different schedule runs at the same time.
 - Deleting the account is immediate and cannot be restored. It removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, browser cookies, and the schedules. It does not remove the platform model keys.
 
 # Product rules
