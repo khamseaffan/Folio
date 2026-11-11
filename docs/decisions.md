@@ -55,7 +55,7 @@
 - Secret Manager holds app secrets only.
 - Cloud SQL has a private IP.
 - Scheduler and Cloud Tasks call Cloud Run with Google identity tokens.
-- Deleting an account removes the Firebase sign-in, sessions, rows, files, keys, and schedules.
+- Deleting an account removes the Firebase sign-in, sessions, rows, files, the Drive token, and schedules. It does not remove the platform model keys.
 
 ## Capacity
 

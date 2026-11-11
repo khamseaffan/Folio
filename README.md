@@ -1,10 +1,10 @@
 # Sakana
 
-Personal AI agent. Each invited person has a private account, their own model key, and their own memory, files, research, and scheduled runs.
+Personal AI agent. Each invited person has a private account, and their own memory, files, research, and scheduled runs. The platform holds the model keys.
 
 ## Product
 
-- Conversation with any connected model.
+- Conversation with the platform model. The current model is Gemini. The person cannot change it.
 - Deep research reports the person can leave and reopen.
 - Voice, file, and read-only Google Drive input.
 - Long-term memory used in later answers.

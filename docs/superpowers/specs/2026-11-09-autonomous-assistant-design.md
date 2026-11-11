@@ -1,6 +1,6 @@
 # Autonomous assistant
 
-Each invited account has an assistant. The person asks for a task. The assistant does the task, asks when a missing answer would change the result, stores that answer, and looks it up on a later task. The assistant may also begin work and tell the person, rather than waiting for a new message.
+Each invited account has an assistant. The person asks for a task. The assistant does the task, asks when a missing answer would change the result, stores that answer, and looks it up on a later task. The assistant begins work without a new message only for a schedule the person told it to run, or to say that a run finished or is waiting.
 
 Chat, deep research, voice, files, Drive import, and scheduled runs remain required. The platform holds the model keys. Each account has a usage record, and the platform can stop an account.
 
@@ -28,7 +28,7 @@ The voice stays fixed as the profile grows. Manner and working preferences live 
 
 A public page read, a file read, a file write inside the account, and a Drive-copy read run without a confirmation.
 
-`browser_submit` is the only tool that sends data. It runs only for a confirmation of that exact submit. The card, the match, and the record are in `docs/product/confirmations.md`.
+A send on a website is the only action that sends data. It runs only for a confirmation of that exact send. The card, the match, and the record are in `docs/product/confirmations.md`.
 
 A task that would cause physical harm stops and asks.
 
@@ -66,7 +66,7 @@ A down provider is retried on a queued run. In chat, the person sees a short fai
 
 Each model call writes the usage record in `docs/product/models.md`. Missing usage is stored as missing.
 
-A `browser_submit` without a matching unused confirmation waits and does not send. Committed work stays.
+A send on a website without a matching unused confirmation waits and does not send. Committed work stays.
 
 Deleting an account stops an in-flight run and removes the Firebase sign-in, waiting questions, unused confirmations, knowledge files, abilities, other files, the Drive token, and schedules. It does not remove the platform model keys.
 
@@ -135,7 +135,7 @@ Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Model
 
 # Decision updates
 
-A scheduled run may use the public web and the browser when the task needs them. A browser submit still requires a confirmation of that exact submit.
+A scheduled run may use the public web and the browser when the task needs them. A send on a website still requires a confirmation of that exact send.
 
 A chat turn may read the profile and this account's files, and may enqueue the worker for browser, web, and research work.
 

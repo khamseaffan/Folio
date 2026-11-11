@@ -106,7 +106,7 @@
       { label: "enqueue", points: [[338, 250], [338, 180], [578, 180], [578, 130]] },
       { label: "deliver", points: [[578, 130], [578, 250]] },
       { label: "short chat", points: [[416, 279], [430, 279], [430, 148], [1068, 148], [1068, 160]] },
-      { label: "their key", points: [[578, 250], [578, 168], [990, 168]] },
+      { label: "model", points: [[578, 250], [578, 168], [990, 168]] },
       { label: "one task", points: [[656, 279], [740, 279]] },
       { label: "read or submit", points: [[896, 279], [940, 279], [940, 369], [990, 369]] },
       { label: "records", points: [[338, 308], [338, 500]] },
@@ -122,13 +122,13 @@
       api: "Cloud Run. A short chat turn runs here: it reads the profile and this account's files, calls the model, and returns the reply. Browser work, a long web read, and research are enqueued instead.",
       scheduler: "Cloud Scheduler. When a scheduled run is due, it enqueues one queue task. The run then uses the same loop as any other turn.",
       queue: "Cloud Tasks. Delivery is at least once. The run id is the identity of the report or the waiting question. A second delivery does not ask again and does not repeat a finished action.",
-      worker: "Cloud Run. It runs the loop for research and for a scheduled run. It calls the model, may use the browser and the public web, and saves the result. A browser submit still requires a confirmation of that exact submit.",
-      browser: "Runs on the worker, one account task at a time. A page read does not send data. browser_submit is the only send, and it runs only for a confirmation of that exact submit. A submit that may already have completed is not repeated.",
-      model: "The person's own provider key: OpenAI, Anthropic, Gemini, or an OpenAI-compatible endpoint. A short chat calls from the API. Research and scheduled runs call from the worker. Each call records cost. Missing usage is stored as missing.",
-      publicWeb: "Read during research, and during a scheduled run when the task needs it. Sending still goes through browser_submit and a confirmation of that exact submit.",
+      worker: "Cloud Run. It runs the loop for research and for a scheduled run. It calls the platform model, may use the browser and the public web, and saves the result. A send on a website still requires a confirmation of that exact send.",
+      browser: "Runs on the worker, one account task at a time. A page read does not send data. A send on a website is the only send, and it runs only for a confirmation of that exact send. A send that may already have completed is not repeated.",
+      model: "The platform holds the key. The current model is Gemini. The person cannot change it. A short chat calls from the API. Research and scheduled runs call from the worker. Each call records cost. Missing usage is stored as missing.",
+      publicWeb: "Read during research, and during a scheduled run when the task needs it. A send on a website still requires a confirmation of that exact send.",
       postgres: "Cloud SQL in us-central1, private IP, primary for reads and writes. This is the record of the account, the thread, the profile, the report, and the scheduled run. The tables and columns are not designed yet.",
       files: "Cloud Storage. Bytes for one account live under that account's prefix. A file is visible only after the bytes are stored and the database row commits. Uploads and task files are counted, and the count stops at 5 GB. Knowledge files and Drive copies are outside that count.",
-      keys: "Cloud KMS envelope-encrypts model keys and Drive refresh tokens. Secret Manager holds app secrets only. Deleting an account removes the keys with the rows, files, and schedules."
+      keys: "Cloud KMS envelope-encrypts the platform model keys and the Drive refresh token. Secret Manager holds app secrets only. Deleting an account removes the Drive token. It does not remove the platform model keys."
     };
 
     const notes = {

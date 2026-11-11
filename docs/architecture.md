@@ -29,14 +29,14 @@ flowchart LR
   api -->|enqueue| tasks
   scheduler -->|"when due"| tasks
   tasks -->|retry| worker
-  worker -->|"their key"| model
-  worker -->|"research only"| publicweb
+  worker -->|model| model
+  worker -->|"when the task needs it"| publicweb
   worker -->|"save result"| sql
 ```
 
 - Chat returns on the API request.
 - Research and scheduled runs go through the queue.
-- Research may read the public web. A scheduled run may not.
-- A model key and a file prefix belong to one account.
+- Research and a scheduled run may read the public web when the task needs it.
+- A file prefix belongs to one account. The platform holds the model keys.
 - Vercel hosts the web app. Google Cloud holds data, jobs, keys, and the API.
 - Firebase Authentication holds the sign-in. Postgres holds the account.
