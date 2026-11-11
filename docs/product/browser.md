@@ -10,6 +10,6 @@ The person can watch a browser task they started. A schedule runs without them w
 
 There is no list of sites the browser may not open, and no list of sites that skip a confirmation. A page read needs no confirmation.
 
-A browser task has no time limit of its own. It stops when the person tells the agent to stop it, or when the account reaches its usage limit.
+A browser task has no time limit of its own. Page text and screenshots go to the model, and those calls count toward the token cap in `docs/product/models.md`. The task stops when the person tells the agent to stop it, or when the account reaches that cap.
 
 An account may run more than one browser task at a time. Two tasks may open different sites together. Two tasks may not drive the same signed-in site at the same time. The second task waits.

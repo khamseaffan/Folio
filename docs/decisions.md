@@ -20,6 +20,7 @@
 - The platform holds the provider keys.
 - The current model is Gemini. The person cannot change it.
 - The call goes through one internal interface. Detail is in `docs/product/models.md`.
+- Each account stops at 10 million recorded total tokens unless that cap is raised. The person sees tokens and the file byte count.
 
 ## Harness
 

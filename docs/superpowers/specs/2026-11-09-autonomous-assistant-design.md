@@ -64,7 +64,7 @@ If a browser action may already have completed, the run waits and tells the pers
 
 A down provider is retried on a queued run. In chat, the person sees a short failure and can send again. A stopped account is not retried.
 
-Each model call writes the usage record in `docs/product/models.md`. Missing usage is stored as missing.
+Each model call writes the usage record in `docs/product/models.md`. Missing usage is stored as missing. An account stops when its recorded total tokens reach its cap. The default cap is 10 million.
 
 A send on a website without a matching unused confirmation waits and does not send. Committed work stays.
 
@@ -124,7 +124,7 @@ flowchart LR
 - A report is not ready until its text and its source list commit with its ready status.
 - A research run opens at most 20 sources and stops after 30 minutes of work. Waiting on the person does not count. Cancelling discards the partial text and leaves the last ready report.
 - A provider failure on a queued run retries. A stopped account does not.
-- A cost entry records missing usage when the provider returns none.
+- A cost entry records missing usage when the provider returns none. That record adds nothing to the token cap. The default cap is 10 million recorded total tokens, and it can be raised for one account.
 - A scheduled run may open a remembered ability. A send on a website from that run still requires the person to confirm that exact send.
 - Deleting a thread deletes its schedules. A schedule has no count cap. When a scheduled run is waiting on the person, the next occurrence is skipped.
 - Deleting the account removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, browser cookies, and the schedules. It does not remove the platform model keys.

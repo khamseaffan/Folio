@@ -10,4 +10,4 @@ The person can download one uploaded file, one task file, or one report. The per
 
 An upload is a file after its bytes are stored and its ownership row commits. An unfinished upload is discarded after 24 hours.
 
-Each account has a byte count of uploads and task files, including an upload whose row has not committed yet. Knowledge files and Drive copies are outside that count. A file is not stored when the count plus that file would exceed 5 GB. Deleting a file lowers the count. Discarding an unfinished upload lowers the count.
+Each account has a byte count of uploads and task files, including an upload whose row has not committed yet. The person can see this count. Knowledge files and Drive copies are outside that count. A file is not stored when the count plus that file would exceed 5 GB. Deleting a file lowers the count. Discarding an unfinished upload lowers the count.

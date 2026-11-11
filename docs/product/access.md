@@ -18,4 +18,4 @@ Ending a session does not stop a running reply. The reply continues on the serve
 
 Deleting the account removes the Firebase sign-in.
 
-Accounts are personal. `khamseaffan@gmail.com` can open the usage tool and stop an account. That account cannot read another account's threads, files, or knowledge.
+Accounts are personal. `khamseaffan@gmail.com` can open the usage tool, raise one account's token cap, and stop an account. That account cannot read another account's threads, files, or knowledge.
