@@ -10,6 +10,6 @@ The first summary is written when the thread reaches 80 message blocks. It cover
 
 The person cannot see or edit the summary.
 
-Deleting a thread removes its message blocks, its summary, and its name. Knowledge files and other files stay.
+Deleting a thread removes its message blocks, its summary, its name, and its schedules. Knowledge files and other files stay.
 
 A reply is streamed as tokens arrive. The person can stop a turn while it is streaming. The provider call stops. The partial reply is kept. Ending a session does not stop that call.

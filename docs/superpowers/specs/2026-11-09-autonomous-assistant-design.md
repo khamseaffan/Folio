@@ -48,7 +48,7 @@ The built-in tools are file read, file write, Drive-copy read, public web read, 
 
 The model opens a remembered ability when the task needs it. This build runs the built-in tools. It does not run model-written code.
 
-Knowledge files are specified in `docs/product/profile.md`. Abilities are specified in `docs/product/abilities.md`. Uploads and task files are specified in `docs/product/files.md`. Drive is specified in `docs/product/drive.md`. Research is specified in `docs/product/research.md`. Submit confirmations are specified in `docs/product/confirmations.md`.
+Knowledge files are specified in `docs/product/profile.md`. Abilities are specified in `docs/product/abilities.md`. Uploads and task files are specified in `docs/product/files.md`. Drive is specified in `docs/product/drive.md`. Research is specified in `docs/product/research.md`. Schedules are specified in `docs/product/schedules.md`. Submit confirmations are specified in `docs/product/confirmations.md`.
 
 # Waiting
 
@@ -126,11 +126,12 @@ flowchart LR
 - A provider failure on a queued run retries. A stopped account does not.
 - A cost entry records missing usage when the provider returns none.
 - A scheduled run may open a remembered ability. A send on a website from that run still requires the person to confirm that exact send.
+- Deleting a thread deletes its schedules. A schedule has no count cap. When a scheduled run is waiting on the person, the next occurrence is skipped.
 - Deleting the account removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, and the schedules. It does not remove the platform model keys.
 
 # Product rules
 
-Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 

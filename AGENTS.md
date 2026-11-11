@@ -13,6 +13,7 @@
 - DB schema is written in `docs/source-of-truth/db-schema`.
 - Before editing any files in `docs/source-of-truth`, ask the user first. Never change it without approval.
 - Before making any changes, if the data, storage location (columns, tables) are changing you need to first get approval from the user to check if the proposed locations, usage and flows are correct.
+- Product behavior keeps determinism minimal. A new deterministic rule is discussed with the user and written only after the user agrees. Deterministic code stays limited to identity, authorization, tenant scope, allowed IDs, schemas, idempotency, evidence provenance, state integrity, and persistence.
 
 ## Always
 

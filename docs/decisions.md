@@ -28,7 +28,7 @@
 - Chat runs in the API request. It reads `profile.md`, the thread window, and files it looks up.
 - An ability is a way of working the agent remembers for that account. Detail is in `docs/product/abilities.md`.
 - Research runs on the worker and writes one report. Detail is in `docs/product/research.md`.
-- A scheduled run uses the same worker. It may read memory and files, then writes a message or a report.
+- A scheduled run uses the same worker. It runs the task the person described and writes a message or a report. Detail is in `docs/product/schedules.md`.
 - A scheduled run does not send email or write to Drive. It may open the web when the task needs it. A send on a website runs only after the person confirms that exact send. Detail is in `docs/product/confirmations.md`.
 
 ## Inputs
