@@ -68,7 +68,7 @@ Each model call writes the usage record in `docs/product/models.md`. Missing usa
 
 A send on a website without a matching unused confirmation waits and does not send. Committed work stays.
 
-Deleting an account stops an in-flight run and removes the Firebase sign-in, waiting questions, unused confirmations, knowledge files, abilities, other files, the Drive token, and schedules. It does not remove the platform model keys.
+Deleting an account stops an in-flight run and removes the Firebase sign-in, waiting questions, unused confirmations, knowledge files, abilities, other files, the Drive token, browser cookies, and schedules. It does not remove the platform model keys.
 
 # Placement
 
@@ -105,7 +105,7 @@ flowchart LR
 - A short chat turn runs on `api`. It may read the profile, this account's files, and Drive copies, then return the reply.
 - A turn that needs `browser`, a long read of `web`, or research becomes one Cloud Task. The API reply says the work is in progress.
 - `worker` runs the same loop for that task and for a scheduled run.
-- `browser` runs on `worker`, one account task at a time.
+- `browser` runs on `worker`. An account may run more than one browser task. Two tasks may not drive the same signed-in site at the same time.
 - `scheduler` enqueues a scheduled run through `tasks`.
 - Voice becomes a chat message, then enters the loop.
 - A Drive import is a read-only copy. The loop reads the copy.
@@ -127,11 +127,11 @@ flowchart LR
 - A cost entry records missing usage when the provider returns none.
 - A scheduled run may open a remembered ability. A send on a website from that run still requires the person to confirm that exact send.
 - Deleting a thread deletes its schedules. A schedule has no count cap. When a scheduled run is waiting on the person, the next occurrence is skipped.
-- Deleting the account removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, and the schedules. It does not remove the platform model keys.
+- Deleting the account removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, browser cookies, and the schedules. It does not remove the platform model keys.
 
 # Product rules
 
-Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Who acts is `docs/product/control.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Schedules are `docs/product/schedules.md`. The browser is `docs/product/browser.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 

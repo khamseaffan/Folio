@@ -29,6 +29,7 @@
 - An ability is a way of working the agent remembers for that account. Detail is in `docs/product/abilities.md`.
 - Research runs on the worker and writes one report. Detail is in `docs/product/research.md`.
 - A scheduled run uses the same worker. It runs the task the person described and writes a message or a report. Detail is in `docs/product/schedules.md`.
+- The worker drives the browser. Detail is in `docs/product/browser.md`.
 - A scheduled run does not send email or write to Drive. It may open the web when the task needs it. A send on a website runs only after the person confirms that exact send. Detail is in `docs/product/confirmations.md`.
 
 ## Inputs
@@ -55,7 +56,7 @@
 - Secret Manager holds app secrets only.
 - Cloud SQL has a private IP.
 - Scheduler and Cloud Tasks call Cloud Run with Google identity tokens.
-- Deleting an account removes the Firebase sign-in, sessions, rows, files, the Drive token, and schedules. It does not remove the platform model keys.
+- Deleting an account removes the Firebase sign-in, sessions, rows, files, the Drive token, browser cookies, and schedules. It does not remove the platform model keys.
 
 ## Capacity
 
