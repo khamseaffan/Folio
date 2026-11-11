@@ -68,6 +68,7 @@ Install the commit hook once: `uvx pre-commit install`.
 - [Abilities](docs/product/abilities.md)
 - [Files](docs/product/files.md)
 - [Drive](docs/product/drive.md)
+- [Research](docs/product/research.md)
 - [Submit confirmations](docs/product/confirmations.md)
 - [Later](docs/product/later.md)
 - [How docs are written](docs/conventions.md)

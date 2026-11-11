@@ -48,7 +48,7 @@ The built-in tools are file read, file write, Drive-copy read, public web read, 
 
 The model opens a remembered ability when the task needs it. This build runs the built-in tools. It does not run model-written code.
 
-Knowledge files are specified in `docs/product/profile.md`. Abilities are specified in `docs/product/abilities.md`. Uploads and task files are specified in `docs/product/files.md`. Drive is specified in `docs/product/drive.md`. Submit confirmations are specified in `docs/product/confirmations.md`.
+Knowledge files are specified in `docs/product/profile.md`. Abilities are specified in `docs/product/abilities.md`. Uploads and task files are specified in `docs/product/files.md`. Drive is specified in `docs/product/drive.md`. Research is specified in `docs/product/research.md`. Submit confirmations are specified in `docs/product/confirmations.md`.
 
 # Waiting
 
@@ -58,7 +58,7 @@ On a queued run, the run is marked waiting and the question is left in the app. 
 
 # Failure
 
-A file is visible after its bytes are stored and its row commits. A report is ready when its text and ready status commit together. A failed attempt leaves the last ready result in place.
+A file is visible after its bytes are stored and its row commits. A report is ready when its text, its source list, and its ready status commit together. A failed attempt leaves the last ready result in place. Cancelling a research run discards the partial text.
 
 If a browser action may already have completed, the run waits and tells the person. It does not repeat that action.
 
@@ -121,7 +121,8 @@ flowchart LR
 - A knowledge file is absent until its bytes and its ownership row commit.
 - A file is absent until its bytes and its row commit.
 - An upload over 50 MB is refused. A file that would make the account's upload and task-file count exceed 5 GB is refused. Knowledge files and Drive copies are outside that count.
-- A report is not ready until its text commits with its ready status.
+- A report is not ready until its text and its source list commit with its ready status.
+- A research run opens at most 20 sources and stops after 30 minutes of work. Waiting on the person does not count. Cancelling discards the partial text and leaves the last ready report.
 - A provider failure on a queued run retries. A stopped account does not.
 - A cost entry records missing usage when the provider returns none.
 - A scheduled run may open a remembered ability. A `browser_submit` from that run still requires a confirmation of that exact submit.
@@ -129,7 +130,7 @@ flowchart LR
 
 # Product rules
 
-Access is `docs/product/access.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
+Access is `docs/product/access.md`. Models and usage are `docs/product/models.md`. Threads are `docs/product/conversations.md`. Knowledge files are `docs/product/profile.md`. Abilities are `docs/product/abilities.md`. Uploads and task files are `docs/product/files.md`. Drive is `docs/product/drive.md`. Research is `docs/product/research.md`. Submit confirmations are `docs/product/confirmations.md`. Later work is `docs/product/later.md`. The system map is `docs/diagrams/system-map.html`.
 
 # Decision updates
 

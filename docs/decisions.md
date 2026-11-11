@@ -26,7 +26,7 @@
 - OpenClaw, Hermes, and an agent framework are not the core.
 - Chat runs in the API request. It reads `profile.md`, the thread window, and files it looks up.
 - An ability is a way of working the agent remembers for that account. Detail is in `docs/product/abilities.md`.
-- Research runs on the worker. It may read that person's files and the public web, then writes one report.
+- Research runs on the worker and writes one report. Detail is in `docs/product/research.md`.
 - A scheduled run uses the same worker. It may read memory and files, then writes a message or a report.
 - A scheduled run does not send email or write to Drive. It may open the web when the task needs it. A browser submit runs only for a confirmation of that exact submit. Detail is in `docs/product/confirmations.md`.
 
@@ -42,7 +42,7 @@
 - Firebase Authentication holds the sign-in.
 - The queue delivers at least once. The job id is the identity of the report or message.
 - A file is visible after the bytes are stored and the database row commits. Upload and task-file bytes are counted per account. Detail is in `docs/product/files.md`.
-- A report's text and its ready status commit together.
+- A report's text, its source list, and its ready status commit together.
 - Memory rows commit with the chat turn that created them.
 
 ## Security
