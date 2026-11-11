@@ -7,6 +7,7 @@
 - The product is for ongoing personal use. The submission checklist is the floor.
 - Chat with memory, research reports, scheduled runs, and files plus Drive are all required.
 - The two original features are long-term memory and the scheduled run.
+- This version and the later version are listed in `docs/product/mvp-mlp.md`.
 
 ## People
 

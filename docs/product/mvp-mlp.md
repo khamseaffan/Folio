@@ -1,0 +1,44 @@
+# MVP and MLP
+
+## MVP
+
+1. An invited person has a private account.
+2. An account is created for khamseaffan@gmail.com or an address at sakana.ai.
+3. Sign-in is Firebase Authentication with Google or a one-time magic link.
+4. The person sets a display name of 1 to 40 characters.
+5. A session ends after 30 minutes of silence from the person and the assistant, and an account has at most two sessions.
+6. Deleting an account is immediate and cannot be restored.
+7. The person talks with one platform model, Gemini, and cannot change it.
+8. The person has many threads, and the agent renames or deletes a thread when told.
+9. A message has no length limit, and a call includes the newest blocks that fit, including the latest 10 person blocks and the latest 10 assistant blocks.
+10. A reply streams, the person can stop it, and the partial reply is kept.
+11. Knowledge is English Markdown files, profile.md is included in every model call, and a search opens at most five other files.
+12. The agent writes, changes, and deletes knowledge when told, and the person reads it in the profile panel.
+13. The agent remembers abilities, lists them for reading, and changes them when told.
+14. Research writes one report from at most 20 sources after at most 30 minutes of work.
+15. The person downloads a report, and the agent names, renames, or deletes it when told.
+16. The person says a schedule in the chat, the agent creates, updates, and deletes it, and deleting the thread deletes the schedule.
+17. A scheduled run uses files, imported Drive copies, the web, and a remembered ability when the task needs them.
+18. A waiting scheduled run causes the next occurrence to be skipped.
+19. The person uploads a PDF, plain text, Markdown, CSV, XLSX, JPEG, PNG, WebP, or HEIC file of at most 50 MB.
+20. Uploads and task files stop at 5 GB, and knowledge files and Drive copies sit outside that count.
+21. The assistant writes a Markdown or PDF task file when the task needs that file, and the person can download it.
+22. A Drive import is one file the person picks, stored as a private read-only copy.
+23. Chrome on the worker reads pages, and a send on a website runs only after the person confirms that exact send.
+24. Speech is transcribed by Gemini into the composer, and the audio is discarded.
+25. The person sees token totals and the file byte count, and the account stops at 10 million recorded tokens unless that cap is raised.
+26. Day one has chat, reports, files, a profile panel, and settings, and the interface is English.
+27. A working or waiting run shows on the thread name, and a question or a failed run appears in that thread.
+28. When Postgres is unavailable, the app stops and says the system is down.
+29. A queued run retries a dead provider three times, then stays on a dead letter queue for the developers.
+
+## MLP
+
+1. A later version lets one account have several named bots.
+2. A later version lets the assistant name a new thread.
+3. A later version searches threads and edits an earlier message.
+4. A later version lets the model write new code and run it in a sandbox.
+5. A later version runs a repeated form when code matches the site, the form, the allowed fields, and an expiry.
+6. A later integration is a connection on the account, a secret in Cloud KMS, and one or more tools.
+7. A later version exports an account's data.
+8. A later version groups accounts in an organization.
