@@ -254,7 +254,7 @@ wheels = [
 ]
 
 [[package]]
-name = "sakana-api"
+name = "folio-api"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
