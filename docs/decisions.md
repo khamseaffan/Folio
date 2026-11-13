@@ -45,6 +45,7 @@
 ## Data
 
 - Postgres is the source of truth for the account and everything after sign-in. Reads and writes use the primary. The record rules are in `docs/product/records.md`.
+- A dependency is not pinned to an older major.
 - Firebase Authentication holds the sign-in.
 - The queue delivers at least once. A queued run is its own row, and its id is the job id. The report or the message points at that run. A queued run retries a dead provider three times after the first attempt, then the failed run stays on a dead letter queue. Detail is in `docs/product/records.md` and `docs/product/failure.md`.
 - A file is visible after the bytes are stored and the database row commits. Upload and task-file bytes are counted per account. The model reads the opened file. A file that fits is sent whole. A file that does not fit is read in successive parts in that same run. This version keeps no embedding index. Detail is in `docs/product/files.md`.
@@ -70,9 +71,20 @@
 - If the database primary is lost: minutes of data loss, minutes to fail over.
 - While Postgres is unavailable, the app stops and shows that the system is down.
 
+## Build
+
+The local build has five stages. The deployment pipeline is stage 2.5.
+
+- Stage 1 is an account on this machine. An allowed email signs in, a session exists, and ending it is logging out.
+- Stage 2 is one chat turn. One thread, one reply, and one usage row.
+- Stage 2.5 is the CI/CD pipeline. The checks already run on a pull request. This stage adds deployment, after that chat turn and before files. The website stays on Vercel. Terraform describes Google Cloud.
+- Stage 3 is files and memory.
+- Stage 4 is research and a schedule. These are the first jobs on the queue.
+- Stage 5 is one Drive copy, then the browser, then dictation, token totals, and the public page.
+- Stages after these five are still to be studied.
+
 ## Hand-in
 
 - Deliverables stay those in `Goal.md`: live URL, report, GitHub.
-- Automated deployment is planned once the app runs on this machine.
 - The draft report is `docs/hand-in/report.md`.
 - The report's omissions section covers only work beyond `Goal.md`.

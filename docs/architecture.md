@@ -41,7 +41,7 @@ flowchart LR
 - A file prefix belongs to one account. The platform holds the model keys.
 - Vercel hosts the web app. Google Cloud holds data, jobs, keys, and the API. Terraform describes the Google Cloud resources. The website is the piece hosted outside Google Cloud.
 - Firebase Authentication holds the sign-in. Postgres holds the account.
-- GitHub Actions runs the checks. Automated deployment is planned once the app runs on this machine.
+- GitHub Actions runs the checks. The deployment pipeline is stage 2.5, after one chat turn on this machine and before files. The website stays on Vercel. Terraform describes Google Cloud.
 
 ## Harness
 

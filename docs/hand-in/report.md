@@ -153,7 +153,7 @@ Later, and not required by the assignment. One email stays one private account.
 
 ## Quality assurance
 
-A change reaches the main branch through a pull request. GitHub Actions runs Ruff, pytest, lint, and typecheck. The same checks run before a commit. The main branch is protected. Automated deployment is not written yet. The first build runs on this machine. Deployment is planned once that build is running.
+A change reaches the main branch through a pull request. GitHub Actions runs Ruff, pytest, lint, and typecheck. The same checks run before a commit. The main branch is protected. The first build on this machine is an account and one chat turn. The deployment pipeline comes after that chat turn and before files. The website stays on Vercel. Terraform describes Google Cloud.
 
 **Checks I will not leave to the model**
 
