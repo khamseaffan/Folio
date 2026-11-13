@@ -23,10 +23,10 @@ import {
 function Mark() {
   return (
     <svg viewBox="0 0 64 64" aria-hidden="true">
-      <rect width="64" height="64" rx="14" fill="#2B3AC9" />
-      <path d="M18 12h20l10 10v30H18z" fill="#FAFBFC" />
-      <path d="M38 12l10 10H38z" fill="#B9C0FF" />
-      <path d="M24 26h18v5H29v3h8v4h-8v8h-5z" fill="#2B3AC9" />
+      <rect width="64" height="64" rx="14" fill="#3d5872" />
+      <path d="M18 12h20l10 10v30H18z" fill="#f7f4f1" />
+      <path d="M38 12l10 10H38z" fill="#d7e4ee" />
+      <path d="M24 26h18v5H29v3h8v4h-8v8h-5z" fill="#3d5872" />
     </svg>
   );
 }
