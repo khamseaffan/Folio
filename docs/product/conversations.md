@@ -8,7 +8,7 @@ One call is sent the system prompt, `profile.md`, the thread summary when one ex
 
 Blocks that do not fit stay stored. They are folded into the summary before the call. A later summary replaces the earlier one and is written from the earlier summary plus the blocks being folded in. The person is not told a message is too long.
 
-The person cannot see or edit the summary.
+The person cannot see or edit the summary. A short chat and a long chat look the same. The summary is ready before a call leaves an older message out.
 
 Deleting a thread removes its message blocks, its summary, its name, and its schedules. Knowledge files and other files stay.
 

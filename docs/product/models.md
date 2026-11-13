@@ -4,9 +4,9 @@ The platform holds the provider keys. A person does not bring, store, or replace
 
 The keys stay envelope-encrypted with Cloud KMS.
 
-Chat, research, and scheduled runs use one model. The person cannot change it. The current model is Gemini.
+Chat, research, and scheduled runs use one model. The person cannot change it. The model id is `gemini-4-argon`. The thinking level is medium. The context window is 1,048,576 tokens. Expected cost uses the published price for that model. The usage row stores the token counts the provider returns.
 
-The model call goes through one internal interface. Gemini is the first implementation. Another provider is a new implementation of that interface. The loop stays the same. Google ADK is not that interface, and it is not the loop.
+The model call goes through one internal interface in the Python API. The website does not call the model. Gemini is the first implementation. Another provider is a new implementation of that interface. The loop stays the same. Google ADK is not that interface, and it is not the loop.
 
 Every model call writes a usage record: the account email, the time, the provider, the model, the input tokens, the output tokens, the total tokens, and the expected cost of that provider and model. When the provider returns no usage, the record says the usage is missing. A browser task's page text and screenshots are part of those calls. A transcription is one of those calls. A chat turn counts only through the tokens on its usage record.
 

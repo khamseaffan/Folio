@@ -9,8 +9,8 @@ The product rules are in [docs/product](docs/product). The record picture is [do
 | Layer | Choice |
 | --- | --- |
 | Web | Next.js on Vercel |
-| API and worker | Python, FastAPI, Cloud Run |
-| Data | Cloud SQL for Postgres, Cloud Storage |
+| API and worker | Python 3.13, FastAPI, Cloud Run |
+| Data | Cloud SQL for PostgreSQL 18, Cloud Storage |
 | Sign-in | Firebase Authentication |
 | Jobs | Cloud Tasks, Cloud Scheduler |
 | Secrets | Cloud KMS for model keys and integration secrets. Secret Manager for app secrets. |

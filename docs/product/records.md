@@ -10,7 +10,7 @@ Knowledge files, abilities, and send confirmations are separate tables. Deleting
 
 A queued run is its own row. Its id is the job id. The report or the message it writes points at that run. A second delivery cannot write a second result.
 
-A usage record is its own table, one row per model call. The row points at the chat turn or the run that caused it. The row keeps the email. Deleting the account clears the account id and leaves the row. The cap for that email is the sum of these rows. The token cap and the stop are one row for that email. Deleting the account leaves that row. A new account for that email keeps the cap and the stop.
+A usage record is its own table, one row per model call. The row points at the chat turn or the run that caused it. The row keeps the email. Deleting the account clears the account id and leaves the row. Deleting a thread, a message, or a run leaves the account id set. The cap for that email is the sum of these rows. The token cap and the stop are one row for that email. Deleting the account leaves that row. A new account for that email keeps the cap and the stop.
 
 Deleting an account removes its threads, reports, file rows, schedules, and runs by a foreign key. It leaves the usage rows. Deleting a run does not delete its report. Deleting the account removes the report before the run. The same request deletes the stored bytes, the Firebase sign-in, the integration secrets, and the browser cookies.
 
@@ -18,4 +18,4 @@ A stored file's path is `accounts/{account_id}/.../{row id}/...`. The knowledge 
 
 Deleting a thread removes its messages, its summary, and its schedules. Knowledge files and other files stay.
 
-Postgres holds these records.
+Postgres holds these records. The database major is PostgreSQL 18.

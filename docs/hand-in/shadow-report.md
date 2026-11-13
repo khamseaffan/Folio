@@ -19,7 +19,7 @@ Folio is a private assistant for one person.
 
 **Model**
 
-- One model, Gemini. I pay for it.
+- One model, `gemini-4-argon`. Thinking level is medium. I pay for it.
 - You do not pick another model, and you do not paste in a key.
 
 **Who can join**
@@ -81,8 +81,8 @@ You use a website. Longer work runs in the background.
 | Piece | Choice |
 | --- | --- |
 | Website | Next.js on Vercel |
-| API and worker | Python on Cloud Run |
-| Account record | Postgres on Cloud SQL |
+| API and worker | Python 3.13 on Cloud Run |
+| Account record | PostgreSQL 18 on Cloud SQL |
 | Files | Cloud Storage, one folder per person |
 | Sign-in | Firebase, sign-in only |
 | Queue | Cloud Tasks and Cloud Scheduler |
@@ -157,7 +157,7 @@ Later, and not required by the assignment. One email stays one private account.
 
 ## Quality assurance
 
-A change reaches the main branch through a pull request. GitHub Actions runs Ruff, pytest, lint, and typecheck. The same checks run before a commit. The main branch is protected. Automated deployment is not written yet. The first build runs on this machine. Deployment is planned once that build is running.
+A change reaches the main branch through a pull request. GitHub Actions runs Ruff, pytest, lint, and typecheck. The same checks run before a commit. The main branch is protected. The first build on this machine is an account and one chat turn. The deployment pipeline comes after that chat turn and before files. The website stays on Vercel. Terraform describes Google Cloud.
 
 **Checks I will not leave to the model**
 

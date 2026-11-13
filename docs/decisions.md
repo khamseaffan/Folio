@@ -15,13 +15,16 @@
 - Each person has a private account.
 - The person changes product records by telling the agent in the chat. The direct controls are in `docs/product/control.md`.
 - Day one screens are chat, reports, files, a profile panel, and settings. Detail is in `docs/product/screens.md`.
+- A new account asks for a display name. The agent uses that name. Detail is in `docs/product/access.md`.
+- A short chat and a long chat look the same. The thread summary is ready before a call leaves an older message out. Detail is in `docs/product/conversations.md`.
+- A failed chat reply keeps the person's message. The thread says "That didn't go through." Try again sends that same message once more. Detail is in `docs/product/failure.md`.
 - Memory, files, Drive, research, and scheduled runs are not shared across accounts.
 
 ## Models
 
 - The platform holds the provider keys.
-- The current model is Gemini. The person cannot change it.
-- The call goes through one internal interface. Detail is in `docs/product/models.md`.
+- The model id is `gemini-4-argon`. The thinking level is medium. The person cannot change it. Detail is in `docs/product/models.md`.
+- The call goes through one internal interface in the Python API. The website does not call the model.
 - Each email stops at 10 million recorded total tokens unless that cap is raised. The cap and the stop stay with the email after the account is deleted. The person sees tokens and the file byte count.
 
 ## Harness
@@ -44,8 +47,9 @@
 
 ## Data
 
-- Postgres is the source of truth for the account and everything after sign-in. Reads and writes use the primary. The record rules are in `docs/product/records.md`.
-- Firebase Authentication holds the sign-in.
+- Postgres is the source of truth for the account and everything after sign-in. Reads and writes use the primary. The database major is PostgreSQL 18. The record rules are in `docs/product/records.md`.
+- A dependency is not pinned to an older major. The API runs on Python 3.13.
+- Firebase Authentication holds the sign-in. Stage 1 uses that sign-in. A typed email with no inbox proof is not a sign-in.
 - The queue delivers at least once. A queued run is its own row, and its id is the job id. The report or the message points at that run. A queued run retries a dead provider three times after the first attempt, then the failed run stays on a dead letter queue. Detail is in `docs/product/records.md` and `docs/product/failure.md`.
 - A file is visible after the bytes are stored and the database row commits. Upload and task-file bytes are counted per account. The model reads the opened file. A file that fits is sent whole. A file that does not fit is read in successive parts in that same run. This version keeps no embedding index. Detail is in `docs/product/files.md`.
 - A report's question, its text, how the run stopped, its source list, and its ready status commit together.
@@ -70,9 +74,20 @@
 - If the database primary is lost: minutes of data loss, minutes to fail over.
 - While Postgres is unavailable, the app stops and shows that the system is down.
 
+## Build
+
+The local build has five stages. The deployment pipeline is stage 2.5.
+
+- Stage 1 is an account on this machine. An allowed email signs in through Firebase, a session exists, and ending it is logging out.
+- Stage 2 is one chat turn. One thread, one reply, and one usage row. The thread summary follows that turn, before a call leaves an older message out.
+- Stage 2.5 is the CI/CD pipeline. The checks already run on a pull request. This stage adds deployment, after that chat turn and before files. The website stays on Vercel. Terraform describes Google Cloud.
+- Stage 3 is files and memory.
+- Stage 4 is research and a schedule. These are the first jobs on the queue.
+- Stage 5 is one Drive copy, then the browser, then dictation, token totals, and the public page.
+- Stages after these five are still to be studied.
+
 ## Hand-in
 
 - Deliverables stay those in `Goal.md`: live URL, report, GitHub.
-- Automated deployment is planned once the app runs on this machine.
 - The draft report is `docs/hand-in/report.md`.
 - The report's omissions section covers only work beyond `Goal.md`.
