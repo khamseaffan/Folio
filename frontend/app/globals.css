@@ -84,6 +84,88 @@ a:focus-visible {
   padding: 1.5rem 1rem 22vh;
 }
 
+.stage.landing {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2.25rem;
+  width: min(100%, 64rem);
+  padding-top: 3.5rem;
+  padding-bottom: 18rem;
+}
+
+.intro {
+  width: min(100%, 28rem);
+  color: var(--ink);
+}
+
+.intro h2 {
+  margin: 0;
+  font-family: var(--font-mincho), "Iowan Old Style", Palatino, serif;
+  font-size: clamp(1.85rem, 4vw, 2.6rem);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.intro > p {
+  margin: 0.85rem 0 0;
+  max-width: 36ch;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+
+.intro ul {
+  list-style: none;
+  margin: 1.6rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.05rem;
+}
+
+.intro li {
+  display: grid;
+  grid-template-columns: 1.35rem minmax(0, 1fr);
+  column-gap: 0.7rem;
+}
+
+.intro li svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  color: var(--fuji);
+}
+
+.intro li strong {
+  font-weight: 600;
+}
+
+.intro li p {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+@media (min-width: 900px) {
+  .stage.landing {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 4rem;
+    padding-top: 2rem;
+    padding-bottom: 16rem;
+  }
+
+  .intro {
+    flex: 1 1 22rem;
+    width: auto;
+    max-width: 28rem;
+  }
+}
+
 .panel {
   box-sizing: border-box;
   width: min(100%, 28rem);
@@ -142,15 +224,6 @@ h1 {
   letter-spacing: 0;
   line-height: 1.15;
   overflow-wrap: anywhere;
-}
-
-.lede {
-  margin: 0.9rem auto 0;
-  max-width: 28ch;
-  color: var(--ink);
-  font-size: 1.02rem;
-  line-height: 1.45;
-  text-align: center;
 }
 
 .mail {

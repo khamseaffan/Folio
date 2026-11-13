@@ -1,6 +1,14 @@
 "use client";
 
-import { ArrowRightStartOnRectangleIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
+import {
+  ArrowRightStartOnRectangleIcon,
+  BookOpenIcon,
+  ClockIcon,
+  DocumentTextIcon,
+  EnvelopeIcon,
+  MagnifyingGlassIcon,
+} from "@heroicons/react/24/outline";
+import type { ComponentType, SVGProps } from "react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   getReady,
@@ -53,6 +61,29 @@ function Mark() {
     </svg>
   );
 }
+
+const abilities: { title: string; text: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
+  {
+    title: "Memory",
+    text: "It keeps notes about you and your work, and you change them in plain words.",
+    icon: BookOpenIcon,
+  },
+  {
+    title: "Research",
+    text: "Ask for a report, then open the finished file with its sources.",
+    icon: MagnifyingGlassIcon,
+  },
+  {
+    title: "Scheduled work",
+    text: "Say when a task should run. The result is waiting when you return.",
+    icon: ClockIcon,
+  },
+  {
+    title: "Files",
+    text: "Upload a document, or bring one across from Google Drive.",
+    icon: DocumentTextIcon,
+  },
+];
 
 const SYSTEM_DOWN = "The system is down and repair is underway.";
 const UNAVAILABLE = "Sign-in is unavailable.";
@@ -313,6 +344,7 @@ export function FolioApp() {
 
   const signedIn = view === "ask-name" || view === "ready";
   const named = view === "ready" && displayName !== null && displayName !== "";
+  const landing = view === "signed-out" || view === "link-email";
 
   return (
     <>
@@ -321,7 +353,24 @@ export function FolioApp() {
           <path fill="#3d5872" d="M0 320 720 40 1440 320V360H0Z" />
           <path fill="#ffffff" d="M468 138 720 40 972 138Z" />
         </svg>
-        <div className="stage">
+        <div className={landing ? "stage landing" : "stage"}>
+          {landing ? (
+            <section className="intro" aria-label="Folio">
+              <h2>A private assistant that remembers your work.</h2>
+              <p>Your notes, files, and research stay in one account that only you can open.</p>
+              <ul>
+                {abilities.map((item) => (
+                  <li key={item.title}>
+                    <item.icon aria-hidden="true" />
+                    <div>
+                      <strong>{item.title}</strong>
+                      <p>{item.text}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           <section className="panel">
           <div className="panel-head">
             <div className="mark" aria-hidden="true">
@@ -332,9 +381,6 @@ export function FolioApp() {
               <h1>{named ? displayName : "Folio"}</h1>
             </div>
           </div>
-          {view === "signed-out" ? (
-            <p className="lede">A private assistant that remembers your work.</p>
-          ) : null}
           {signedIn && accountEmail ? <p className="mail">{accountEmail}</p> : null}
           {notice ? (
             <p role="alert" className="notice">
