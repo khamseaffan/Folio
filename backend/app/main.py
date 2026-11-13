@@ -4,7 +4,7 @@ import uuid
 import psycopg
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.account import ensure_account, load_account, set_display_name
 from app.db import connect, database_ready
@@ -13,7 +13,7 @@ from app.model import open_model
 from app.session import end_session, open_session, start_session
 from app.sign_in_proof import NOT_ALLOWED, NOT_PROVEN, SignInError, verify_allowed_sign_in
 from app.thread import ThreadRow, create_thread, get_thread, list_threads
-from app.turn import run_turn
+from app.turn import start_reply, stop_reply
 
 app = FastAPI()
 
@@ -346,7 +346,7 @@ async def post_message(request: Request, thread_id: str) -> Response:
         return _error(400, _MESSAGE)
     try:
         with connect() as connection:
-            result = run_turn(
+            started = start_reply(
                 connection,
                 session_id,
                 account_id,
@@ -354,21 +354,34 @@ async def post_message(request: Request, thread_id: str) -> Response:
                 text,
                 open_model(),
             )
-            if isinstance(result, str):
-                refusal = result
-                view = None
-            elif result is None:
-                refusal = None
-                view = None
-            else:
-                refusal = None
-                view = _thread_view(connection, account_id, parsed)
-                if view is None:
-                    raise RuntimeError("thread is missing")
     except Exception:
         return _down()
-    if refusal is not None:
-        return _error(403, refusal)
-    if view is None:
+    if isinstance(started, str):
+        return _error(403, started)
+    if started is None:
         return _error(404, _NOT_FOUND)
-    return JSONResponse(content=view)
+    return StreamingResponse(
+        started.events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.post("/threads/{thread_id}/stop", status_code=204)
+def stop_message(request: Request, thread_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    parsed = _parse_thread_id(thread_id)
+    if parsed is None:
+        return _error(404, _NOT_FOUND)
+    try:
+        with connect() as connection:
+            thread = get_thread(connection, account_id, parsed)
+    except Exception:
+        return _down()
+    if thread is None:
+        return _error(404, _NOT_FOUND)
+    stop_reply(account_id, parsed)
+    return Response(status_code=204)

@@ -270,17 +270,104 @@ export async function getThread(id: string): Promise<ApiResult<ThreadWithMessage
   return threadCall(result, threadPageFrom);
 }
 
-export async function postThreadMessage(
+export type StreamResult =
+  | { kind: "done" }
+  | { kind: "failed" }
+  | { kind: "closed" }
+  | ApiDown
+  | ApiMessage;
+
+function streamEvent(block: string): { text: string } | { done: true } | { failed: true } | null {
+  const line = block
+    .split("\n")
+    .map((item) => item.trim())
+    .find((item) => item.startsWith("data: "));
+  if (line === undefined) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line.slice("data: ".length)) as unknown;
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+  if (typeof parsed.text === "string") return { text: parsed.text };
+  if (parsed.done === true) return { done: true };
+  if (parsed.failed === true) return { failed: true };
+  return null;
+}
+
+export async function streamThreadMessage(
   id: string,
   text: string,
-): Promise<ApiResult<ThreadWithMessages>> {
-  const result = await call(
-    `/threads/${encodeURIComponent(id)}/messages`,
-    "POST",
-    JSON.stringify({ text }),
-  );
+  signal: AbortSignal,
+  onOpen: () => void,
+  onText: (chunk: string) => void,
+): Promise<StreamResult> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase()}/threads/${encodeURIComponent(id)}/messages`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+      cache: "no-store",
+      signal,
+    });
+  } catch {
+    if (signal.aborted) return { kind: "closed" };
+    return { kind: "message", message: FALLBACK, unauthorized: false, refused: false };
+  }
+  const payload = response.status === 200 ? null : await readBody(response);
+  if (response.status === 503 && isDownBody(payload)) return { kind: "down" };
+  if (response.status !== 200 || response.body === null) {
+    return {
+      kind: "message",
+      message:
+        response.status === 404
+          ? "Not found"
+          : (errorSentence(payload) ?? FALLBACK),
+      unauthorized: response.status === 401,
+      refused: response.status >= 400,
+    };
+  }
+  onOpen();
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let failed = false;
+  let done = false;
+  const take = (block: string) => {
+    const event = streamEvent(block);
+    if (event === null) return;
+    if ("text" in event) onText(event.text);
+    else if ("failed" in event) failed = true;
+    else done = true;
+  };
+  try {
+    while (true) {
+      const step = await reader.read();
+      if (step.done) break;
+      buffer += decoder.decode(step.value, { stream: true }).replace(/\r\n/g, "\n");
+      const pieces = buffer.split("\n\n");
+      buffer = pieces.pop() ?? "";
+      for (const piece of pieces) take(piece);
+    }
+    buffer += decoder.decode().replace(/\r\n/g, "\n");
+    if (buffer.trim() !== "") take(buffer);
+  } catch {
+    if (signal.aborted) return { kind: "closed" };
+    return { kind: "message", message: FALLBACK, unauthorized: false, refused: false };
+  }
+  if (failed) return { kind: "failed" };
+  if (done) return { kind: "done" };
+  return { kind: "closed" };
+}
+
+export async function postStop(id: string): Promise<ApiResult<true>> {
+  const result = await call(`/threads/${encodeURIComponent(id)}/stop`, "POST");
   if ("kind" in result) return result;
-  return threadCall(result, threadPageFrom);
+  if (result.status === 204) return { kind: "value", value: true };
+  return threadCall(result, () => true);
 }
 
 export async function postSignOut(): Promise<ApiResult<true>> {
