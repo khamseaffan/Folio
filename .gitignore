@@ -18,3 +18,9 @@ node_modules/
 dist/
 .next/
 .vercel
+
+infra/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+infra/plan.tfplan

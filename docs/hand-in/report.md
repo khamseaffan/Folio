@@ -167,6 +167,11 @@ A change reaches the main branch through a pull request. GitHub Actions runs Ruf
 - Deleting an account deletes that person's threads, files, and reports, and leaves the usage rows and the platform model keys.
 - A call with no usage figure is stored as missing, not as zero.
 
+**Known trade-offs of this deployment**
+
+- The first request after a quiet period is slow, because the API runs no idle instance and Cloud Run has to start one. I did not keep one warm because that costs money all month for 25 people. With real users I would keep one instance warm.
+- The database is one zone with no failover, for the same cost reason.
+
 **Before the URL is submitted**
 
 Sign in, hold a conversation, ask for a research report, set a schedule, upload a file, and import one Drive file, on the deployed site.
@@ -212,8 +217,8 @@ Design for the running service. Not switched on yet.
 
 - Model keys and integration secrets are encrypted with Cloud KMS.
 - Browser cookies are encrypted the same way and deleted with the account.
-- The database is on a private IP.
-- The scheduler calls the worker as Google, not with a shared password.
+- The database is on a private IP inside a VPC. Only the API reaches it, over Cloud Run's direct VPC connection, with TLS and a generated password held in Secret Manager. The website never touches the database.
+- I did not buy a static outbound address or Cloud NAT, because nothing outside Google Cloud needs to be allowlisted.
 
 **What can leave the account**
 
