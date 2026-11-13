@@ -1,6 +1,6 @@
 # Hand-in report
 
-Draft version 1. The site is not deployed, and there is no live URL.
+Draft version 1. The design is recorded. The site is not deployed, and there is no live URL. The URL, the test run on that site, and switching on monitoring are filled in when the app is running.
 
 ## Service overview
 
@@ -20,12 +20,12 @@ Folio is a private assistant for one person.
 
 **Who can join**
 
+- The site opens on one public page. You sign in from that page.
 - My email is the first account.
-- Later accounts are `@sakana.ai`, and someone already inside has to invite them.
-- Any other email is refused while the invite is being sent.
+- An account is `khamseaffan@gmail.com` or `@sakana.ai`. Any other email is refused at sign-in.
 - Sign-in is Google, or a magic link that works once and lasts a day.
-- You can end your session.
-- Deleting an account is immediate, and the account cannot be restored.
+- You can end your session. A third sign-in ends the oldest one.
+- Deleting an account is immediate, and the account cannot be restored. The token rows for that email stay, so a new account does not start from zero.
 
 **Size**
 
@@ -52,14 +52,15 @@ A research report is separate from a chat reply. You can leave the page. The fin
 
 **When it stops**
 
-- After 20 sources, or after 30 minutes of work, whichever comes first.
+- After 20 opened sources, after 30 minutes of work, or when new pages mostly repeat the ones already opened.
+- A page that cannot be opened does not count. A page that disagrees is kept.
 - If it needs an answer from you, the clock pauses and the question stays in the thread.
 - Nothing is sent out of the account while it waits.
 
 **What you get**
 
 - One report per run. You can keep several.
-- The finished report includes the pages and files it used, saved with the writing.
+- The file contains the question, the writing, a few lines on how the run stopped, and the sources. Each source has a title, an address or a file name, and one line on what it was used for.
 - Until then, the screen shows that it is still working, or shows the question.
 - You download the file it produced: Markdown, PDF, or another file the task needed.
 - If you cancel, the unfinished writing is discarded. The last finished report stays.
@@ -81,7 +82,7 @@ You use a website. Longer work runs in the background.
 | Files | Cloud Storage, one folder per person |
 | Sign-in | Firebase, sign-in only |
 | Queue | Cloud Tasks and Cloud Scheduler |
-| Keys | Cloud KMS for model keys, the Drive connection, and browser cookies |
+| Keys | Cloud KMS for model keys, integration secrets, and browser cookies |
 | App secrets | Secret Manager |
 | Region | `us-central1`, described in Terraform |
 | Checks | GitHub Actions |
@@ -91,7 +92,7 @@ You use a website. Longer work runs in the background.
 - A short chat is answered on the API request.
 - Research and a scheduled run go on a queue. A worker picks them up.
 - The worker calls Gemini, reads public pages, and can drive Chrome.
-- Google Drive is one file you pick. Folio keeps a private copy from that moment.
+- Google Drive is the first integration. It is one file you pick. Folio keeps a private copy from that moment. A later integration is another row, with its own secret and tools.
 - If Gemini is down, the job tries again three times, then stops. You see one line in the thread. I can inspect the failed job.
 
 **Why**
@@ -125,8 +126,8 @@ The assignment asks for two features of my own.
 - A remembered way of working, taught in the chat, removed when you say so.
 - Chrome on the server. Reading a page does not ask. A form, a post, or a payment shows a card and sends only if you confirm it. The card lasts 24 hours.
 - A file written when the result of the task is a file, which you can download.
-- Token totals and file space in settings. The account stops at 10 million tokens unless I raise it. Files stop at 5 GB. One upload stops at 50 MB.
-- Screens on day one: chat, reports, files, a profile panel, and settings.
+- Token totals and file space in settings. The email stops at 10 million tokens unless I raise it. Deleting the account leaves that total, the raised cap, and a stop. Files stop at 5 GB. One upload stops at 50 MB.
+- The site opens on one public page. After sign-in: chat, reports, files, a profile panel, and settings.
 
 **Why these extras**
 
@@ -141,7 +142,7 @@ Later, and not required by the assignment. One email stays one private account.
 - Search across old threads, and editing a message you already sent.
 - The model writing new code and running it.
 - Repeating a form, with code deciding it is the same form, and with an expiry.
-- Connections other than Google Drive.
+- Connections other than Google Drive. A later one is another row: a connection, a secret, and tools.
 - A full export of the account before deletion.
 - Grouping accounts into an organization.
 
@@ -152,18 +153,18 @@ Later, and not required by the assignment. One email stays one private account.
 
 ## Quality assurance
 
-A change reaches the main branch through a pull request. GitHub Actions runs Ruff, pytest, lint, and typecheck. The same checks run before a commit. The main branch is protected.
+A change reaches the main branch through a pull request. GitHub Actions runs Ruff, pytest, lint, and typecheck. The same checks run before a commit. The main branch is protected. Automated deployment is not written yet. The first build runs on this machine. Deployment is planned once that build is running.
 
 **Checks I will not leave to the model**
 
 - A website send matches the site, the fields, and a card inside 24 hours.
 - A file over 50 MB, or one that would pass 5 GB, is refused.
-- Research stops at 20 sources and at 30 minutes.
+- Research stops at 20 opened sources and at 30 minutes. The model stops when new pages mostly repeat, and the file says so.
 - The same job delivered twice does not create two reports.
-- A report is ready only when the writing and the source list are saved together.
+- A report is ready only when the question, the writing, how the run stopped, and the source list are saved together.
 - A schedule does not start a second copy of itself while the first is still going.
 - Deleting a thread deletes its schedules.
-- Deleting an account deletes that person's data and leaves the platform model keys.
+- Deleting an account deletes that person's threads, files, and reports, and leaves the usage rows and the platform model keys.
 - A call with no usage figure is stored as missing, not as zero.
 
 **Before the URL is submitted**
@@ -178,7 +179,7 @@ Design for the running service. Not switched on yet.
 
 - API and worker logs go to Cloud Logging.
 - A line names the account, the run, and the operation.
-- It leaves out the conversation, the transcript, file contents, the prompt, keys, the Drive connection, cookies, and magic links.
+- It leaves out the conversation, the transcript, file contents, the prompt, keys, integration secrets, cookies, and magic links.
 
 **Alerts**
 
@@ -196,7 +197,7 @@ Design for the running service. Not switched on yet.
 
 **Getting in**
 
-- An invite is required, and the email has to be allowed.
+- The email has to be allowed. Sign-in from the public page creates the account.
 - No password. Google, or a one-time link, proves the address.
 - A session ends after 30 minutes if you and the assistant are both quiet.
 - At most two sessions.
@@ -209,7 +210,7 @@ Design for the running service. Not switched on yet.
 
 **Where secrets live**
 
-- Model keys and the Drive connection are encrypted with Cloud KMS.
+- Model keys and integration secrets are encrypted with Cloud KMS.
 - Browser cookies are encrypted the same way and deleted with the account.
 - The database is on a private IP.
 - The scheduler calls the worker as Google, not with a shared password.
@@ -228,4 +229,4 @@ Sign-in stays in Firebase. The notes stay in Postgres. A yes on one form is not 
 
 - Settings shows tokens, not a price. The expected cost is stored so I can compare it with the bill.
 - Postgres holds the account. This version has no separate cache.
-- Tables and indexes are the next design step. They are not in this draft.
+- The record picture is drawn. Each table is created when the work that writes it is built. No table exists yet.

@@ -1,8 +1,8 @@
 # Drive
 
-Drive is the integration. An import is one file the person picks in Google's picker. The app stores a private read-only copy of that file from that moment. A later edit in Drive waits for another import.
+Drive is an integration. An import is one file the person picks in Google's picker. The app stores a private read-only copy of that file from that moment. The copy is a file row. A later edit in Drive waits for another import.
 
-One account connects one Google account. The refresh token is envelope-encrypted with Cloud KMS and belongs to that account.
+One account has one Google Drive row. The refresh token is envelope-encrypted with Cloud KMS and belongs to that account.
 
 The assistant may ask for a new import during a task. The person starts the import.
 

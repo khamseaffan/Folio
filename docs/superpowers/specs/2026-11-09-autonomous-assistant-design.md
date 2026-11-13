@@ -1,6 +1,6 @@
 # Autonomous assistant
 
-Each invited account has an assistant. The person asks for a task. The assistant does the task, asks when a missing answer would change the result, stores that answer, and looks it up on a later task. The assistant begins work without a new message only for a schedule the person told it to run, or to say that a run finished or is waiting.
+Each account has an assistant. The person asks for a task. The assistant does the task, asks when a missing answer would change the result, stores that answer, and looks it up on a later task. The assistant begins work without a new message only for a schedule the person told it to run, or to say that a run finished or is waiting.
 
 Chat, deep research, voice, files, Drive import, and scheduled runs remain required. The platform holds the model keys. Each account has a usage record, and the platform can stop an account. Day one screens are chat, reports, files, a profile panel, and settings. Detail is in `docs/product/screens.md`.
 
@@ -58,7 +58,7 @@ On a queued run, the run is its own row and is marked waiting, and the question 
 
 # Failure
 
-A file is visible after its bytes are stored and its row commits. A report is ready when its text, its source list, and its ready status commit together. A failed attempt leaves the last ready result in place. Cancelling a research run discards the partial text.
+A file is visible after its bytes are stored and its row commits. A report is ready when its question, its text, how the run stopped, its source list, and its ready status commit together. A failed attempt leaves the last ready result in place. Cancelling a research run discards the partial text.
 
 If a browser action may already have completed, the run tells the person in the thread and does not repeat that action. When nothing was sent, the agent decides the next step, and it can ask the person whether to try again.
 
@@ -66,11 +66,11 @@ A down provider is retried three times after the first attempt on a queued run. 
 
 When Postgres is unavailable, the app stops and shows that the system is down.
 
-Each model call writes the usage record in `docs/product/models.md`. Missing usage is stored as missing. An account stops when its recorded total tokens reach its cap. The default cap is 10 million.
+Each model call writes the usage record in `docs/product/models.md`. Missing usage is stored as missing. An email stops when its recorded total tokens reach its cap. The default cap is 10 million. The cap and the stop stay with the email after the account is deleted.
 
 A send on a website without a matching unused confirmation waits and does not send. Committed work stays.
 
-Deleting an account is immediate and cannot be restored. It stops an in-flight run and removes the Firebase sign-in, waiting questions, unused confirmations, knowledge files, abilities, other files, the Drive token, browser cookies, and schedules. It does not remove the platform model keys.
+Deleting an account is immediate and cannot be restored. It stops an in-flight run and removes the Firebase sign-in, waiting questions, unused confirmations, knowledge files, abilities, other files, the integration secrets, browser cookies, and schedules. It leaves the usage rows for that email. It does not remove the platform model keys.
 
 # Placement
 
@@ -111,7 +111,7 @@ flowchart LR
 - `scheduler` enqueues a scheduled run through `tasks`.
 - Voice becomes a chat message when the person sends the transcript, then enters the loop. Detail is in `docs/product/voice.md`.
 - A Drive import is a read-only copy. The loop reads the copy.
-- Platform model keys stay envelope-encrypted with Cloud KMS. A Drive refresh token stays encrypted the same way, and it belongs to one account.
+- Platform model keys stay envelope-encrypted with Cloud KMS. An integration secret stays encrypted the same way, on that account's row for that provider.
 
 # Tests
 
@@ -123,13 +123,13 @@ flowchart LR
 - A knowledge file is absent until its bytes and its ownership row commit.
 - A file is absent until its bytes and its row commit.
 - An upload over 50 MB is refused. A file that would make the account's upload and task-file count exceed 5 GB is refused. Knowledge files and Drive copies are outside that count.
-- A report is not ready until its text and its source list commit with its ready status.
-- A research run opens at most 20 sources and stops after 30 minutes of work. Waiting on the person does not count. Cancelling discards the partial text and leaves the last ready report.
+- A report is not ready until its question, its text, how the run stopped, and its source list commit with its ready status.
+- A research run opens at most 20 sources. It stops at that ceiling, after 30 minutes of work, or when new pages mostly repeat. A page that cannot be opened does not count. Waiting on the person does not count. Cancelling discards the partial text and leaves the last ready report.
 - A provider failure on a queued run retries three times after the first attempt. The failed run then stays on a dead letter queue. A stopped account does not retry. The person sees one line in the thread that the run failed.
-- A cost entry records missing usage when the provider returns none. That record adds nothing to the token cap. The default cap is 10 million recorded total tokens, and it can be raised for one account.
+- A usage record stores missing usage when the provider returns none. That record adds nothing to the token cap. The default cap is 10 million recorded total tokens, and it can be raised for one email. The cap and the stop stay with that email.
 - A scheduled run may open a remembered ability. A send on a website from that run still requires the person to confirm that exact send.
 - Deleting a thread deletes its schedules. A schedule has no count cap. When a run of the same schedule is still working or waiting, the next occurrence is skipped. A different schedule runs at the same time.
-- Deleting the account is immediate and cannot be restored. It removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the Drive token, browser cookies, and the schedules. It does not remove the platform model keys.
+- Deleting the account is immediate and cannot be restored. It removes the Firebase sign-in, the waiting run, unused confirmations, the knowledge files, the abilities, the other files, the integration secrets, browser cookies, and the schedules. It leaves the usage rows for that email. It does not remove the platform model keys.
 
 # Product rules
 
