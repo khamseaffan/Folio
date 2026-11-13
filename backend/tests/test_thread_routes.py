@@ -1,4 +1,8 @@
+import json
+import threading
+import time
 import uuid
+from datetime import datetime
 
 import pytest
 from app.account import ensure_account
@@ -6,6 +10,7 @@ from app.db import connect
 from app.main import app
 from app.model import Block, Reply
 from app.session import apply as apply_session
+from app.session import end_session
 from app.sign_in_proof import VerifiedSignIn
 from fastapi.testclient import TestClient
 
@@ -17,17 +22,89 @@ CAUSE = "distinctive-cause-zebra"
 SUMMARY = "hidden-summary-quill"
 
 
+class _Script:
+    def __init__(
+        self,
+        chunks: tuple[str, ...],
+        holds: tuple[threading.Event | None, ...],
+        error: BaseException | None,
+        error_at: int | None,
+        final: Reply,
+        arrived: threading.Event,
+    ) -> None:
+        self._chunks = chunks
+        self._holds = holds
+        self._error = error
+        self._error_at = error_at
+        self._final = final
+        self._arrived = arrived
+        self._parts: list[str] = []
+        self._done = False
+
+    def __iter__(self):
+        if self._error is not None and not self._chunks:
+            raise self._error
+        for index, chunk in enumerate(self._chunks):
+            hold = self._holds[index] if index < len(self._holds) else None
+            if hold is not None:
+                self._arrived.set()
+                hold.wait()
+            if self._error is not None and self._error_at == index:
+                raise self._error
+            self._parts.append(chunk)
+            yield chunk
+        self._done = True
+
+    def reply(self) -> Reply:
+        if not self._done:
+            return Reply(
+                text="".join(self._parts),
+                input_tokens=None,
+                output_tokens=None,
+                total_tokens=None,
+            )
+        return self._final
+
+
 class FakeModel:
-    def __init__(self, reply: Reply | None = None, error: BaseException | None = None) -> None:
+    def __init__(
+        self,
+        reply: Reply | None = None,
+        error: BaseException | None = None,
+        chunks: tuple[str, ...] | None = None,
+        holds: tuple[threading.Event | None, ...] = (),
+        error_at: int | None = None,
+        arrived: threading.Event | None = None,
+    ) -> None:
         self.completed = 0
+        self.calls = 0
         self._reply = reply if reply is not None else Reply("fake-reply", 424242, 434343, 858585)
         self._error = error
+        self._chunks = chunks
+        self._holds = holds
+        self._error_at = error_at
+        self._arrived = arrived if arrived is not None else threading.Event()
 
     def complete(self, prompt: str, blocks: list[Block]) -> Reply:
         self.completed += 1
         if self._error is not None:
             raise self._error
         return self._reply
+
+    def stream(self, prompt: str, blocks: list[Block]) -> _Script:
+        self.calls += 1
+        if self._chunks is None:
+            chunks = () if self._error is not None else (self._reply.text,)
+        else:
+            chunks = self._chunks
+        return _Script(
+            chunks,
+            self._holds,
+            self._error,
+            self._error_at,
+            self._reply,
+            self._arrived,
+        )
 
     def count_tokens(self, prompt: str, blocks: list[Block]) -> int:
         return 1
@@ -138,6 +215,66 @@ def _message_count(thread_id: str) -> int:
     return int(row[0])
 
 
+def _events(text: str) -> list[dict[str, object]]:
+    found: list[dict[str, object]] = []
+    for block in text.split("\n\n"):
+        line = block.strip()
+        if line == "":
+            continue
+        assert line.startswith("data: ")
+        payload = json.loads(line.removeprefix("data: "))
+        assert isinstance(payload, dict)
+        found.append(payload)
+    return found
+
+
+def _next_event(lines) -> dict[str, object]:
+    for line in lines:
+        if not line.startswith("data: "):
+            continue
+        payload = json.loads(line.removeprefix("data: "))
+        assert isinstance(payload, dict)
+        return payload
+    raise AssertionError("stream ended")
+
+
+def _wait_until(ready) -> None:
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if ready():
+            return
+        time.sleep(0.02)
+    raise AssertionError("timed out")
+
+
+def _stored_messages(thread_id: str) -> list[tuple[str, str, str]]:
+    with connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT role, kind, body
+            FROM message
+            WHERE thread_id = %s
+            ORDER BY created_at ASC
+            """,
+            (thread_id,),
+        ).fetchall()
+    return [(row[0], row[1], row[2]) for row in rows]
+
+
+def _usage_rows(email: str) -> list[tuple]:
+    with connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT operation, provider, model, input_tokens, output_tokens,
+                   total_tokens, message_id
+            FROM usage
+            WHERE email = %s
+            """,
+            (email.lower(),),
+        ).fetchall()
+    return list(rows)
+
+
 def _usage_count(email: str) -> int:
     with connect() as connection:
         present = connection.execute("SELECT to_regclass('public.usage')").fetchone()
@@ -238,11 +375,15 @@ def _assert_not_found(
         f"/threads/{thread_id}/messages",
         json={"text": "cross-account-text"},
     )
+    stopped = client.post(f"/threads/{thread_id}/stop")
     assert loaded.status_code == 404
     assert loaded.json() == {"error": "Not found"}
     assert posted.status_code == 404
     assert posted.json() == {"error": "Not found"}
+    assert stopped.status_code == 404
+    assert stopped.json() == {"error": "Not found"}
     assert model.completed == 0
+    assert model.calls == 0
 
 
 def test_no_session_uses_the_sign_in_status(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -257,6 +398,7 @@ def test_no_session_uses_the_sign_in_status(monkeypatch: pytest.MonkeyPatch) -> 
         client.post("/threads"),
         client.get(f"/threads/{thread_id}"),
         client.post(f"/threads/{thread_id}/messages", json={"text": "hello"}),
+        client.post(f"/threads/{thread_id}/stop"),
     ]
     client.cookies.set("session", "not-a-session")
     invalid = client.get("/threads")
@@ -336,13 +478,16 @@ def test_a_new_thread_is_named_new_thread(monkeypatch: pytest.MonkeyPatch) -> No
         _remove(email)
 
 
-def test_post_message_returns_the_reply_and_one_usage_row(
+def test_post_message_streams_chunks_in_order_and_stores_one_usage_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     email = _email("Chat")
     stored = email.lower()
     _remove(email)
-    model = FakeModel(reply=Reply("fake-reply", 424242, 434343, 858585))
+    model = FakeModel(
+        reply=Reply("fakereply", 424242, 434343, 858585),
+        chunks=("fake", "reply"),
+    )
     try:
         client = _sign_in(monkeypatch, email)
         created = client.post("/threads")
@@ -357,9 +502,25 @@ def test_post_message_returns_the_reply_and_one_usage_row(
         posted = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
         loaded = client.get(f"/threads/{thread_id}")
         assert posted.status_code == 200
+        assert "text/event-stream" in posted.headers["content-type"]
         assert loaded.status_code == 200
-        assert posted.json() == loaded.json()
-        body = _assert_thread(posted.json())
+        events = _events(posted.text)
+        assert events == [
+            {"text": "fake"},
+            {"text": "reply"},
+            {"done": True},
+        ]
+        for event in events:
+            if "text" in event:
+                assert set(event) == {"text"}
+        assert SUMMARY not in posted.text
+        assert "summary" not in posted.text
+        assert "424242" not in posted.text
+        assert "434343" not in posted.text
+        assert "858585" not in posted.text
+        assert "gemini-4-argon" not in posted.text
+        assert "expected_cost" not in posted.text
+        body = _assert_thread(loaded.json())
         messages = body["messages"]
         assert isinstance(messages, list)
         created_at = [item["created_at"] for item in messages]
@@ -372,22 +533,23 @@ def test_post_message_returns_the_reply_and_one_usage_row(
         assert person["body"] == "hello"
         assert str(person["created_at"]) <= str(assistant["created_at"])
         assert person["kind"] == "chat"
-        assert assistant["body"] == "fake-reply"
+        assert assistant["body"] == "fakereply"
         assert assistant["kind"] == "chat"
-        assert SUMMARY not in posted.text
-        assert "summary" not in posted.text
-        assert "424242" not in posted.text
-        assert "434343" not in posted.text
-        assert "858585" not in posted.text
-        assert "gemini-4-argon" not in posted.text
-        assert "expected_cost" not in posted.text
-        with connect() as connection:
-            usage = connection.execute(
-                "SELECT message_id FROM usage WHERE email = %s",
-                (stored,),
-            ).fetchall()
-        assert usage == [(uuid.UUID(str(assistant["id"])),)]
-        assert model.completed == 1
+        assert SUMMARY not in loaded.text
+        usage = _usage_rows(stored)
+        assert usage == [
+            (
+                "chat",
+                "google",
+                "gemini-4-argon",
+                424242,
+                434343,
+                858585,
+                uuid.UUID(str(assistant["id"])),
+            )
+        ]
+        assert model.calls == 1
+        assert model.completed == 0
     finally:
         _remove(email)
 
@@ -447,6 +609,7 @@ def test_stopped_email_returns_the_sentence_and_stores_nothing(
         assert _message_count(thread_id) == 0
         assert _usage_count(stored) == 0
         assert model.completed == 0
+        assert model.calls == 0
     finally:
         _remove(email)
 
@@ -478,6 +641,7 @@ def test_token_cap_returns_the_sentence_without_digits_and_stores_nothing(
         assert _message_count(thread_id) == 0
         assert _usage_count(stored) == 0
         assert model.completed == 0
+        assert model.calls == 0
     finally:
         _remove(email)
 
@@ -495,8 +659,14 @@ def test_model_error_keeps_the_person_message_and_hides_the_cause(
         thread_id = created.json()["id"]
         _use_model(monkeypatch, model)
         response = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        loaded = client.get(f"/threads/{thread_id}")
         assert response.status_code == 200
-        body = _assert_thread(response.json())
+        assert _events(response.text) == [{"failed": True}]
+        assert CAUSE not in response.text
+        assert "summary" not in response.text
+        assert "gemini-4-argon" not in response.text
+        assert "expected_cost" not in response.text
+        body = _assert_thread(loaded.json())
         messages = body["messages"]
         assert isinstance(messages, list)
         by_role = {item["role"]: item for item in messages}
@@ -508,10 +678,313 @@ def test_model_error_keeps_the_person_message_and_hides_the_cause(
         assert person["kind"] == "chat"
         assert assistant["kind"] == "failure"
         assert assistant["body"] == FAILED
+        assert CAUSE not in loaded.text
+        assert _usage_rows(email) == [("chat", "google", "gemini-4-argon", None, None, None, None)]
+        assert model.calls == 1
+        assert model.completed == 0
+    finally:
+        _remove(email)
+
+
+def _open_thread(monkeypatch: pytest.MonkeyPatch, email: str) -> tuple[TestClient, str]:
+    client = _sign_in(monkeypatch, email)
+    created = client.post("/threads")
+    assert created.status_code == 200
+    return client, created.json()["id"]
+
+
+def _last_active(session_id: uuid.UUID) -> datetime:
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT last_active_at FROM session WHERE id = %s",
+            (session_id,),
+        ).fetchone()
+    assert row is not None
+    return row[0]
+
+
+def _assistant_id(thread_id: str) -> uuid.UUID:
+    with connect() as connection:
+        row = connection.execute(
+            """
+            SELECT id FROM message
+            WHERE thread_id = %s AND role = 'assistant' AND kind = 'chat'
+            """,
+            (thread_id,),
+        ).fetchone()
+    assert row is not None
+    return row[0]
+
+
+def test_stop_after_the_first_chunk_stores_that_text_and_one_usage_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Stop")
+    _remove(email)
+    release = threading.Event()
+    arrived = threading.Event()
+    model = FakeModel(
+        reply=Reply("keptlater", 424242, 434343, 858585),
+        chunks=("kept", "later"),
+        holds=(None, release),
+        arrived=arrived,
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        session_raw = client.cookies.get("session")
+        assert session_raw is not None
+        session_id = uuid.UUID(session_raw)
+        _use_model(monkeypatch, model)
+        with client.stream(
+            "POST",
+            f"/threads/{thread_id}/messages",
+            json={"text": "hello"},
+        ) as response:
+            assert response.status_code == 200
+            lines = response.iter_lines()
+            first = _next_event(lines)
+            assert first == {"text": "kept"}
+            assert set(first) == {"text"}
+            assert arrived.wait(2)
+            after_person = _last_active(session_id)
+            assert _stored_messages(thread_id) == [("person", "chat", "hello")]
+            stopped = client.post(f"/threads/{thread_id}/stop")
+            assert stopped.status_code == 204
+            release.set()
+            done = _next_event(lines)
+            assert done == {"done": True}
+            assert "424242" not in json.dumps(first)
+            assert "424242" not in json.dumps(done)
+        assert _stored_messages(thread_id) == [
+            ("person", "chat", "hello"),
+            ("assistant", "chat", "kept"),
+        ]
+        assert _last_active(session_id) > after_person
+        rows = _usage_rows(email)
+        assert len(rows) == 1
+        assert rows[0][0:6] == ("chat", "google", "gemini-4-argon", None, None, None)
+        assert rows[0][6] == _assistant_id(thread_id)
+        assert FAILED not in "".join(body for _, _, body in _stored_messages(thread_id))
+    finally:
+        release.set()
+        _remove(email)
+
+
+def test_stop_before_any_word_stores_usage_and_no_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Early")
+    _remove(email)
+    release = threading.Event()
+    arrived = threading.Event()
+    model = FakeModel(
+        reply=Reply("later", 11, 12, 23),
+        chunks=("later",),
+        holds=(release,),
+        arrived=arrived,
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        with client.stream(
+            "POST",
+            f"/threads/{thread_id}/messages",
+            json={"text": "hello"},
+        ) as response:
+            assert response.status_code == 200
+            assert arrived.wait(2)
+            assert _stored_messages(thread_id) == [("person", "chat", "hello")]
+            stopped = client.post(f"/threads/{thread_id}/stop")
+            assert stopped.status_code == 204
+            release.set()
+            assert _next_event(response.iter_lines()) == {"done": True}
+        assert _stored_messages(thread_id) == [("person", "chat", "hello")]
+        assert _usage_rows(email) == [("chat", "google", "gemini-4-argon", None, None, None, None)]
+    finally:
+        release.set()
+        _remove(email)
+
+
+def test_closing_the_stream_does_not_stop_the_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Close")
+    _remove(email)
+    release = threading.Event()
+    arrived = threading.Event()
+    model = FakeModel(
+        reply=Reply("keptlater", 424242, 434343, 858585),
+        chunks=("kept", "later"),
+        holds=(None, release),
+        arrived=arrived,
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        stream_cm = client.stream(
+            "POST",
+            f"/threads/{thread_id}/messages",
+            json={"text": "hello"},
+        )
+        response = stream_cm.__enter__()
+        try:
+            assert response.status_code == 200
+            first = _next_event(response.iter_lines())
+            assert first == {"text": "kept"}
+            assert arrived.wait(2)
+        finally:
+
+            def _close() -> None:
+                stream_cm.__exit__(None, None, None)
+
+            closer = threading.Thread(target=_close)
+            closer.start()
+            closer.join(3)
+            if closer.is_alive():
+                release.set()
+                closer.join(3)
+                raise AssertionError("closing the stream waited on the reply")
+        release.set()
+        _wait_until(lambda: _usage_count(email) == 1)
+        assert _stored_messages(thread_id) == [
+            ("person", "chat", "hello"),
+            ("assistant", "chat", "keptlater"),
+        ]
+        rows = _usage_rows(email)
+        assert len(rows) == 1
+        assert rows[0][0:6] == ("chat", "google", "gemini-4-argon", 424242, 434343, 858585)
+        stored = "".join(body for _, _, body in _stored_messages(thread_id))
+        assert FAILED not in stored
+    finally:
+        release.set()
+        _remove(email)
+
+
+def test_ending_the_session_does_not_stop_the_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Ended")
+    _remove(email)
+    release = threading.Event()
+    arrived = threading.Event()
+    model = FakeModel(
+        reply=Reply("keptlater", 7, 8, 15),
+        chunks=("kept", "later"),
+        holds=(None, release),
+        arrived=arrived,
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        session_raw = client.cookies.get("session")
+        assert session_raw is not None
+        _use_model(monkeypatch, model)
+        with client.stream(
+            "POST",
+            f"/threads/{thread_id}/messages",
+            json={"text": "hello"},
+        ) as response:
+            lines = response.iter_lines()
+            assert _next_event(lines) == {"text": "kept"}
+            assert arrived.wait(2)
+            end_session(uuid.UUID(session_raw))
+            signed_out = client.post("/sign-out")
+            assert signed_out.status_code == 204
+            release.set()
+            assert _next_event(lines) == {"text": "later"}
+            assert _next_event(lines) == {"done": True}
+        assert _stored_messages(thread_id) == [
+            ("person", "chat", "hello"),
+            ("assistant", "chat", "keptlater"),
+        ]
+        assert _usage_rows(email) == [
+            ("chat", "google", "gemini-4-argon", 7, 8, 15, _assistant_id(thread_id))
+        ]
+    finally:
+        release.set()
+        _remove(email)
+
+
+def test_another_account_cannot_stop_the_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner_email = _email("Owner")
+    other_email = _email("Other")
+    _remove(owner_email)
+    _remove(other_email)
+    allowed_existed = _account_exists(ALLOWED)
+    allowed_usage = _usage_ids(ALLOWED)
+    allowed_threads = _thread_ids(ALLOWED)
+    allowed_session: uuid.UUID | None = None
+    release = threading.Event()
+    arrived = threading.Event()
+    model = FakeModel(
+        reply=Reply("keptlater", 3, 4, 7),
+        chunks=("kept", "later"),
+        holds=(None, release),
+        arrived=arrived,
+    )
+    try:
+        owner, thread_id = _open_thread(monkeypatch, owner_email)
+        _use_model(monkeypatch, model)
+        other = _sign_in(monkeypatch, other_email)
+        with owner.stream(
+            "POST",
+            f"/threads/{thread_id}/messages",
+            json={"text": "hello"},
+        ) as response:
+            lines = response.iter_lines()
+            assert _next_event(lines) == {"text": "kept"}
+            assert arrived.wait(2)
+            refused = other.post(f"/threads/{thread_id}/stop")
+            assert refused.status_code == 404
+            assert refused.json() == {"error": "Not found"}
+            admin, allowed_session = _allowed_client()
+            admin_stop = admin.post(f"/threads/{thread_id}/stop")
+            assert admin_stop.status_code == 404
+            assert admin_stop.json() == {"error": "Not found"}
+            release.set()
+            later = _next_event(lines)
+            done = _next_event(lines)
+            assert later == {"text": "later"}
+            assert done == {"done": True}
+            assert "3" not in json.dumps([later, done])
+        assert _stored_messages(thread_id) == [
+            ("person", "chat", "hello"),
+            ("assistant", "chat", "keptlater"),
+        ]
+        assert len(_usage_rows(owner_email)) == 1
+    finally:
+        release.set()
+        _remove(owner_email)
+        _remove(other_email)
+        _cleanup_allowed(allowed_existed, allowed_usage, allowed_threads, allowed_session)
+
+
+def test_mid_stream_model_error_keeps_the_arrived_text_and_hides_the_cause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Partial")
+    _remove(email)
+    model = FakeModel(
+        chunks=("kept", "later"),
+        error=RuntimeError(CAUSE),
+        error_at=1,
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        response = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert response.status_code == 200
+        assert _events(response.text) == [{"text": "kept"}, {"failed": True}]
         assert CAUSE not in response.text
-        assert "summary" not in response.text
         assert "gemini-4-argon" not in response.text
-        assert "expected_cost" not in response.text
-        assert model.completed == 1
+        assert _stored_messages(thread_id) == [
+            ("person", "chat", "hello"),
+            ("assistant", "chat", "kept"),
+            ("assistant", "failure", FAILED),
+        ]
+        assert _usage_rows(email) == [
+            ("chat", "google", "gemini-4-argon", None, None, None, _assistant_id(thread_id))
+        ]
     finally:
         _remove(email)

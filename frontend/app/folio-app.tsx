@@ -9,6 +9,7 @@ import {
   MagnifyingGlassIcon,
   PaperAirplaneIcon,
   PlusIcon,
+  StopIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType, SVGProps } from "react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -21,7 +22,8 @@ import {
   postDisplayName,
   postSignIn,
   postSignOut,
-  postThreadMessage,
+  postStop,
+  streamThreadMessage,
   type Account,
   type ApiDown,
   type ApiMessage,
@@ -97,6 +99,7 @@ const abilities: { title: string; text: string; icon: ComponentType<SVGProps<SVG
 ];
 
 const SYSTEM_DOWN = "The system is down and repair is underway.";
+const FAILED_REPLY = "That didn't go through.";
 const UNAVAILABLE = "Sign-in is unavailable.";
 const LINK_SENT = "Check your email for a sign-in link. Open it in this browser.";
 
@@ -218,7 +221,10 @@ export function FolioApp() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [draft, setDraft] = useState("");
+  const [streaming, setStreaming] = useState(false);
   const linkHref = useRef<string | null>(null);
+  const streamAbort = useRef<AbortController | null>(null);
+  const stopping = useRef(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const messagePane = useRef<HTMLDivElement>(null);
   const requestGeneration = useRef(0);
@@ -264,6 +270,8 @@ export function FolioApp() {
       if (listed.kind === "message") {
         if (listed.unauthorized) {
           requestGeneration.current += 1;
+          streamAbort.current?.abort();
+          setStreaming(false);
           setNotice(listed.message);
           await signOutFirebase();
           if (!active) return;
@@ -303,6 +311,8 @@ export function FolioApp() {
       if (opened.kind === "message") {
         if (opened.unauthorized) {
           requestGeneration.current += 1;
+          streamAbort.current?.abort();
+          setStreaming(false);
           setNotice(opened.message);
           await signOutFirebase();
           if (!active) return;
@@ -408,6 +418,8 @@ export function FolioApp() {
         setNotice(result.message);
         if (result.unauthorized) {
           requestGeneration.current += 1;
+          streamAbort.current?.abort();
+          setStreaming(false);
           await signOutFirebase();
           setDisplayName(null);
           setAccountEmail(null);
@@ -444,6 +456,8 @@ export function FolioApp() {
         return;
       }
       requestGeneration.current += 1;
+      streamAbort.current?.abort();
+      setStreaming(false);
       await signOutFirebase();
       setDisplayName(null);
       setAccountEmail(null);
@@ -464,6 +478,7 @@ export function FolioApp() {
     setMessages([]);
     setDraft("");
     setThreadsLoaded(false);
+    setStreaming(false);
   }
 
   async function showChatError(result: ApiDown | ApiMessage) {
@@ -473,6 +488,8 @@ export function FolioApp() {
     }
     if (result.unauthorized) {
       requestGeneration.current += 1;
+      streamAbort.current?.abort();
+      setStreaming(false);
       setNotice(result.message);
       await signOutFirebase();
       setDisplayName(null);
@@ -547,24 +564,100 @@ export function FolioApp() {
   async function sendDraft(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
     const text = draft;
-    if (text.trim() === "" || openId === null || acting.current || pending) return;
+    if (text.trim() === "" || openId === null || acting.current || pending || streaming) return;
     const threadId = openId;
     acting.current = true;
     const generation = ++requestGeneration.current;
-    setPending(true);
+    const controller = new AbortController();
+    streamAbort.current = controller;
     setNotice(null);
+    const personId = crypto.randomUUID();
+    const assistantId = crypto.randomUUID();
+    let opened = false;
     try {
-      const result = await postThreadMessage(threadId, text);
+      const result = await streamThreadMessage(
+        threadId,
+        text,
+        controller.signal,
+        () => {
+          if (requestGeneration.current !== generation) return;
+          opened = true;
+          setStreaming(() => requestGeneration.current === generation);
+          setDraft("");
+          setMessages((current) => {
+            if (requestGeneration.current !== generation) return current;
+            return [
+              ...current,
+              {
+                id: personId,
+                role: "person",
+                kind: "chat",
+                body: text,
+                created_at: new Date().toISOString(),
+              },
+            ];
+          });
+        },
+        (chunk) => {
+          if (requestGeneration.current !== generation) return;
+          setMessages((current) => {
+            if (requestGeneration.current !== generation) return current;
+            if (!current.some((message) => message.id === assistantId)) {
+              return [
+                ...current,
+                {
+                  id: assistantId,
+                  role: "assistant",
+                  kind: "chat",
+                  body: chunk,
+                  created_at: new Date().toISOString(),
+                },
+              ];
+            }
+            return current.map((message) =>
+              message.id === assistantId ? { ...message, body: message.body + chunk } : message,
+            );
+          });
+        },
+      );
       if (requestGeneration.current !== generation) return;
-      if (result.kind !== "value") {
-        await showChatError(result);
+      if (result.kind === "done" || result.kind === "closed") return;
+      if (opened && result.kind === "message") return;
+      if (result.kind === "failed") {
+        setMessages((current) => {
+          if (requestGeneration.current !== generation) return current;
+          return [
+            ...current,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              kind: "failure",
+              body: FAILED_REPLY,
+              created_at: new Date().toISOString(),
+            },
+          ];
+        });
         return;
       }
-      remember(result.value);
-      setDraft("");
+      await showChatError(result);
     } finally {
+      if (streamAbort.current === controller) streamAbort.current = null;
       acting.current = false;
-      if (requestGeneration.current === generation) setPending(false);
+      if (requestGeneration.current === generation) setStreaming(false);
+    }
+  }
+
+  async function onStop() {
+    if (openId === null || stopping.current) return;
+    stopping.current = true;
+    const threadId = openId;
+    const generation = requestGeneration.current;
+    try {
+      const result = await postStop(threadId);
+      if (result.kind === "value" || requestGeneration.current !== generation) return;
+      await showChatError(result);
+    } finally {
+      stopping.current = false;
     }
   }
 
@@ -705,14 +798,21 @@ export function FolioApp() {
                           onChange={(event) => setDraft(event.target.value)}
                           onKeyDown={onComposerKey}
                         />
-                        <button
-                          type="submit"
-                          className="primary send"
-                          disabled={pending || draft.trim() === ""}
-                        >
-                          <PaperAirplaneIcon aria-hidden="true" />
-                          Send
-                        </button>
+                        {streaming ? (
+                          <button type="button" className="primary send" onClick={() => void onStop()}>
+                            <StopIcon aria-hidden="true" />
+                            Stop
+                          </button>
+                        ) : (
+                          <button
+                            type="submit"
+                            className="primary send"
+                            disabled={pending || draft.trim() === ""}
+                          >
+                            <PaperAirplaneIcon aria-hidden="true" />
+                            Send
+                          </button>
+                        )}
                       </form>
                     </section>
                   ) : null}

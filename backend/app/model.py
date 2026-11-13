@@ -1,4 +1,6 @@
 import os
+import threading
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -59,16 +61,75 @@ class Reply:
     total_tokens: int | None
 
 
+class TextStream(Protocol):
+    def __iter__(self) -> Iterator[str]: ...
+
+    def reply(self) -> Reply: ...
+
+
 class Model(Protocol):
     def complete(self, prompt: str, blocks: list[Block]) -> Reply: ...
 
     def count_tokens(self, prompt: str, blocks: list[Block]) -> int: ...
 
+    def stream(self, prompt: str, blocks: list[Block]) -> TextStream: ...
+
+
+class _FakeStream:
+    def __init__(
+        self,
+        chunks: tuple[str, ...],
+        pauses: tuple[threading.Event, ...],
+        usage: Reply,
+    ) -> None:
+        self._chunks = chunks
+        self._pauses = pauses
+        self._usage = usage
+        self._parts: list[str] = []
+        self._done = False
+
+    def __iter__(self) -> Iterator[str]:
+        for index, chunk in enumerate(self._chunks):
+            if index > 0 and index - 1 < len(self._pauses):
+                self._pauses[index - 1].wait()
+            self._parts.append(chunk)
+            yield chunk
+        self._done = True
+
+    def reply(self) -> Reply:
+        if not self._done:
+            return Reply(
+                text="".join(self._parts),
+                input_tokens=None,
+                output_tokens=None,
+                total_tokens=None,
+            )
+        return Reply(
+            text="".join(self._chunks),
+            input_tokens=self._usage.input_tokens,
+            output_tokens=self._usage.output_tokens,
+            total_tokens=self._usage.total_tokens,
+        )
+
 
 class FakeModel:
-    def __init__(self, reply: str = "", token_count: int = 1) -> None:
+    def __init__(
+        self,
+        reply: str = "",
+        token_count: int = 1,
+        chunks: tuple[str, ...] | None = None,
+        pauses: tuple[threading.Event, ...] = (),
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+        total_tokens: int | None = None,
+    ) -> None:
         self._reply = reply
         self._token_count = token_count
+        self._chunks = chunks
+        self._pauses = pauses
+        self._input_tokens = input_tokens
+        self._output_tokens = output_tokens
+        self._total_tokens = total_tokens
 
     def complete(self, prompt: str, blocks: list[Block]) -> Reply:
         return Reply(
@@ -80,6 +141,19 @@ class FakeModel:
 
     def count_tokens(self, prompt: str, blocks: list[Block]) -> int:
         return self._token_count
+
+    def stream(self, prompt: str, blocks: list[Block]) -> _FakeStream:
+        if self._chunks is None:
+            chunks = (self._reply,) if self._reply != "" else ()
+        else:
+            chunks = self._chunks
+        usage = Reply(
+            text="",
+            input_tokens=self._input_tokens,
+            output_tokens=self._output_tokens,
+            total_tokens=self._total_tokens,
+        )
+        return _FakeStream(chunks, self._pauses, usage)
 
 
 def open_model() -> Model:
