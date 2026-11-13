@@ -45,7 +45,7 @@ flowchart LR
 
 ## Harness
 
-The agent has tools and memory. The loop is project code. The model chooses the tool, the memory, and the words. Code runs a gate before the tool. The model does not decide that a gate passed.
+The agent has tools and memory. The loop is LangGraph. The brain is a LangChain chat model. The model chooses the tool, the memory, and the words. Code runs a gate before the tool. The model does not decide that a gate passed.
 
 ```mermaid
 flowchart LR

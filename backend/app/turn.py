@@ -8,6 +8,7 @@ from dataclasses import dataclass
 import psycopg
 
 from app.db import connect
+from app.loop import ask, stream_turn
 from app.message import (
     MessageRow,
     delete_failure,
@@ -20,7 +21,24 @@ from app.session import set_last_active_at
 from app.thread import ThreadRow, get_thread, set_summary
 from app.usage import record_usage, tokens_for_email
 
-_PROVIDER = "google"
+_PROVIDER = "openai"
+
+
+def _window(model: Model) -> int:
+    context = getattr(model, "context_tokens", None)
+    if isinstance(context, int):
+        return context
+    return CONTEXT_TOKENS
+
+
+def _who(model: Model) -> tuple[str, str]:
+    provider = getattr(model, "provider", None)
+    model_id = getattr(model, "model_id", None)
+    if not isinstance(provider, str) or provider == "":
+        provider = _PROVIDER
+    if not isinstance(model_id, str) or model_id == "":
+        model_id = MODEL_ID
+    return provider, model_id
 _STOPPED = "A system admin has stopped your account. Contact khamseaffan@gmail.com."
 _CAPPED = "You have reached the allowed usage limit."
 _FAILED = "That didn't go through."
@@ -76,7 +94,7 @@ def select_blocks(
     for index, message in enumerate(newest_first):
         trial_ids = chosen | {message[0]}
         trial = [item for item in ordered if item[0] in trial_ids]
-        if model.count_tokens(prompt, _as_blocks(trial)) <= CONTEXT_TOKENS:
+        if model.count_tokens(prompt, _as_blocks(trial)) <= _window(model):
             chosen.add(message[0])
         else:
             rejected = {item[0] for item in newest_first[index:]}
@@ -103,13 +121,13 @@ def _newest_that_fit(
     model: Model,
 ) -> list[MessageRow]:
     ordered = list(messages)
-    if model.count_tokens(prompt, _as_blocks(ordered)) <= CONTEXT_TOKENS:
+    if model.count_tokens(prompt, _as_blocks(ordered)) <= _window(model):
         return ordered
     chosen: set[uuid.UUID] = set()
     for message in reversed(ordered):
         trial_ids = chosen | {message[0]}
         trial = [item for item in ordered if item[0] in trial_ids]
-        if model.count_tokens(prompt, _as_blocks(trial)) <= CONTEXT_TOKENS:
+        if model.count_tokens(prompt, _as_blocks(trial)) <= _window(model):
             chosen.add(message[0])
     return [message for message in ordered if message[0] in chosen]
 
@@ -149,7 +167,7 @@ def _cover(
             kept, left_out = _without(messages, drop)
             return prompt, kept, left_out
         try:
-            folded = model.complete(fold_prompt, _as_blocks(included))
+            folded = ask(model, fold_prompt, _as_blocks(included))
         except Exception:
             # The summary never reaches the person. A later reply failure keeps its line.
             ordered = _chat_messages(messages)
@@ -160,8 +178,7 @@ def _cover(
             account_id,
             email,
             "chat",
-            _PROVIDER,
-            MODEL_ID,
+            *_who(model),
             folded.input_tokens,
             folded.output_tokens,
             folded.total_tokens,
@@ -209,6 +226,7 @@ class _Prepared:
     prompt: str
     blocks: list[Block]
     omitted: list[MessageRow]
+    model: Model
 
 
 @dataclass
@@ -345,6 +363,7 @@ def _prepare(
         prompt=prompt,
         blocks=blocks,
         omitted=omitted,
+        model=model,
     )
 
 
@@ -354,6 +373,7 @@ def _fail(
     thread_id: uuid.UUID,
     email: str,
     omitted: list[MessageRow],
+    model: Model,
 ) -> TurnResult:
     stored = insert_message(
         connection,
@@ -370,8 +390,7 @@ def _fail(
         account_id,
         email,
         "chat",
-        _PROVIDER,
-        MODEL_ID,
+        *_who(model),
         None,
         None,
         None,
@@ -393,7 +412,7 @@ def run_turn(
     if not isinstance(prepared, _Prepared):
         return prepared
     try:
-        reply = model.complete(prepared.prompt, prepared.blocks)
+        reply = ask(model, prepared.prompt, prepared.blocks)
     except Exception:
         return _fail(
             connection,
@@ -401,6 +420,7 @@ def run_turn(
             prepared.thread_id,
             prepared.email,
             prepared.omitted,
+            prepared.model,
         )
     assistant = insert_message(
         connection,
@@ -418,8 +438,7 @@ def run_turn(
         prepared.account_id,
         prepared.email,
         "chat",
-        _PROVIDER,
-        MODEL_ID,
+        *_who(prepared.model),
         reply.input_tokens,
         reply.output_tokens,
         reply.total_tokens,
@@ -427,20 +446,6 @@ def run_turn(
         None,
     )
     return TurnResult(body=reply.text, kind="chat", omitted=tuple(prepared.omitted))
-
-
-def _reply_or_none(stream: object) -> Reply | None:
-    read = getattr(stream, "reply", None)
-    if not callable(read):
-        return None
-    failed = False
-    try:
-        value = read()
-    except Exception:
-        failed = True
-    if failed or not isinstance(value, Reply):
-        return None
-    return value
 
 
 def _counts(reply: Reply | None) -> tuple[int | None, int | None, int | None]:
@@ -453,7 +458,14 @@ def _save(prepared: _Prepared, text: str, reply: Reply | None, failed: bool, sto
     input_tokens, output_tokens, total_tokens = _counts(reply)
     with connect() as connection:
         if failed and text == "":
-            _fail(connection, prepared.account_id, prepared.thread_id, prepared.email, [])
+            _fail(
+                connection,
+                prepared.account_id,
+                prepared.thread_id,
+                prepared.email,
+                [],
+                prepared.model,
+            )
             return
         message_id: uuid.UUID | None = None
         assistant: MessageRow | None = None
@@ -496,8 +508,7 @@ def _save(prepared: _Prepared, text: str, reply: Reply | None, failed: bool, sto
             prepared.account_id,
             prepared.email,
             "chat",
-            _PROVIDER,
-            MODEL_ID,
+            *_who(prepared.model),
             input_tokens,
             output_tokens,
             total_tokens,
@@ -572,6 +583,7 @@ def _prepare_retry(
         prompt=prompt,
         blocks=blocks,
         omitted=omitted,
+        model=model,
     )
     return _Retry(prepared=prepared, failure_id=failure_id, partial_id=partial_id)
 
@@ -612,8 +624,7 @@ def _save_retry(
                 prepared.account_id,
                 prepared.email,
                 "chat",
-                _PROVIDER,
-                MODEL_ID,
+                *_who(prepared.model),
                 input_tokens,
                 output_tokens,
                 total_tokens,
@@ -662,8 +673,7 @@ def _save_retry(
             prepared.account_id,
             prepared.email,
             "chat",
-            _PROVIDER,
-            MODEL_ID,
+            *_who(prepared.model),
             input_tokens,
             output_tokens,
             total_tokens,
@@ -680,23 +690,20 @@ def _write_reply(
 ) -> None:
     parts: list[str] = []
     failed = False
-    stream: object | None = None
+    reply: Reply | None = None
     try:
-        stream = model.stream(prepared.prompt, prepared.blocks)
+        for event in stream_turn(model, prepared.prompt, prepared.blocks, live.stop):
+            if not isinstance(event, dict):
+                continue
+            text = event.get("text")
+            if isinstance(text, str) and text != "":
+                parts.append(text)
+                live.publish({"text": text})
+            usage = event.get("usage")
+            if isinstance(usage, Reply):
+                reply = usage
     except Exception:
         failed = True
-    if stream is not None and not failed:
-        try:
-            for chunk in stream:
-                if live.stop.is_set():
-                    break
-                if not isinstance(chunk, str) or chunk == "":
-                    continue
-                parts.append(chunk)
-                live.publish({"text": chunk})
-        except Exception:
-            failed = True
-    reply = _reply_or_none(stream) if stream is not None else None
     stopped = live.stop.is_set()
     try:
         persist("".join(parts), reply, failed, stopped)

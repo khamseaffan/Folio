@@ -10,9 +10,9 @@ from app.model import MODEL_ID
 
 _MIGRATION = Path(__file__).resolve().parent.parent / "migrations" / "usage.sql"
 
-# https://ai.google.dev/gemini-api/docs/pricing input $2 output $10 per 1M through 2026-11-30.
+# https://developers.openai.com/api/docs/pricing short context input $2 output $10 per 1M.
 _PRICES: dict[tuple[str, str], tuple[Decimal, Decimal]] = {
-    ("google", MODEL_ID): (
+    ("openai", MODEL_ID): (
         Decimal("2.00") / Decimal(1_000_000),
         Decimal("10.00") / Decimal(1_000_000),
     ),

@@ -1,8 +1,8 @@
 import threading
-from types import SimpleNamespace
 
 import pytest
-from app.gemini import GeminiModel
+from app.brain import LangChainBrain
+from app.loop import LOOP, ask
 from app.model import (
     CONTEXT_TOKENS,
     MODEL_ID,
@@ -13,65 +13,39 @@ from app.model import (
     Reply,
     open_model,
 )
+from langchain_core.messages import AIMessage, AIMessageChunk
 
 
-def _level(config: object) -> object:
-    thinking = getattr(config, "thinking_config", None)
-    if thinking is None:
-        generation = getattr(config, "generation_config", None)
-        thinking = getattr(generation, "thinking_config", None)
-    assert thinking is not None
-    return thinking.thinking_level
-
-
-class _Models:
+class _Chat:
     def __init__(
         self,
-        response: object,
-        counted: object,
-        stream_chunks: list[object] | None = None,
-        stream_error: BaseException | None = None,
+        message: AIMessage,
+        tokens: int | None = 6,
+        chunks: list[AIMessageChunk] | None = None,
+        error: BaseException | None = None,
     ) -> None:
-        self.response = response
-        self.counted = counted
-        self.stream_chunks = stream_chunks if stream_chunks is not None else []
-        self.stream_error = stream_error
-        self.generate_calls: list[dict[str, object]] = []
-        self.stream_calls: list[dict[str, object]] = []
-        self.count_calls: list[dict[str, object]] = []
+        self.message = message
+        self.tokens = tokens
+        self.chunks = chunks if chunks is not None else []
+        self.error = error
+        self.sent: list[object] = []
 
-    def generate_content(self, *, model: str, contents: object, config: object) -> object:
-        self.generate_calls.append(
-            {"model": model, "contents": contents, "config": config}
-        )
-        return self.response
+    def invoke(self, messages: list[object]) -> AIMessage:
+        self.sent.append(messages)
+        if self.error is not None and not self.chunks:
+            raise self.error
+        return self.message
 
-    def generate_content_stream(self, *, model: str, contents: object, config: object) -> object:
-        self.stream_calls.append(
-            {"model": model, "contents": contents, "config": config}
-        )
-        if self.stream_error is not None:
-            raise self.stream_error
-        chunks = self.stream_chunks
+    def stream(self, messages: list[object]):
+        self.sent.append(messages)
+        if self.error is not None:
+            raise self.error
+        yield from self.chunks
 
-        def _walk():
-            yield from chunks
-
-        return _walk()
-
-    def count_tokens(self, *, model: str, contents: object) -> object:
-        self.count_calls.append({"model": model, "contents": contents})
-        return self.counted
-
-
-def _gemini(
-    response: object,
-    counted: object,
-    stream_chunks: list[object] | None = None,
-    stream_error: BaseException | None = None,
-) -> tuple[GeminiModel, _Models]:
-    models = _Models(response, counted, stream_chunks, stream_error)
-    return GeminiModel(SimpleNamespace(models=models)), models
+    def get_num_tokens(self, text: str) -> int | None:
+        if self.tokens is None:
+            raise RuntimeError("token count is missing")
+        return self.tokens
 
 
 def _blocks() -> list[Block]:
@@ -82,9 +56,9 @@ def _blocks() -> list[Block]:
 
 
 def test_constants() -> None:
-    assert MODEL_ID == "gemini-4-argon"
+    assert MODEL_ID == "gpt-6.1-sol"
     assert THINKING == "medium"
-    assert CONTEXT_TOKENS == 1048576
+    assert CONTEXT_TOKENS == 1_050_000
 
 
 def test_fake_returns_configured_reply_and_scripted_count() -> None:
@@ -120,8 +94,8 @@ def test_block_role_must_be_person_or_assistant() -> None:
 
 
 def test_open_model_without_a_key_returns_the_fake(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setenv("GOOGLE_API_KEY", "other-key")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "other-key")
     missing = open_model()
     assert isinstance(missing, FakeModel)
     noted = missing.complete("prompt", [])
@@ -130,65 +104,51 @@ def test_open_model_without_a_key_returns_the_fake(monkeypatch: pytest.MonkeyPat
     assert noted.output_tokens is None
     assert noted.total_tokens is None
     assert list(missing.stream("prompt", [])) == ["Noted."]
-    monkeypatch.setenv("GEMINI_API_KEY", "   ")
+    monkeypatch.setenv("OPENAI_API_KEY", "   ")
     assert isinstance(open_model(), FakeModel)
 
 
 def test_open_model_with_a_key_does_not_call_the_api(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key-value")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-value")
     built: list[object] = []
 
-    def client(*, api_key: str) -> object:
-        if api_key.strip() == "":
-            raise AssertionError("blank key")
-        built.append(object())
-        return built[-1]
+    def build(model: str, **kwargs: object) -> object:
+        assert model == "openai:gpt-6.1-sol"
+        assert kwargs.get("reasoning_effort") == "medium"
+        chat = object()
+        built.append(chat)
+        return chat
 
-    monkeypatch.setattr("app.gemini.genai.Client", client)
+    monkeypatch.setattr("app.brain.init_chat_model", build)
     model = open_model()
     assert built
-    assert isinstance(model, GeminiModel)
-    assert getattr(model, "_client", None) is built[0]
+    assert isinstance(model, LangChainBrain)
+    assert model._chat is built[0]
 
 
-def test_gemini_sends_the_model_and_medium_thinking() -> None:
-    response = SimpleNamespace(text="answer", usage_metadata=None)
-    model, models = _gemini(response, SimpleNamespace(total_tokens=6))
-    blocks = _blocks()
-    reply = model.complete("system prompt", blocks)
-    counted = model.count_tokens("system prompt", blocks)
-
+def test_langchain_sends_the_prompt_and_blocks() -> None:
+    chat = _Chat(AIMessage(content="answer"))
+    model = LangChainBrain(chat)
+    reply = model.complete("system prompt", _blocks())
+    counted = model.count_tokens("system prompt", _blocks())
     assert reply.text == "answer"
     assert counted == 6
-    assert models.generate_calls[0]["model"] == "gemini-4-argon"
-    assert models.count_calls[0]["model"] == "gemini-4-argon"
-    generate_config = models.generate_calls[0]["config"]
-    assert _level(generate_config) == "MEDIUM"
-    assert getattr(generate_config, "system_instruction") == "system prompt"
-    generate_contents = models.generate_calls[0]["contents"]
-    assert isinstance(generate_contents, list)
-    assert [item.role for item in generate_contents] == ["user", "model"]
-    assert generate_contents[0].parts[0].text == "hello"
-    assert generate_contents[1].parts[0].text == "hi"
-    count_contents = models.count_calls[0]["contents"]
-    assert isinstance(count_contents, list)
-    assert [item.role for item in count_contents] == ["user", "user", "model"]
-    assert [item.parts[0].text for item in count_contents] == [
-        "system prompt",
-        "hello",
-        "hi",
-    ]
-    assert "config" not in models.count_calls[0]
+    sent = chat.sent[0]
+    assert sent[0].content == "system prompt"
+    assert [type(item).__name__ for item in sent] == ["SystemMessage", "HumanMessage", "AIMessage"]
+    assert sent[1].content == "hello"
+    assert sent[2].content == "hi"
 
 
 def test_usage_metadata_maps_provider_fields() -> None:
-    usage = SimpleNamespace(
-        prompt_token_count=2,
-        candidates_token_count=3,
-        total_token_count=9,
+    message = AIMessage(
+        content=[
+            {"type": "thinking", "thinking": "hidden"},
+            {"type": "text", "text": "answer"},
+        ],
+        usage_metadata={"input_tokens": 2, "output_tokens": 3, "total_tokens": 9},
     )
-    response = SimpleNamespace(text="answer", thoughts="hidden", usage_metadata=usage)
-    model, _models = _gemini(response, SimpleNamespace(total_tokens=1))
+    model = LangChainBrain(_Chat(message))
     assert model.complete("system", _blocks()) == Reply(
         text="answer",
         input_tokens=2,
@@ -198,13 +158,11 @@ def test_usage_metadata_maps_provider_fields() -> None:
 
 
 def test_zero_counts_stay_zero() -> None:
-    usage = SimpleNamespace(
-        prompt_token_count=0,
-        candidates_token_count=0,
-        total_token_count=0,
+    message = AIMessage(
+        content="answer",
+        usage_metadata={"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
     )
-    response = SimpleNamespace(text="answer", usage_metadata=usage)
-    model, _models = _gemini(response, SimpleNamespace(total_tokens=0))
+    model = LangChainBrain(_Chat(message, tokens=0))
     assert model.complete("system", _blocks()) == Reply(
         text="answer",
         input_tokens=0,
@@ -215,8 +173,7 @@ def test_zero_counts_stay_zero() -> None:
 
 
 def test_missing_usage_is_none() -> None:
-    response = SimpleNamespace(text="answer", usage_metadata=None)
-    model, _models = _gemini(response, SimpleNamespace(total_tokens=1))
+    model = LangChainBrain(_Chat(AIMessage(content="answer")))
     assert model.complete("system", _blocks()) == Reply(
         text="answer",
         input_tokens=None,
@@ -226,9 +183,8 @@ def test_missing_usage_is_none() -> None:
 
 
 def test_partial_usage_leaves_absent_fields_none() -> None:
-    usage = SimpleNamespace(prompt_token_count=8, candidates_token_count=None)
-    response = SimpleNamespace(text="answer", usage_metadata=usage)
-    model, _models = _gemini(response, SimpleNamespace(total_tokens=1))
+    message = type("Message", (), {"content": "answer", "usage_metadata": {"input_tokens": 8}})()
+    model = LangChainBrain(_Chat(message))
     assert model.complete("system", _blocks()) == Reply(
         text="answer",
         input_tokens=8,
@@ -238,13 +194,9 @@ def test_partial_usage_leaves_absent_fields_none() -> None:
 
 
 def test_missing_token_count_is_an_error() -> None:
-    model, _models = _gemini(
-        SimpleNamespace(text="answer", usage_metadata=None),
-        SimpleNamespace(total_tokens=None),
-    )
-    with pytest.raises(ModelError) as caught:
+    model = LangChainBrain(_Chat(AIMessage(content="answer"), tokens=None))
+    with pytest.raises(ModelError):
         model.count_tokens("system", _blocks())
-    assert "test-key-value" not in str(caught.value)
 
 
 def test_model_error_cannot_contain_the_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -252,6 +204,14 @@ def test_model_error_cannot_contain_the_key(monkeypatch: pytest.MonkeyPatch) -> 
     error = ModelError("failed with test-key-value in the text")
     assert "test-key-value" not in str(error)
     assert error.__cause__ is None
+
+
+def test_the_loop_calls_the_model() -> None:
+    model = FakeModel(reply="from-the-graph", input_tokens=1, output_tokens=2, total_tokens=3)
+    reply = ask(model, "system", _blocks())
+    assert reply.text == "from-the-graph"
+    assert reply.input_tokens == 1
+    assert "model" in LOOP.get_graph().nodes
 
 
 def test_fake_stream_waits_between_chunks_and_leaves_missing_usage_none() -> None:
@@ -315,19 +275,16 @@ def test_fake_stream_keeps_a_finished_zero_count() -> None:
     )
 
 
-def test_gemini_stream_uses_the_same_model_and_medium_thinking() -> None:
-    usage = SimpleNamespace(
-        prompt_token_count=2,
-        candidates_token_count=3,
-        total_token_count=9,
-    )
+def test_langchain_stream_keeps_text_and_usage() -> None:
     chunks = [
-        SimpleNamespace(text="hel", usage_metadata=None),
-        SimpleNamespace(text="lo", thoughts="hidden", usage_metadata=usage),
+        AIMessageChunk(content="hel"),
+        AIMessageChunk(
+            content=[{"type": "thinking", "thinking": "hidden"}, {"type": "text", "text": "lo"}],
+            usage_metadata={"input_tokens": 2, "output_tokens": 3, "total_tokens": 9},
+        ),
     ]
-    model, models = _gemini(SimpleNamespace(text="unused"), SimpleNamespace(total_tokens=1), chunks)
-    blocks = _blocks()
-    stream = model.stream("system prompt", blocks)
+    chat = _Chat(AIMessage(content="unused"), chunks=chunks)
+    stream = LangChainBrain(chat).stream("system prompt", _blocks())
     assert list(stream) == ["hel", "lo"]
     assert stream.reply() == Reply(
         text="hello",
@@ -335,25 +292,15 @@ def test_gemini_stream_uses_the_same_model_and_medium_thinking() -> None:
         output_tokens=3,
         total_tokens=9,
     )
-    assert models.stream_calls[0]["model"] == "gemini-4-argon"
-    stream_config = models.stream_calls[0]["config"]
-    assert _level(stream_config) == "MEDIUM"
-    assert getattr(stream_config, "system_instruction") == "system prompt"
-    stream_contents = models.stream_calls[0]["contents"]
-    assert isinstance(stream_contents, list)
-    assert [item.role for item in stream_contents] == ["user", "model"]
-    assert stream_contents[0].parts[0].text == "hello"
-    assert stream_contents[1].parts[0].text == "hi"
+    sent = chat.sent[0]
+    assert sent[0].content == "system prompt"
+    assert sent[1].content == "hello"
+    assert sent[2].content == "hi"
 
 
-def test_gemini_stream_missing_usage_is_none() -> None:
-    chunks = [SimpleNamespace(text="answer", usage_metadata=None)]
-    model, _models = _gemini(
-        SimpleNamespace(text="answer"),
-        SimpleNamespace(total_tokens=1),
-        chunks,
-    )
-    stream = model.stream("system", _blocks())
+def test_langchain_stream_missing_usage_is_none() -> None:
+    chat = _Chat(AIMessage(content="answer"), chunks=[AIMessageChunk(content="answer")])
+    stream = LangChainBrain(chat).stream("system", _blocks())
     assert list(stream) == ["answer"]
     assert stream.reply() == Reply(
         text="answer",
@@ -363,19 +310,15 @@ def test_gemini_stream_missing_usage_is_none() -> None:
     )
 
 
-def test_gemini_stream_zero_counts_stay_zero() -> None:
-    usage = SimpleNamespace(
-        prompt_token_count=0,
-        candidates_token_count=0,
-        total_token_count=0,
+def test_langchain_stream_zero_counts_stay_zero() -> None:
+    chunk = AIMessageChunk(
+        content="answer",
+        usage_metadata={"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
     )
-    chunks = [SimpleNamespace(text="answer", usage_metadata=usage)]
-    model, _models = _gemini(
-        SimpleNamespace(text="answer"),
-        SimpleNamespace(total_tokens=0),
-        chunks,
+    stream = LangChainBrain(_Chat(AIMessage(content="answer"), chunks=[chunk])).stream(
+        "system",
+        _blocks(),
     )
-    stream = model.stream("system", _blocks())
     assert list(stream) == ["answer"]
     assert stream.reply() == Reply(
         text="answer",
@@ -385,30 +328,32 @@ def test_gemini_stream_zero_counts_stay_zero() -> None:
     )
 
 
-def test_gemini_stream_failure_hides_the_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_langchain_stream_failure_hides_the_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-value")
-    model, _models = _gemini(
-        SimpleNamespace(text="answer"),
-        SimpleNamespace(total_tokens=1),
-        stream_error=RuntimeError("authorization failed for test-key-value"),
+    chat = _Chat(
+        AIMessage(content="answer"),
+        error=RuntimeError("authorization failed for test-key-value"),
     )
     with pytest.raises(ModelError) as caught:
-        list(model.stream("system", _blocks()))
+        list(LangChainBrain(chat).stream("system", _blocks()))
     assert "test-key-value" not in str(caught.value)
     assert caught.value.__cause__ is None
-    assert caught.value.__context__ is None
+    assert caught.value.__suppress_context__ is True
 
 
 def test_provider_failure_hides_the_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-value")
 
     class _Failing:
-        def generate_content(self, *, model: str, contents: object, config: object) -> object:
+        def invoke(self, messages: list[object]) -> AIMessage:
             raise RuntimeError("authorization failed for test-key-value")
 
-    model = GeminiModel(SimpleNamespace(models=_Failing()))
+        def get_num_tokens(self, text: str) -> int:
+            return 1
+
+    model = LangChainBrain(_Failing())
     with pytest.raises(ModelError) as caught:
         model.complete("system", _blocks())
     assert "test-key-value" not in str(caught.value)
     assert caught.value.__cause__ is None
-    assert caught.value.__context__ is None
+    assert caught.value.__suppress_context__ is True

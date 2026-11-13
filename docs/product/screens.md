@@ -12,7 +12,7 @@ Files lists the account's uploads and task files. The person can upload, downloa
 
 The profile panel opens from the top of the chat. It shows the knowledge files, the abilities, and the upcoming schedules. The person reads them there. Creating, changing, and deleting them stays in the chat.
 
-Settings holds the display name, the sessions, the integrations, and deleting the account. The token totals are shown there.
+Settings holds the display name, the sessions, the integrations, and deleting the account. The token totals are shown there. `khamseaffan@gmail.com` also selects the platform provider and model there. Another account does not see that control.
 
 In a wide window the thread and the profile panel sit side by side. A narrow window remains usable.
 

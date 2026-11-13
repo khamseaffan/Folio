@@ -8,7 +8,7 @@
 4. The person sets a display name of 1 to 40 characters.
 5. The person can end a session. A session also ends after 30 minutes of silence from the person and the assistant, and an account has at most two sessions.
 6. Deleting an account is immediate and cannot be restored. The usage rows, the token cap, and the stop for that email stay.
-7. The person talks with one platform model, `gemini-4-argon`, and cannot change it. The call goes through one internal interface in the Python API.
+7. `khamseaffan@gmail.com` selects the provider and the model. The person talks with that one platform model and cannot change it. The starting selection is OpenAI and `gpt-6.1-sol`. The call goes through a LangChain chat model. LangGraph is the loop. Tools, memory, and the graph stay the same.
 8. The person has many threads, and the agent renames or deletes a thread when told.
 9. A message has no length limit, and a call includes the newest blocks that fit, including the latest 10 person blocks and the latest 10 assistant blocks.
 10. A reply streams, the person can stop it, and the partial reply is kept.
@@ -25,7 +25,7 @@
 21. The assistant writes the file the task needs, as Markdown, PDF, or another type, and the person can download it.
 22. A Drive import is one file the person picks, stored as a private read-only copy.
 23. Chrome on the worker reads pages, and a send on a website runs only after the person confirms that exact send. The card expires 24 hours after it appears.
-24. Speech is transcribed by Gemini into the composer, and the audio is discarded.
+24. Speech is transcribed into the composer by the provider and model selected for that call. The starting model is Gemini. The audio is discarded.
 25. The person sees token totals and the file byte count. The email stops at 10 million recorded tokens unless that cap is raised. The cap and the stop stay with the email.
 26. The site opens on one public page. Sign-in opens chat, reports, files, a profile panel, and settings. The interface is English.
 27. A working or waiting run shows on the thread name, a question or a failed run appears in that thread, and two runs may write in that thread at the same time.

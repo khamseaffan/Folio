@@ -241,7 +241,7 @@ def test_owned_thread_stores_the_reply_and_one_usage_row(accounts) -> None:
     assert assistant[3] is None
     assert assistant[5] == "chat"
     assert assistant[6] == "fake-reply"
-    assert usage == [("chat", "google", "gemini-4-argon", 17, 19, 36, assistant[0], None)]
+    assert usage == [("chat", "openai", "gpt-6.1-sol", 17, 19, 36, assistant[0], None)]
     assert HARM in model.prompts[0]
     assert "Ada" in model.prompts[0]
 
@@ -345,8 +345,8 @@ def test_usage_at_the_cap_returns_the_line_without_figures(accounts) -> None:
             owner_id,
             email,
             "research",
-            "google",
-            "gemini-4-argon",
+            "openai",
+            "gpt-6.1-sol",
             100,
             0,
             100,
@@ -387,8 +387,8 @@ def test_usage_one_token_under_the_cap_still_stores_the_turn(accounts) -> None:
             owner_id,
             email,
             "research",
-            "google",
-            "gemini-4-argon",
+            "openai",
+            "gpt-6.1-sol",
             99,
             0,
             99,
@@ -720,4 +720,4 @@ def test_model_error_keeps_the_person_message_and_stores_null_usage(accounts) ->
     assert person[6] == "hello"
     assert failure[5] == "failure"
     assert failure[6] == FAILED
-    assert usage == [("chat", "google", "gemini-4-argon", None, None, None, None, None)]
+    assert usage == [("chat", "openai", "gpt-6.1-sol", None, None, None, None, None)]

@@ -32,15 +32,16 @@ The colors are a cherry blossom morning in front of Mount Fuji.
 ## Models
 
 - The platform holds the provider keys.
-- The model id is `gemini-4-argon`. The thinking level is medium. The person cannot change it. Detail is in `docs/product/models.md`.
-- The call goes through one internal interface in the Python API. The website does not call the model.
+- `khamseaffan@gmail.com` selects the provider and the model in settings. Another account cannot. The starting selection is OpenAI and `gpt-6.1-sol`. Tools, memory, and the loop stay the same. Detail is in `docs/product/models.md`.
+- The call goes through a LangChain chat model inside the LangGraph loop. The website does not call the model.
 - Each email stops at 10 million recorded total tokens unless that cap is raised. The cap and the stop stay with the email after the account is deleted. The person sees tokens and the file byte count.
 
 ## Harness
 
-- The loop is project code in the API and the worker. It is an agent harness: the agent has tools and memory.
+- The loop is LangGraph, in the API and the worker. The agent has tools and memory.
+- The brain is a LangChain chat model. The developer selects the provider and the model. The graph, the tools, and the memory stay the same.
 - The model chooses the tool, the memory, and the words. Code runs a gate before the tool. The model does not decide that a gate passed.
-- OpenClaw, Hermes, and an agent framework are not the core.
+- OpenClaw and Hermes are not the core. Google ADK is not the loop. The Vercel AI SDK does not call the model.
 - Chat runs in the API request. It reads `profile.md`, the thread window, and files it looks up.
 - An ability is a way of working the agent remembers for that account. Detail is in `docs/product/abilities.md`.
 - Research runs on the worker and writes one report. Detail is in `docs/product/research.md`.
