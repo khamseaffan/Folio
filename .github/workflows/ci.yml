@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - name: Cache virtualenv
@@ -20,7 +20,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: backend/.venv
-          key: venv-${{ runner.os }}-py3.12-${{ hashFiles('backend/uv.lock') }}
+          key: venv-${{ runner.os }}-py3.13-${{ hashFiles('backend/uv.lock') }}
       - name: Install
         if: steps.venv.outputs.cache-hit != 'true'
         working-directory: backend

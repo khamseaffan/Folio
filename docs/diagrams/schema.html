@@ -157,6 +157,7 @@
       </thead>
       <tbody id="key-rows"></tbody>
     </table>
+    <p class="meta">On delete, set null clears the parent id and leaves account_id. account_id on a usage row is cleared only when the account is deleted.</p>
     <p class="meta">A stored path is <code>accounts/{account_id}/.../{row id}/...</code>. A report file is <code>accounts/{account_id}/reports/{report_id}/{filename}</code>. The knowledge text is the row. The report text is the row, and the file at its path is the download. Report bytes sit outside the 5 GB upload and task-file count. On this machine the prefix is a directory, not Cloud Storage.</p>
     <h2>All attributes</h2>
     <div id="catalog"></div>
@@ -178,7 +179,7 @@
         attrs: [
           attr("id", "uuid", "yes", "PK"),
           attr("email", "text", "yes", "unique, FK", "Stored in lowercase. One email holds one account. Points at email_limit."),
-          attr("firebase_uid", "text", "no", "unique", "On this machine, local:{email} until Firebase replaces it."),
+          attr("firebase_uid", "text", "no", "unique", "The Firebase user id. Sign-in is Firebase Authentication."),
           attr("display_name", "text", "no", "", "Empty until set. Then 1 to 40 characters."),
           attr("created_at", "timestamptz", "yes")
         ]
@@ -315,7 +316,7 @@
         indexes: "Index on email. Index on account_id and at where account_id is set. Index on account_id, provider, and model.",
         attrs: [
           attr("id", "uuid", "yes", "PK"),
-          attr("account_id", "uuid", "no", "FK", "Cleared when the account is deleted. The row stays."),
+          attr("account_id", "uuid", "no", "FK", "Cleared only when the account is deleted. Deleting a thread, a message, or a run leaves it set."),
           attr("email", "text", "yes", "", "Stored in lowercase. The cap sums every row for this email."),
           attr("at", "timestamptz", "yes"),
           attr("provider", "text", "yes"),
