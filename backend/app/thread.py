@@ -47,6 +47,27 @@ def list_threads(connection: psycopg.Connection, account_id: uuid.UUID) -> list[
     return list(rows)
 
 
+def set_summary(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    summary: str,
+) -> None:
+    apply(connection)
+    updated = connection.execute(
+        """
+        UPDATE thread
+        SET summary = %s
+        WHERE id = %s
+          AND account_id = %s
+        RETURNING id
+        """,
+        (summary, thread_id, account_id),
+    ).fetchone()
+    if updated is None:
+        raise RuntimeError("thread is missing")
+
+
 def get_thread(
     connection: psycopg.Connection,
     account_id: uuid.UUID,

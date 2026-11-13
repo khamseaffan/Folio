@@ -17,7 +17,7 @@ from app.message import (
 )
 from app.model import CONTEXT_TOKENS, MODEL_ID, Block, Model, Reply
 from app.session import set_last_active_at
-from app.thread import ThreadRow, get_thread
+from app.thread import ThreadRow, get_thread, set_summary
 from app.usage import record_usage, tokens_for_email
 
 _PROVIDER = "google"
@@ -26,6 +26,7 @@ _CAPPED = "You have reached the allowed usage limit."
 _FAILED = "That didn't go through."
 NO_FAILURE = "There is no failed reply."
 _HARM = "A task that would cause physical harm stops and asks."
+_FOLD = "Summarize the earlier messages so the next reply can continue."
 _KEPT = 10
 
 
@@ -83,6 +84,92 @@ def select_blocks(
             break
     selected = [message for message in ordered if message[0] in chosen]
     return _as_blocks(selected), omitted
+
+
+def _fold_prompt(summary: str | None) -> str:
+    if summary is None:
+        return _FOLD
+    return f"{_FOLD}\n{summary}"
+
+
+def _chat_messages(messages: list[MessageRow]) -> list[MessageRow]:
+    chat = [message for message in messages if message[5] == "chat"]
+    return sorted(chat, key=lambda message: (message[7], str(message[0])))
+
+
+def _newest_that_fit(
+    prompt: str,
+    messages: list[MessageRow],
+    model: Model,
+) -> list[MessageRow]:
+    ordered = list(messages)
+    if model.count_tokens(prompt, _as_blocks(ordered)) <= CONTEXT_TOKENS:
+        return ordered
+    chosen: set[uuid.UUID] = set()
+    for message in reversed(ordered):
+        trial_ids = chosen | {message[0]}
+        trial = [item for item in ordered if item[0] in trial_ids]
+        if model.count_tokens(prompt, _as_blocks(trial)) <= CONTEXT_TOKENS:
+            chosen.add(message[0])
+    return [message for message in ordered if message[0] in chosen]
+
+
+def _without(
+    messages: list[MessageRow],
+    drop_ids: set[uuid.UUID],
+) -> tuple[list[Block], list[MessageRow]]:
+    ordered = _chat_messages(messages)
+    omitted = [message for message in ordered if message[0] in drop_ids]
+    kept = [message for message in ordered if message[0] not in drop_ids]
+    return _as_blocks(kept), omitted
+
+
+def _cover(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    email: str,
+    display_name: str | None,
+    summary: str | None,
+    messages: list[MessageRow],
+    model: Model,
+) -> tuple[str, list[Block], list[MessageRow]]:
+    covered: set[uuid.UUID] = set()
+    while True:
+        prompt = _system_prompt(display_name, summary)
+        blocks, omitted = select_blocks(prompt, messages, model)
+        if all(message[0] in covered for message in omitted):
+            return prompt, blocks, omitted
+        fold_prompt = _fold_prompt(summary)
+        included = _newest_that_fit(fold_prompt, omitted, model)
+        fresh = [message for message in included if message[0] not in covered]
+        if not fresh:
+            # Leave out only messages this summary already covers.
+            drop = {message[0] for message in omitted if message[0] in covered}
+            kept, left_out = _without(messages, drop)
+            return prompt, kept, left_out
+        try:
+            folded = model.complete(fold_prompt, _as_blocks(included))
+        except Exception:
+            # The summary never reaches the person. A later reply failure keeps its line.
+            ordered = _chat_messages(messages)
+            return prompt, _as_blocks(ordered), []
+        set_summary(connection, account_id, thread_id, folded.text)
+        record_usage(
+            connection,
+            account_id,
+            email,
+            "chat",
+            _PROVIDER,
+            MODEL_ID,
+            folded.input_tokens,
+            folded.output_tokens,
+            folded.total_tokens,
+            None,
+            None,
+        )
+        covered.update(message[0] for message in included)
+        summary = folded.text
 
 
 def _account(connection: psycopg.Connection, account_id: uuid.UUID) -> tuple[str, str | None]:
@@ -237,11 +324,19 @@ def _prepare(
     if person is None:
         return None
     set_last_active_at(connection, session_id, account_id)
-    prompt = _system_prompt(display_name, thread[3])
     messages = list_messages(connection, account_id, thread_id)
     if messages is None:
         raise RuntimeError("thread is missing")
-    blocks, omitted = select_blocks(prompt, messages, model)
+    prompt, blocks, omitted = _cover(
+        connection,
+        account_id,
+        thread_id,
+        email,
+        display_name,
+        thread[3],
+        messages,
+        model,
+    )
     return _Prepared(
         session_id=session_id,
         account_id=account_id,
@@ -454,13 +549,21 @@ def _prepare_retry(
     if failed is None:
         return NO_FAILURE
     failure_id, partial_id = failed
-    prompt = _system_prompt(display_name, thread[3])
     context = [
         message
         for message in messages
         if partial_id is None or message[0] != partial_id
     ]
-    blocks, omitted = select_blocks(prompt, context, model)
+    prompt, blocks, omitted = _cover(
+        connection,
+        account_id,
+        thread_id,
+        email,
+        display_name,
+        thread[3],
+        context,
+        model,
+    )
     prepared = _Prepared(
         session_id=session_id,
         account_id=account_id,

@@ -134,9 +134,9 @@ class FakeModel:
     def complete(self, prompt: str, blocks: list[Block]) -> Reply:
         return Reply(
             text=self._reply,
-            input_tokens=None,
-            output_tokens=None,
-            total_tokens=None,
+            input_tokens=self._input_tokens,
+            output_tokens=self._output_tokens,
+            total_tokens=self._total_tokens,
         )
 
     def count_tokens(self, prompt: str, blocks: list[Block]) -> int:

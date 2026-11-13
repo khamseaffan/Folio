@@ -2,13 +2,14 @@ import json
 import threading
 import time
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from app.account import ensure_account
 from app.db import connect
 from app.main import app
-from app.model import Block, Reply
+from app.message import insert_message
+from app.model import CONTEXT_TOKENS, Block, Reply
 from app.session import apply as apply_session
 from app.session import end_session
 from app.sign_in_proof import VerifiedSignIn
@@ -75,25 +76,42 @@ class FakeModel:
         holds: tuple[threading.Event | None, ...] = (),
         error_at: int | None = None,
         arrived: threading.Event | None = None,
+        summary_reply: Reply | None = None,
+        complete_error: BaseException | None = None,
+        token_count: int = 1,
+        overflow_text: str | None = None,
     ) -> None:
         self.completed = 0
         self.calls = 0
+        self.order: list[str] = []
         self._reply = reply if reply is not None else Reply("fake-reply", 424242, 434343, 858585)
         self._error = error
         self._chunks = chunks
         self._holds = holds
         self._error_at = error_at
         self._arrived = arrived if arrived is not None else threading.Event()
+        self._summary_reply = summary_reply
+        self._complete_error = complete_error
+        self._token_count = token_count
+        self._overflow_text = overflow_text
         self.seen: list[tuple[str, list[tuple[str, str]]]] = []
+        self.folded: list[tuple[str, list[tuple[str, str]]]] = []
 
     def complete(self, prompt: str, blocks: list[Block]) -> Reply:
         self.completed += 1
+        self.order.append("complete")
+        self.folded.append((prompt, [(block.role, block.text) for block in blocks]))
+        if self._complete_error is not None:
+            raise self._complete_error
+        if self._summary_reply is not None:
+            return self._summary_reply
         if self._error is not None:
             raise self._error
         return self._reply
 
     def stream(self, prompt: str, blocks: list[Block]) -> _Script:
         self.calls += 1
+        self.order.append("stream")
         self.seen.append((prompt, [(block.role, block.text) for block in blocks]))
         if self._chunks is None:
             chunks = () if self._error is not None else (self._reply.text,)
@@ -109,7 +127,13 @@ class FakeModel:
         )
 
     def count_tokens(self, prompt: str, blocks: list[Block]) -> int:
-        return 1
+        if (
+            self._overflow_text is not None
+            and any(block.text == self._overflow_text for block in blocks)
+            and len(blocks) > 1
+        ):
+            return CONTEXT_TOKENS + 1
+        return self._token_count
 
 
 def _email(label: str) -> str:
@@ -1382,5 +1406,246 @@ def test_retry_without_a_failure_line_does_not_call_or_insert(
         assert model.completed == 0
         assert _stored_messages(thread_id) == stored
         assert _message_count(thread_id) == 2
+    finally:
+        _remove(email)
+
+
+def _account_id(email: str) -> uuid.UUID:
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT id FROM account WHERE email = %s",
+            (email.lower(),),
+        ).fetchone()
+    assert row is not None
+    return row[0]
+
+
+def _thread_summary(thread_id: str) -> str | None:
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT summary FROM thread WHERE id = %s",
+            (thread_id,),
+        ).fetchone()
+    assert row is not None
+    return row[0]
+
+
+def _usage_full(email: str) -> list[tuple]:
+    with connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT operation, provider, model, input_tokens, output_tokens,
+                   total_tokens, message_id, run_id
+            FROM usage
+            WHERE email = %s
+            ORDER BY at ASC, id ASC
+            """,
+            (email.lower(),),
+        ).fetchall()
+    return list(rows)
+
+
+def _stamp_message(connection, message_id: uuid.UUID, when: datetime) -> None:
+    connection.execute(
+        "UPDATE message SET created_at = %s WHERE id = %s",
+        (when, message_id),
+    )
+
+
+def _seed_long(email: str, thread_id: str, *, failure: bool) -> None:
+    account_id = _account_id(email)
+    thread = uuid.UUID(thread_id)
+    base = datetime(2020, 1, 1, tzinfo=UTC)
+    with connect() as connection:
+        for index in range(11):
+            person = insert_message(connection, account_id, thread, "person", "chat", f"p{index}")
+            assert person is not None
+            _stamp_message(connection, person[0], base + timedelta(seconds=index))
+        for index in range(10):
+            assistant = insert_message(
+                connection, account_id, thread, "assistant", "chat", f"a{index}"
+            )
+            assert assistant is not None
+            _stamp_message(connection, assistant[0], base + timedelta(seconds=100 + index))
+        if not failure:
+            return
+        again = insert_message(connection, account_id, thread, "person", "chat", "again")
+        assert again is not None
+        _stamp_message(connection, again[0], base + timedelta(seconds=200))
+        failed = insert_message(connection, account_id, thread, "assistant", "failure", FAILED)
+        assert failed is not None
+        _stamp_message(connection, failed[0], base + timedelta(seconds=201))
+
+
+_FOLD = "Summarize the earlier messages so the next reply can continue."
+_FOLDED = "earlier-folded-quill"
+_SUMMARY_CAUSE = "summary-cause-ibex"
+
+
+def _reply_blocks(last: str, *, oldest: int) -> list[tuple[str, str]]:
+    blocks = [("person", f"p{index}") for index in range(oldest, 11)]
+    blocks.extend(("assistant", f"a{index}") for index in range(10))
+    blocks.append(("person", last))
+    return blocks
+
+
+def test_short_thread_sends_every_chat_message_and_skips_the_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Short")
+    _remove(email)
+    model = FakeModel(
+        reply=Reply("visible-answer", 5, 6, 11),
+        chunks=("visible-answer",),
+        token_count=1,
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        account_id = _account_id(email)
+        thread = uuid.UUID(thread_id)
+        base = datetime(2020, 1, 1, tzinfo=UTC)
+        with connect() as connection:
+            earlier = insert_message(connection, account_id, thread, "person", "chat", "earlier")
+            old = insert_message(connection, account_id, thread, "assistant", "chat", "old-reply")
+            failure = insert_message(connection, account_id, thread, "assistant", "failure", FAILED)
+            assert earlier is not None
+            assert old is not None
+            assert failure is not None
+            _stamp_message(connection, earlier[0], base)
+            _stamp_message(connection, old[0], base + timedelta(seconds=1))
+            _stamp_message(connection, failure[0], base + timedelta(seconds=2))
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "now"})
+        loaded = client.get(f"/threads/{thread_id}")
+        assert posted.status_code == 200
+        assert model.order == ["stream"]
+        assert model.completed == 0
+        assert model.seen == [
+            (HARM, [("person", "earlier"), ("assistant", "old-reply"), ("person", "now")])
+        ]
+        assert _thread_summary(thread_id) is None
+        body = _assert_thread(loaded.json())
+        messages = body["messages"]
+        assert isinstance(messages, list)
+        assistant = next(item for item in messages if item["body"] == "visible-answer")
+        assert isinstance(assistant, dict)
+        assert _usage_full(email) == [
+            (
+                "chat",
+                "google",
+                "gemini-4-argon",
+                5,
+                6,
+                11,
+                uuid.UUID(str(assistant["id"])),
+                None,
+            )
+        ]
+    finally:
+        _remove(email)
+
+
+def test_a_long_thread_writes_the_summary_before_the_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Long")
+    _remove(email)
+    model = FakeModel(
+        reply=Reply("visible-answer", 5, 6, 11),
+        chunks=("visible-answer",),
+        summary_reply=Reply(_FOLDED, 7, 8, 15),
+        overflow_text="p0",
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _seed_long(email, thread_id, failure=False)
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "p-new"})
+        loaded = client.get(f"/threads/{thread_id}")
+        assert posted.status_code == 200
+        assert model.order == ["complete", "stream"]
+        assert model.folded == [(_FOLD, [("person", "p0")])]
+        assert model.seen == [(f"{HARM}\n{_FOLDED}", _reply_blocks("p-new", oldest=1))]
+        assert _thread_summary(thread_id) == _FOLDED
+        assert _FOLDED not in posted.text
+        assert _FOLDED not in loaded.text
+        _assert_thread(loaded.json())
+        reply_id = next(row[0] for row in _message_rows(thread_id) if row[3] == "visible-answer")
+        rows = _usage_full(email)
+        assert len(rows) == 2
+        summary_row = next(row for row in rows if row[6] is None)
+        reply_row = next(row for row in rows if row[6] is not None)
+        assert summary_row == ("chat", "google", "gemini-4-argon", 7, 8, 15, None, None)
+        assert reply_row == ("chat", "google", "gemini-4-argon", 5, 6, 11, reply_id, None)
+    finally:
+        _remove(email)
+
+
+def test_a_failed_summary_keeps_the_older_messages_and_one_failure_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Missed")
+    _remove(email)
+    model = FakeModel(
+        error=RuntimeError(CAUSE),
+        complete_error=RuntimeError(_SUMMARY_CAUSE),
+        overflow_text="p0",
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _seed_long(email, thread_id, failure=False)
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "p-new"})
+        loaded = client.get(f"/threads/{thread_id}")
+        assert posted.status_code == 200
+        assert _events(posted.text) == [{"failed": True}]
+        assert model.order == ["complete", "stream"]
+        assert model.seen == [(HARM, _reply_blocks("p-new", oldest=0))]
+        assert _SUMMARY_CAUSE not in posted.text
+        assert CAUSE not in posted.text
+        assert _SUMMARY_CAUSE not in loaded.text
+        assert _thread_summary(thread_id) is None
+        stored = _stored_messages(thread_id)
+        assert [row for row in stored if row[1] == "failure"] == [("assistant", "failure", FAILED)]
+        assert _usage_full(email) == [
+            ("chat", "google", "gemini-4-argon", None, None, None, None, None)
+        ]
+    finally:
+        _remove(email)
+
+
+def test_retry_on_a_long_thread_writes_the_summary_before_the_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("RetryLong")
+    _remove(email)
+    model = FakeModel(
+        reply=Reply("visible-answer", 5, 6, 11),
+        chunks=("visible-answer",),
+        summary_reply=Reply(_FOLDED, 7, 8, 15),
+        overflow_text="p0",
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _seed_long(email, thread_id, failure=True)
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/retry")
+        loaded = client.get(f"/threads/{thread_id}")
+        assert posted.status_code == 200
+        assert model.order == ["complete", "stream"]
+        assert model.folded == [(_FOLD, [("person", "p0")])]
+        assert model.seen == [(f"{HARM}\n{_FOLDED}", _reply_blocks("again", oldest=1))]
+        assert _thread_summary(thread_id) == _FOLDED
+        assert _FOLDED not in posted.text
+        assert _FOLDED not in loaded.text
+        _assert_thread(loaded.json())
+        reply_id = next(row[0] for row in _message_rows(thread_id) if row[3] == "visible-answer")
+        rows = _usage_full(email)
+        assert len(rows) == 2
+        summary_row = next(row for row in rows if row[6] is None)
+        reply_row = next(row for row in rows if row[6] is not None)
+        assert summary_row == ("chat", "google", "gemini-4-argon", 7, 8, 15, None, None)
+        assert reply_row == ("chat", "google", "gemini-4-argon", 5, 6, 11, reply_id, None)
+        assert all(row[1] != "failure" for row in _stored_messages(thread_id))
     finally:
         _remove(email)

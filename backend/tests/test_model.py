@@ -98,6 +98,20 @@ def test_fake_returns_configured_reply_and_scripted_count() -> None:
     )
     assert model.count_tokens("system", blocks) == 4
     assert FakeModel().count_tokens("system", []) == 1
+    counted = FakeModel(reply="hello", input_tokens=2, output_tokens=3, total_tokens=5)
+    assert counted.complete("system", blocks) == Reply(
+        text="hello",
+        input_tokens=2,
+        output_tokens=3,
+        total_tokens=5,
+    )
+    zeros = FakeModel(reply="z", input_tokens=0, output_tokens=0, total_tokens=0)
+    assert zeros.complete("system", []) == Reply(
+        text="z",
+        input_tokens=0,
+        output_tokens=0,
+        total_tokens=0,
+    )
 
 
 def test_block_role_must_be_person_or_assistant() -> None:
