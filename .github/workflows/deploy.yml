@@ -17,8 +17,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  api:
+  # Two merges close together can finish CI out of order. Only the newest commit on main is
+  # deployed, so an older run can never replace a newer one.
+  latest:
     if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      current: ${{ steps.tip.outputs.current }}
+    steps:
+      - id: tip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tip=$(gh api "repos/${{ github.repository }}/commits/main" --jq .sha)
+          if [ "$tip" = "${{ github.event.workflow_run.head_sha }}" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "main has moved on to $tip, so this run is skipped"
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  api:
+    needs: latest
+    if: needs.latest.outputs.current == 'true'
     runs-on: ubuntu-latest
     env:
       IMAGE: ${{ vars.IMAGE_REPO }}/api:${{ github.event.workflow_run.head_sha }}
