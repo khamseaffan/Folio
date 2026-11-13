@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  ArrowRightStartOnRectangleIcon,
-  BookOpenIcon,
-  EnvelopeIcon,
-} from "@heroicons/react/24/outline";
+import { ArrowRightStartOnRectangleIcon, EnvelopeIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   getReady,
@@ -23,6 +19,16 @@ import {
   signInWithGoogle,
   signOutFirebase,
 } from "../lib/firebase-auth";
+
+function Mark() {
+  return (
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <path fill="currentColor" d="M2 26.5C8 25 11 20 14.2 15.2 15.2 13.2 15.6 10.6 16 8.2c.4 2.4.8 5 1.8 7 3.2 4.8 6.2 9.8 12.2 11.3Z" />
+      <path fill="#f7f4f1" d="M14.2 13.4c.6-1.6 1.2-3.6 1.8-5.2.6 1.6 1.2 3.6 1.8 5.2-.8-.5-1.6-.8-1.8-.8s-1 .3-1.8.8z" />
+      <circle cx="24.2" cy="8.4" r="1.7" fill="#d98996" />
+    </svg>
+  );
+}
 
 const SYSTEM_DOWN = "The system is down and repair is underway.";
 const UNAVAILABLE = "Sign-in is unavailable.";
@@ -286,17 +292,25 @@ export function FolioApp() {
 
   return (
     <>
-      <div className="stage" inert={down}>
-        <section className="panel">
+      <div className="scene" inert={down}>
+        <svg className="fuji" viewBox="0 0 1440 360" aria-hidden="true">
+          <path fill="#3d5872" d="M0 320 720 40 1440 320V360H0Z" />
+          <path fill="#ffffff" d="M468 138 720 40 972 138Z" />
+        </svg>
+        <div className="stage">
+          <section className="panel">
           <div className="panel-head">
             <div className="mark" aria-hidden="true">
-              <BookOpenIcon />
+              <Mark />
             </div>
             <div>
               {named ? <p className="kicker">Folio</p> : null}
               <h1>{named ? displayName : "Folio"}</h1>
             </div>
           </div>
+          {view === "signed-out" ? (
+            <p className="lede">This is a skeleton. Sign-in is here. Nothing else is in it yet.</p>
+          ) : null}
           {signedIn && accountEmail ? <p className="mail">{accountEmail}</p> : null}
           {notice ? (
             <p role="alert" className="notice">
@@ -382,7 +396,8 @@ export function FolioApp() {
               Sign out
             </button>
           ) : null}
-        </section>
+          </section>
+        </div>
       </div>
       {down ? (
         <div className="down-layer">
