@@ -1,5 +1,8 @@
 FROM python:3.13-slim
 
+ARG VERSION=dev
+LABEL org.opencontainers.image.version=$VERSION
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 ENV UV_COMPILE_BYTECODE=1 \

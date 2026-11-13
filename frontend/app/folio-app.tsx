@@ -264,6 +264,7 @@ export function FolioApp() {
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [working, setWorking] = useState(false);
   const linkHref = useRef<string | null>(null);
   const streamAbort = useRef<AbortController | null>(null);
   const stopping = useRef(false);
@@ -314,6 +315,7 @@ export function FolioApp() {
           requestGeneration.current += 1;
           streamAbort.current?.abort();
           setStreaming(false);
+          setWorking(false);
           setNotice(listed.message);
           await signOutFirebase();
           if (!active) return;
@@ -355,6 +357,7 @@ export function FolioApp() {
           requestGeneration.current += 1;
           streamAbort.current?.abort();
           setStreaming(false);
+          setWorking(false);
           setNotice(opened.message);
           await signOutFirebase();
           if (!active) return;
@@ -462,6 +465,7 @@ export function FolioApp() {
           requestGeneration.current += 1;
           streamAbort.current?.abort();
           setStreaming(false);
+          setWorking(false);
           await signOutFirebase();
           setDisplayName(null);
           setAccountEmail(null);
@@ -500,6 +504,7 @@ export function FolioApp() {
       requestGeneration.current += 1;
       streamAbort.current?.abort();
       setStreaming(false);
+      setWorking(false);
       await signOutFirebase();
       setDisplayName(null);
       setAccountEmail(null);
@@ -521,6 +526,7 @@ export function FolioApp() {
     setDraft("");
     setThreadsLoaded(false);
     setStreaming(false);
+    setWorking(false);
   }
 
   async function showChatError(result: ApiDown | ApiMessage) {
@@ -532,6 +538,7 @@ export function FolioApp() {
       requestGeneration.current += 1;
       streamAbort.current?.abort();
       setStreaming(false);
+      setWorking(false);
       setNotice(result.message);
       await signOutFirebase();
       setDisplayName(null);
@@ -616,6 +623,19 @@ export function FolioApp() {
     const personId = crypto.randomUUID();
     const assistantId = crypto.randomUUID();
     let opened = false;
+    // Show the message and the working dots now. They are undone if the server refuses the send.
+    setDraft("");
+    setMessages((current) => [
+      ...current,
+      {
+        id: personId,
+        role: "person",
+        kind: "chat",
+        body: text,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    setWorking(true);
     try {
       const result = await streamThreadMessage(
         threadId,
@@ -625,23 +645,10 @@ export function FolioApp() {
           if (requestGeneration.current !== generation) return;
           opened = true;
           setStreaming(() => requestGeneration.current === generation);
-          setDraft("");
-          setMessages((current) => {
-            if (requestGeneration.current !== generation) return current;
-            return [
-              ...current,
-              {
-                id: personId,
-                role: "person",
-                kind: "chat",
-                body: text,
-                created_at: new Date().toISOString(),
-              },
-            ];
-          });
         },
         (chunk) => {
           if (requestGeneration.current !== generation) return;
+          setWorking(false);
           setMessages((current) => {
             if (requestGeneration.current !== generation) return current;
             if (!current.some((message) => message.id === assistantId)) {
@@ -666,6 +673,7 @@ export function FolioApp() {
       if (result.kind === "done" || result.kind === "closed") return;
       if (opened && result.kind === "message") return;
       if (result.kind === "failed") {
+        setWorking(false);
         setMessages((current) => {
           if (requestGeneration.current !== generation) return current;
           return [
@@ -681,11 +689,20 @@ export function FolioApp() {
         });
         return;
       }
+      if (!opened) {
+        // The server refused the send, so nothing was stored. Take the message back out.
+        setMessages((current) => current.filter((message) => message.id !== personId));
+        setDraft((current) => (current === "" ? text : current));
+      }
+      setWorking(false);
       await showChatError(result);
     } finally {
       if (streamAbort.current === controller) streamAbort.current = null;
       acting.current = false;
-      if (requestGeneration.current === generation) setStreaming(false);
+      if (requestGeneration.current === generation) {
+        setStreaming(false);
+        setWorking(false);
+      }
     }
   }
 
@@ -908,6 +925,17 @@ export function FolioApp() {
                             </p>
                           ),
                         )}
+                        {working ? (
+                          <div
+                            className="message reply working"
+                            role="status"
+                            aria-label="Folio is working"
+                          >
+                            <span className="dot" aria-hidden="true" />
+                            <span className="dot" aria-hidden="true" />
+                            <span className="dot" aria-hidden="true" />
+                          </div>
+                        ) : null}
                       </div>
                       )}
                       <form className="composer" onSubmit={(event) => void sendDraft(event)}>

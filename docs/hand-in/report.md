@@ -155,6 +155,14 @@ Later, and not required by the assignment. One email stays one private account.
 
 A change reaches the main branch through a pull request. GitHub Actions runs Ruff, pytest, lint, and typecheck. The same checks run before a commit. The main branch is protected: a change needs the backend, frontend, Terraform and container checks to pass. A merge to main deploys by itself. Vercel builds the website, and a workflow builds the API image tagged with the commit, runs the database migration, deploys Cloud Run, and checks that the live site answers. Only the newest commit on main is deployed. The workflow signs in to Google with a short-lived identity tied to this repository, so no key is stored. Terraform describes Google Cloud and is applied by me after I read the plan, so the pipeline never holds infrastructure-admin power.
 
+**Release environments**
+
+- Development is a branch and a pull request, checked by CI.
+- Staging will be what a merge to the main branch produces.
+- Production will happen only when a release is made on GitHub.
+- Today there is one pipeline. A merge to the main branch deploys straight to the one live environment. The split into staging and production is a planned step and is not built.
+- Every API image carries a version tag (`v0.1.` and the deploy number) as well as the commit it was built from, so a release can later point at an exact image.
+
 **Checks I will not leave to the model**
 
 - A website send matches the site, the fields, and a card inside 24 hours.
