@@ -22,11 +22,20 @@ The product rules are in [docs/product](docs/product). The record picture is [do
 
 ## Status
 
+Live at https://folio.khamseaffan.com.
+
 | Present | Not built |
 | --- | --- |
-| API health check and tests | Accounts, chat, memory, research, files, schedules |
-| Web app shell | Google Cloud and Vercel deploy |
-| Record picture | The tables. Each table is created when the work that writes it is built. |
+| Sign-in with an email allowlist, sessions, a display name | Memory, research, files, schedules |
+| Threads and one streamed chat turn with usage rows | Drive, the browser, voice |
+| Deployment: Terraform on Google Cloud, Vercel, and CI/CD | Admin limits and the settings screen |
+
+## Deploy
+
+- **Pull request:** GitHub Actions runs `backend`, `frontend`, `terraform` and `docker`. All four must pass to merge into `main`.
+- **Merge to `main`:** Vercel builds the website from its GitHub connection. `deploy.yml` then builds the API image tagged with the commit, runs the migration job, deploys Cloud Run, and checks that `https://folio.khamseaffan.com/api/ready` answers. Only the newest commit on `main` is deployed.
+- **Infrastructure:** `infra/` is applied by a person after reading the plan. See `infra/README.md`.
+- **Same origin:** the site forwards `/api/*` to the API, so the session cookie works.
 
 ## Run
 

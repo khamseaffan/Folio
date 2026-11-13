@@ -90,7 +90,7 @@ The local build has five stages. The deployment pipeline is stage 2.5.
 
 - Stage 1 is an account on this machine. An allowed email signs in through Firebase, a session exists, and ending it is logging out.
 - Stage 2 is one chat turn. One thread, one reply, and one usage row. The thread summary follows that turn, before a call leaves an older message out.
-- Stage 2.5 is the CI/CD pipeline. The checks already run on a pull request. This stage adds deployment, after that chat turn and before files. The website stays on Vercel. Terraform describes Google Cloud.
+- Stage 2.5 is the CI/CD pipeline. It is built. The site is live at https://folio.khamseaffan.com. A pull request runs four checks. A merge deploys the website through Vercel and the API through GitHub Actions. Terraform is applied by a person after a plan review, so CI holds no infrastructure-admin power. See `docs/superpowers/specs/2026-11-13-deployment-design.md`.
 - Stage 3 is files and memory.
 - Stage 4 is research and a schedule. These are the first jobs on the queue.
 - Stage 5 is one Drive copy, then the browser, then dictation, token totals, and the public page.
