@@ -28,6 +28,8 @@ class FakeModel:
         error: BaseException | None = None,
         token_count: int = 1,
         overflow_text: str | None = None,
+        later_mark: str | None = None,
+        later_text: str | None = None,
     ) -> None:
         self.prompts: list[str] = []
         self.completed: list[list[Block]] = []
@@ -36,6 +38,8 @@ class FakeModel:
         self._error = error
         self._token_count = token_count
         self._overflow_text = overflow_text
+        self._later_mark = later_mark
+        self._later_text = later_text
 
     def complete(self, prompt: str, blocks: list[Block]) -> Reply:
         self.prompts.append(prompt)
@@ -46,8 +50,15 @@ class FakeModel:
 
     def count_tokens(self, prompt: str, blocks: list[Block]) -> int:
         self.counted.append(list(blocks))
-        if self._overflow_text is not None and any(
-            block.text == self._overflow_text for block in blocks
+        texts = [block.text for block in blocks]
+        if self._overflow_text is not None and self._overflow_text in texts and len(blocks) > 1:
+            return CONTEXT_TOKENS + 1
+        if (
+            self._later_mark is not None
+            and self._later_text is not None
+            and self._later_mark in prompt
+            and self._later_text in texts
+            and len(blocks) > 1
         ):
             return CONTEXT_TOKENS + 1
         return self._token_count
@@ -553,9 +564,27 @@ def test_full_window_keeps_the_latest_ten_and_omits_an_older_message(accounts) -
             "SELECT summary FROM thread WHERE id = %s",
             (thread_id,),
         ).fetchone()
+        usage = connection.execute(
+            """
+            SELECT operation, input_tokens, output_tokens, total_tokens, message_id, run_id
+            FROM usage
+            WHERE email = %s
+            """,
+            (accounts["owner_email"],),
+        ).fetchall()
+        listed = list_messages(connection, owner_id, thread_id)
     assert isinstance(result, TurnResult)
-    assert model.completed
-    sent = [block.text for block in model.completed[0]]
+    assert len(model.completed) == 2
+    fold = "Summarize the earlier messages so the next reply can continue."
+    assert model.prompts[0] == f"{fold}\n{summary}"
+    assert "Ada" not in model.prompts[0]
+    assert HARM not in model.prompts[0]
+    assert [block.text for block in model.completed[0]] == ["p0"]
+    assert HARM in model.prompts[1]
+    assert "Ada" in model.prompts[1]
+    assert "done" in model.prompts[1]
+    assert summary not in model.prompts[1]
+    sent = [block.text for block in model.completed[1]]
     persons = [text for text in sent if text.startswith("p")]
     assistants = [text for text in sent if text.startswith("a")]
     assert persons == [f"p{index}" for index in range(1, 11)] + ["p-new"]
@@ -563,9 +592,92 @@ def test_full_window_keeps_the_latest_ten_and_omits_an_older_message(accounts) -
     assert "p0" not in sent
     assert "kind-failure-skip" not in sent
     assert [message[6] for message in result.omitted] == ["p0"]
-    assert stored == (summary,)
+    assert stored == ("done",)
     assert any("p0" in [block.text for block in blocks] for blocks in model.counted)
     assert summary not in sent
+    assert listed is not None
+    reply_id = next(row[0] for row in listed if row[6] == "done")
+    assert len(usage) == 2
+    assert all(row[0] == "chat" and row[5] is None for row in usage)
+    assert {row[4] for row in usage} == {None, reply_id}
+    assert all(row[1] == 1 and row[2] == 1 and row[3] == 2 for row in usage)
+
+
+def test_a_second_omission_is_summarized_before_the_reply(accounts) -> None:
+    owner_id = accounts["owner_id"]
+    thread_id = accounts["thread_id"]
+    prior = "prior-fold-mantle"
+    model = FakeModel(
+        reply=Reply("done", 1, 1, 2),
+        overflow_text="p0",
+        later_mark="done",
+        later_text="p1",
+    )
+    base = datetime(2020, 1, 1, tzinfo=UTC)
+    with connect() as connection:
+        connection.execute(
+            "UPDATE thread SET summary = %s WHERE id = %s",
+            (prior, thread_id),
+        )
+        for index in range(11):
+            person = insert_message(
+                connection, owner_id, thread_id, "person", "chat", f"p{index}"
+            )
+            assert person is not None
+            _stamp(connection, person[0], base + timedelta(seconds=index))
+        for index in range(10):
+            assistant = insert_message(
+                connection, owner_id, thread_id, "assistant", "chat", f"a{index}"
+            )
+            assert assistant is not None
+            _stamp(connection, assistant[0], base + timedelta(seconds=100 + index))
+        result = run_turn(
+            connection,
+            accounts["owner_session"],
+            owner_id,
+            thread_id,
+            "p-new",
+            model,
+        )
+        stored = connection.execute(
+            "SELECT summary FROM thread WHERE id = %s",
+            (thread_id,),
+        ).fetchone()
+        usage = connection.execute(
+            """
+            SELECT operation, message_id, run_id
+            FROM usage
+            WHERE email = %s
+            """,
+            (accounts["owner_email"],),
+        ).fetchall()
+        listed = list_messages(connection, owner_id, thread_id)
+    fold = "Summarize the earlier messages so the next reply can continue."
+    assert isinstance(result, TurnResult)
+    assert len(model.completed) == 3
+    assert model.prompts[0] == f"{fold}\n{prior}"
+    assert HARM not in model.prompts[0]
+    assert [block.text for block in model.completed[0]] == ["p0"]
+    assert model.prompts[1] == f"{fold}\ndone"
+    assert [block.text for block in model.completed[1]] == ["p1"]
+    assert HARM in model.prompts[2]
+    assert "done" in model.prompts[2]
+    assert fold not in model.prompts[2]
+    sent = [block.text for block in model.completed[2]]
+    assert "p0" not in sent
+    assert "p1" not in sent
+    assert [f"p{index}" for index in range(2, 11)] + ["p-new"] == [
+        text for text in sent if text.startswith("p")
+    ]
+    assert [f"a{index}" for index in range(10)] == [text for text in sent if text.startswith("a")]
+    assert [message[6] for message in result.omitted] == ["p0", "p1"]
+    assert stored == ("done",)
+    assert listed is not None
+    reply_id = next(row[0] for row in listed if row[6] == "done")
+    assert len(usage) == 3
+    assert all(row[0] == "chat" and row[2] is None for row in usage)
+    assert sum(row[1] is None for row in usage) == 2
+    assert sum(row[1] == reply_id for row in usage) == 1
 
 
 def test_model_error_keeps_the_person_message_and_stores_null_usage(accounts) -> None:
