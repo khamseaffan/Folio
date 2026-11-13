@@ -1,9 +1,11 @@
+import threading
 import uuid
 
 import pytest
 from app.db import connect
 from app.main import app
 from app.message import insert_message
+from app.model import FakeModel
 from app.operations import OPERATIONS
 from app.sign_in_proof import SignInError, VerifiedSignIn
 from app.thread import create_thread
@@ -236,6 +238,37 @@ def test_delete_account_stops_live_replies(monkeypatch, email) -> None:
     account_id = _account_id(email)
     assert client.delete("/account").status_code == 204
     assert stopped == [account_id]
+
+
+def test_delete_account_mid_reply_keeps_the_usage_row(monkeypatch, email) -> None:
+    monkeypatch.setattr("app.main.delete_firebase_user", lambda uid: None)
+    release = threading.Event()
+    model = FakeModel(chunks=("first", " second"), pauses=(release,))
+    monkeypatch.setattr("app.main.open_model", lambda: model)
+    client = _sign_in(monkeypatch, email)
+    thread_id = client.post("/threads").json()["id"]
+    try:
+        with client.stream(
+            "POST",
+            f"/threads/{thread_id}/messages",
+            json={"text": "hello"},
+        ) as response:
+            lines = response.iter_lines()
+            assert next(line for line in lines if line.startswith("data: ")) == (
+                'data: {"text": "first"}'
+            )
+            assert client.delete("/account").status_code == 204
+            release.set()
+            for _ in lines:
+                pass
+    finally:
+        release.set()
+    with connect() as connection:
+        rows = connection.execute(
+            "SELECT account_id, usage_missing FROM usage WHERE email = %s",
+            (email.lower(),),
+        ).fetchall()
+    assert rows == [(None, True)]
 
 
 def test_firebase_refusal_keeps_the_account(monkeypatch, email) -> None:

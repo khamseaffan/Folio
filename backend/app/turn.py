@@ -382,11 +382,17 @@ def _record(
     replies: list[Reply],
     message_id: uuid.UUID | None,
 ) -> None:
+    # The account can be deleted during the turn. The row is kept for the email without it.
+    present = connection.execute(
+        "SELECT id FROM account WHERE id = %s",
+        (prepared.account_id,),
+    ).fetchone()
+    account_id = prepared.account_id if present is not None else None
     # A turn that never reached the model still leaves one row, with its counts missing.
     for reply in replies or [Reply("", None, None, None)]:
         record_usage(
             connection,
-            prepared.account_id,
+            account_id,
             prepared.email,
             "chat",
             *_who(prepared.model),

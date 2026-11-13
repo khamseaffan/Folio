@@ -43,7 +43,7 @@ def apply(connection: psycopg.Connection) -> None:
 
 def record_usage(
     connection: psycopg.Connection,
-    account_id: uuid.UUID,
+    account_id: uuid.UUID | None,
     email: str,
     operation: str,
     provider: str,
