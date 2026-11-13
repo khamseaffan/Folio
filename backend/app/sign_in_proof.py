@@ -58,20 +58,29 @@ def verify_allowed_sign_in(id_token: str) -> VerifiedSignIn:
     return VerifiedSignIn(firebase_uid=uid, email=email.lower())
 
 
+def firebase_credential() -> credentials.Base | None:
+    # On Cloud Run the service's own identity is used, so no key file is stored anywhere.
+    if os.environ.get("FIREBASE_USE_ADC") == "1":
+        return credentials.ApplicationDefault()
+    path = service_account_path()
+    if not os.path.isfile(path):
+        return None
+    return credentials.Certificate(path)
+
+
 def _firebase_app() -> firebase_admin.App:
     try:
         return firebase_admin.get_app()
     except ValueError:
         pass
-    path = service_account_path()
-    if not os.path.isfile(path):
-        raise SignInError(NOT_PROVEN) from None
     try:
-        certificate = credentials.Certificate(path)
+        credential = firebase_credential()
     except Exception:
         raise SignInError(NOT_PROVEN) from None
+    if credential is None:
+        raise SignInError(NOT_PROVEN) from None
     try:
-        return firebase_admin.initialize_app(certificate)
+        return firebase_admin.initialize_app(credential)
     except ValueError:
         return firebase_admin.get_app()
 
