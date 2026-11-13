@@ -19,7 +19,7 @@ const mincho = Shippori_Mincho({
 
 export const metadata: Metadata = {
   title: "Folio",
-  description: "Sign in to Folio.",
+  description: "A private assistant that remembers your work.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

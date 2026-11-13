@@ -333,7 +333,7 @@ export function FolioApp() {
             </div>
           </div>
           {view === "signed-out" ? (
-            <p className="lede">This is a skeleton. Sign-in is here. Nothing else is in it yet.</p>
+            <p className="lede">A private assistant that remembers your work.</p>
           ) : null}
           {signedIn && accountEmail ? <p className="mail">{accountEmail}</p> : null}
           {notice ? (
