@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Newsreader } from "next/font/google";
+import { Outfit } from "next/font/google";
 import "./globals.css";
 
-const newsreader = Newsreader({
+const outfit = Outfit({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
-  variable: "--font-newsreader",
+  variable: "--font-outfit",
   display: "swap",
 });
 
@@ -18,7 +17,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${newsreader.variable} h-full`}>
+    <html lang="en" className={`${outfit.variable} h-full`}>
       <body className="min-h-full">{children}</body>
     </html>
   );

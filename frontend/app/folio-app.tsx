@@ -1,7 +1,11 @@
 "use client";
 
-import { ArrowRightIcon, ArrowRightStartOnRectangleIcon } from "@heroicons/react/24/outline";
-import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from "react";
+import {
+  ArrowRightStartOnRectangleIcon,
+  BookOpenIcon,
+  EnvelopeIcon,
+} from "@heroicons/react/24/outline";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   getReady,
   getSession,
@@ -47,22 +51,6 @@ const QUIET: BootResult = {
 };
 
 let bootTask: Promise<BootResult> | null = null;
-
-function subscribeToNothing(): () => void {
-  return () => {};
-}
-
-function datelineNow(): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  }).format(new Date());
-}
-
-function datelineOnServer(): string {
-  return "";
-}
 
 function accountBoot(account: Account): BootResult {
   if (account.display_name === null || account.display_name.trim() === "") {
@@ -142,7 +130,6 @@ export function FolioApp() {
   const [draftName, setDraftName] = useState("");
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
-  const dateline = useSyncExternalStore(subscribeToNothing, datelineNow, datelineOnServer);
   const linkHref = useRef<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -299,27 +286,18 @@ export function FolioApp() {
 
   return (
     <>
-      <div className="sheet" inert={down}>
-        <header className="mast">
-          {named ? <p className="running">Folio</p> : null}
-          <h1 className={named ? "title title-name" : "title"}>{named ? displayName : "Folio"}</h1>
-          <div className="rule-row">
-            <p className="dateline">{dateline}</p>
-            {signedIn && accountEmail ? <p className="credit">{accountEmail}</p> : null}
-            {signedIn ? (
-              <button
-                type="button"
-                className="sign-out"
-                onClick={() => void onSignOut()}
-                disabled={pending}
-              >
-                <ArrowRightStartOnRectangleIcon aria-hidden="true" />
-                Sign out
-              </button>
-            ) : null}
+      <div className="stage" inert={down}>
+        <section className="panel">
+          <div className="panel-head">
+            <div className="mark" aria-hidden="true">
+              <BookOpenIcon />
+            </div>
+            <div>
+              {named ? <p className="kicker">Folio</p> : null}
+              <h1>{named ? displayName : "Folio"}</h1>
+            </div>
           </div>
-        </header>
-        <main className="entry">
+          {signedIn && accountEmail ? <p className="mail">{accountEmail}</p> : null}
           {notice ? (
             <p role="alert" className="notice">
               {notice}
@@ -332,71 +310,79 @@ export function FolioApp() {
           ) : null}
           {view === "checking" ? <p className="hint">One moment.</p> : null}
           {view === "signed-out" || view === "link-email" ? (
-            <>
+            <form className="block" onSubmit={(event) => void onEmail(event)} aria-busy={pending}>
               {view === "link-email" ? (
                 <p className="hint">Enter the email address the link was sent to.</p>
-              ) : (
-                <button
-                  type="button"
-                  className="line"
-                  onClick={() => void onGoogle()}
-                  disabled={pending}
-                >
-                  Google
-                  <ArrowRightIcon aria-hidden="true" />
-                </button>
-              )}
-              <form onSubmit={(event) => void onEmail(event)} aria-busy={pending}>
-                <div className="write-line">
-                  <label htmlFor="email">Email</label>
-                  <input
-                    id="email"
-                    name="email"
-                    type="email"
-                    autoComplete="email"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    inputMode="email"
-                    placeholder="address"
-                    required
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                  />
-                  <button type="submit" className="ink-word" disabled={pending}>
-                    {view === "link-email" ? "Continue" : "Send a link"}
-                  </button>
-                </div>
-              </form>
+              ) : null}
+              <div className="field">
+                <EnvelopeIcon aria-hidden="true" />
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  inputMode="email"
+                  placeholder="Email"
+                  aria-label="Email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
+              </div>
+              <button type="submit" className="primary" disabled={pending}>
+                {view === "link-email" ? "Continue" : "Send a link"}
+              </button>
               {view === "link-email" ? (
                 <button type="button" className="text-button" onClick={leaveLink} disabled={pending}>
                   Use another sign-in
                 </button>
-              ) : null}
-            </>
-          ) : null}
-          {view === "ask-name" ? (
-            <form onSubmit={(event) => void onName(event)} aria-busy={pending}>
-              <div className="write">
-                <label htmlFor="display-name">Name</label>
-                <div className="write-line name-line">
-                  <input
-                    id="display-name"
-                    name="display-name"
-                    type="text"
-                    autoComplete="name"
-                    autoCapitalize="words"
-                    required
-                    value={draftName}
-                    onChange={(event) => setDraftName(event.target.value)}
-                  />
-                  <button type="submit" className="ink-word" disabled={pending}>
-                    Save
-                  </button>
-                </div>
-              </div>
+              ) : (
+                <button
+                  type="button"
+                  className="quiet"
+                  onClick={() => void onGoogle()}
+                  disabled={pending}
+                >
+                  Continue with Google
+                </button>
+              )}
             </form>
           ) : null}
-        </main>
+          {view === "ask-name" ? (
+            <form className="block" onSubmit={(event) => void onName(event)} aria-busy={pending}>
+              <div className="field">
+                <input
+                  id="display-name"
+                  name="display-name"
+                  type="text"
+                  autoComplete="name"
+                  autoCapitalize="words"
+                  placeholder="Your name"
+                  aria-label="Your name"
+                  required
+                  value={draftName}
+                  onChange={(event) => setDraftName(event.target.value)}
+                />
+              </div>
+              <button type="submit" className="primary" disabled={pending}>
+                Save
+              </button>
+            </form>
+          ) : null}
+          {signedIn ? (
+            <button
+              type="button"
+              className="quiet"
+              onClick={() => void onSignOut()}
+              disabled={pending}
+            >
+              <ArrowRightStartOnRectangleIcon aria-hidden="true" />
+              Sign out
+            </button>
+          ) : null}
+        </section>
       </div>
       {down ? (
         <div className="down-layer">
