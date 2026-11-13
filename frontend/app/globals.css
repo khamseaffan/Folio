@@ -1,13 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --ink: #1c2836;
-  --muted: #6d7886;
-  --alert: #9a4038;
-  --panel: rgba(255, 252, 248, 0.82);
-  --field: #f3f6fa;
-  --button: #2a3848;
-  --button-ink: #f6f3ee;
+  --ink: #243140;
+  --muted: #6e7d8c;
+  --alert: #9b4454;
+  --snow: #f4f1ef;
+  --sky: #d7e4ee;
+  --petal: #f6d5d8;
+  --blossom: #d98996;
+  --fuji: #3d5872;
+  --panel: rgba(255, 250, 248, 0.9);
+  --field: #eef3f6;
+  --button: #3d5872;
+  --button-ink: #f7f4f1;
 }
 
 html,
@@ -20,10 +25,35 @@ body {
   font-family: var(--font-outfit), "Avenir Next", "Segoe UI", sans-serif;
   font-size: 1.0625rem;
   line-height: 1.4;
-  background:
-    radial-gradient(ellipse 60% 48% at 8% 92%, #f6e2cc 0%, transparent 72%),
-    radial-gradient(ellipse 42% 36% at 96% 0%, #d5e7f4 0%, transparent 70%),
-    linear-gradient(160deg, #eef3f6 0%, #f7f2ea 70%);
+  background: var(--snow);
+}
+
+.scene {
+  position: relative;
+  min-height: 100dvh;
+  overflow: clip;
+  background: linear-gradient(180deg, #d3e4f0 0%, #e4eef5 62%, var(--snow) 100%);
+}
+
+.scene::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(46vw, 28rem);
+  height: 42%;
+  background: radial-gradient(ellipse at 70% 28%, var(--petal) 0%, transparent 68%);
+  pointer-events: none;
+}
+
+.fuji {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
 }
 
 button,
@@ -32,18 +62,108 @@ input {
   color: inherit;
 }
 
-:focus-visible {
+button:focus-visible,
+a:focus-visible {
   outline: 2px solid var(--button);
   outline-offset: 3px;
 }
 
+.field input:focus,
+.field input:focus-visible {
+  outline: none;
+}
+
 .stage {
+  position: relative;
+  z-index: 1;
   box-sizing: border-box;
-  min-height: 100%;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem 1rem 2rem;
+  padding: 1.5rem 1rem 22vh;
+}
+
+.stage.landing {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2.25rem;
+  width: min(100%, 64rem);
+  padding-top: 3.5rem;
+  padding-bottom: 18rem;
+}
+
+.intro {
+  width: min(100%, 28rem);
+  color: var(--ink);
+}
+
+.intro h2 {
+  margin: 0;
+  font-family: var(--font-mincho), "Iowan Old Style", Palatino, serif;
+  font-size: clamp(1.85rem, 4vw, 2.6rem);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.15;
+}
+
+.intro > p {
+  margin: 0.85rem 0 0;
+  max-width: 36ch;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+
+.intro ul {
+  list-style: none;
+  margin: 1.6rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.05rem;
+}
+
+.intro li {
+  display: grid;
+  grid-template-columns: 1.35rem minmax(0, 1fr);
+  column-gap: 0.7rem;
+}
+
+.intro li svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+  color: var(--fuji);
+}
+
+.intro li strong {
+  font-weight: 600;
+}
+
+.intro li p {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+@media (min-width: 900px) {
+  .stage.landing {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 4rem;
+    padding-top: 2rem;
+    padding-bottom: 16rem;
+  }
+
+  .intro {
+    flex: 1 1 22rem;
+    width: auto;
+    max-width: 28rem;
+  }
 }
 
 .panel {
@@ -58,6 +178,7 @@ input {
 .panel-head {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.85rem;
   min-width: 0;
 }
@@ -65,17 +186,15 @@ input {
 .mark {
   display: grid;
   place-items: center;
-  width: 2.7rem;
-  height: 2.7rem;
+  width: 2.9rem;
+  height: 2.9rem;
   flex: 0 0 auto;
-  border-radius: 0.85rem;
-  background: #e8eef3;
-  color: var(--button);
+  background: transparent;
 }
 
 .mark svg {
-  width: 1.35rem;
-  height: 1.35rem;
+  width: 100%;
+  height: 100%;
 }
 
 .kicker,
@@ -89,20 +208,20 @@ input {
 }
 
 .kicker {
-  margin-bottom: 0.2rem;
+  margin-bottom: 0.15rem;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-family: var(--font-mincho), "Iowan Old Style", Palatino, serif;
+  font-size: 0.95rem;
   font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
 }
 
 h1 {
   margin: 0;
   text-align: left;
-  font-size: clamp(1.55rem, 5vw, 1.85rem);
+  font-family: var(--font-mincho), "Iowan Old Style", Palatino, serif;
+  font-size: clamp(1.7rem, 5vw, 2.05rem);
   font-weight: 600;
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
   line-height: 1.15;
   overflow-wrap: anywhere;
 }
@@ -164,11 +283,12 @@ h1 {
 }
 
 .field input::placeholder {
-  color: #98a2ae;
+  color: var(--muted);
 }
 
 .primary,
 .quiet,
+.google,
 .text-button {
   border: 0;
   cursor: pointer;
@@ -202,8 +322,28 @@ h1 {
   height: 1.05rem;
 }
 
+.google {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 3.05rem;
+  border-radius: 999px;
+  background: var(--field);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.google svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+}
+
 .primary:disabled,
 .quiet:disabled,
+.google:disabled,
 .text-button:disabled {
   cursor: default;
   opacity: 0.5;
@@ -217,7 +357,7 @@ h1 {
   align-items: center;
   justify-content: center;
   padding: 1.25rem;
-  background: rgba(210, 224, 234, 0.62);
+  background: rgba(215, 228, 238, 0.72);
 }
 
 .down-panel {
@@ -225,8 +365,8 @@ h1 {
   width: min(100%, 22rem);
   padding: 1.8rem 1.4rem;
   border-radius: 1.6rem;
-  background: rgba(255, 252, 248, 0.94);
-  box-shadow: 0 24px 60px rgba(48, 72, 96, 0.16);
+  background: rgba(255, 250, 248, 0.96);
+  box-shadow: 0 24px 60px rgba(36, 49, 64, 0.16);
 }
 
 .down-panel p {

@@ -9,6 +9,15 @@
 - The two original features are long-term memory and the scheduled run.
 - This version and the later version are listed in `docs/product/mvp-mlp.md`.
 
+## Color
+
+The colors are a cherry blossom morning in front of Mount Fuji.
+
+- Ink is `#243140`. Muted text is `#6e7d8c`.
+- Snow is `#f4f1ef`. Sky is `#d7e4ee`. Petal is `#f6d5d8`.
+- Fuji is `#3d5872`. It is the mountain and the solid button. Text on the button is `#f7f4f1`.
+- Blossom is `#d98996`. An error is `#9b4454`.
+
 ## People
 
 - A person on the allowlist creates an account by signing in. The allowlist, sign-in, and sessions are in `docs/product/access.md`.

@@ -3,8 +3,12 @@
 import {
   ArrowRightStartOnRectangleIcon,
   BookOpenIcon,
+  ClockIcon,
+  DocumentTextIcon,
   EnvelopeIcon,
+  MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
+import type { ComponentType, SVGProps } from "react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
   getReady,
@@ -23,6 +27,63 @@ import {
   signInWithGoogle,
   signOutFirebase,
 } from "../lib/firebase-auth";
+
+function GoogleMark() {
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path
+        fill="#FFC107"
+        d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"
+      />
+      <path
+        fill="#FF3D00"
+        d="m6.306 14.691 6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"
+      />
+      <path
+        fill="#4CAF50"
+        d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238A11.91 11.91 0 0 1 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"
+      />
+      <path
+        fill="#1976D2"
+        d="M43.611 20.083H42V20H24v8h11.303a12.04 12.04 0 0 1-4.087 5.571l.003-.002 6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"
+      />
+    </svg>
+  );
+}
+
+function Mark() {
+  return (
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <rect width="64" height="64" rx="14" fill="#3d5872" />
+      <path d="M18 12h20l10 10v30H18z" fill="#f7f4f1" />
+      <path d="M38 12l10 10H38z" fill="#d7e4ee" />
+      <path d="M24 26h18v5H29v3h8v4h-8v8h-5z" fill="#3d5872" />
+    </svg>
+  );
+}
+
+const abilities: { title: string; text: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
+  {
+    title: "Memory",
+    text: "It keeps notes about you and your work, and you change them in plain words.",
+    icon: BookOpenIcon,
+  },
+  {
+    title: "Research",
+    text: "Ask for a report, then open the finished file with its sources.",
+    icon: MagnifyingGlassIcon,
+  },
+  {
+    title: "Scheduled work",
+    text: "Say when a task should run. The result is waiting when you return.",
+    icon: ClockIcon,
+  },
+  {
+    title: "Files",
+    text: "Upload a document, or bring one across from Google Drive.",
+    icon: DocumentTextIcon,
+  },
+];
 
 const SYSTEM_DOWN = "The system is down and repair is underway.";
 const UNAVAILABLE = "Sign-in is unavailable.";
@@ -283,14 +344,37 @@ export function FolioApp() {
 
   const signedIn = view === "ask-name" || view === "ready";
   const named = view === "ready" && displayName !== null && displayName !== "";
+  const landing = view === "signed-out" || view === "link-email";
 
   return (
     <>
-      <div className="stage" inert={down}>
-        <section className="panel">
+      <div className="scene" inert={down}>
+        <svg className="fuji" viewBox="0 0 1440 360" aria-hidden="true">
+          <path fill="#3d5872" d="M0 320 720 40 1440 320V360H0Z" />
+          <path fill="#ffffff" d="M468 138 720 40 972 138Z" />
+        </svg>
+        <div className={landing ? "stage landing" : "stage"}>
+          {landing ? (
+            <section className="intro" aria-label="Folio">
+              <h2>A private assistant that remembers your work.</h2>
+              <p>Your notes, files, and research stay in one account that only you can open.</p>
+              <ul>
+                {abilities.map((item) => (
+                  <li key={item.title}>
+                    <item.icon aria-hidden="true" />
+                    <div>
+                      <strong>{item.title}</strong>
+                      <p>{item.text}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          <section className="panel">
           <div className="panel-head">
             <div className="mark" aria-hidden="true">
-              <BookOpenIcon />
+              <Mark />
             </div>
             <div>
               {named ? <p className="kicker">Folio</p> : null}
@@ -341,10 +425,11 @@ export function FolioApp() {
               ) : (
                 <button
                   type="button"
-                  className="quiet"
+                  className="google"
                   onClick={() => void onGoogle()}
                   disabled={pending}
                 >
+                  <GoogleMark />
                   Continue with Google
                 </button>
               )}
@@ -382,7 +467,8 @@ export function FolioApp() {
               Sign out
             </button>
           ) : null}
-        </section>
+          </section>
+        </div>
       </div>
       {down ? (
         <div className="down-layer">
