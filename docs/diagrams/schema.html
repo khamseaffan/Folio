@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Folio schema</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1a1a1a;
+      --muted: #5c6570;
+      --line: #c5cad1;
+      --paper: #ffffff;
+      --wash: #f3f5f7;
+      --box: #f7f8fa;
+      --selected: #1c3f73;
+      --note: #f4efe4;
+      --note-line: #d9c7a3;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 16px/1.5 "Segoe UI", system-ui, sans-serif;
+    }
+    main {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 28px 20px 64px;
+    }
+    .stage {
+      max-width: none;
+      margin: 0 -4px 0;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+      font-weight: 650;
+    }
+    h2 {
+      margin: 28px 0 8px;
+      font-size: 18px;
+      font-weight: 650;
+    }
+    .lede { margin: 0 0 14px; color: var(--muted); max-width: 70ch; }
+    .note {
+      margin: 0 0 16px;
+      max-width: 70ch;
+      padding: 10px 12px;
+      background: var(--note);
+      border: 1px solid var(--note-line);
+    }
+    .map { display: block; }
+    .part { cursor: pointer; }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px 28px;
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 8px; }
+    .picker { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 14px; }
+    .picker .group {
+      width: 100%;
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .picker button {
+      font: inherit;
+      font-size: 13px;
+      border: 1px solid var(--line);
+      background: var(--box);
+      color: var(--ink);
+      border-radius: 999px;
+      padding: 3px 10px;
+      cursor: pointer;
+    }
+    .picker button.current {
+      background: var(--selected);
+      border-color: var(--selected);
+      color: #fff;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      text-align: left;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    tr.hit td { background: var(--wash); }
+    .entity { margin-top: 22px; padding: 8px; }
+    .entity.current { background: var(--wash); }
+    .entity h3 { margin: 0 0 4px; font-size: 16px; }
+    .entity p { margin: 0 0 8px; max-width: 70ch; }
+    .meta { margin: 8px 0 0; color: var(--muted); font-size: 14px; max-width: 70ch; }
+    code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 0.92em; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Database schema</h1>
+    <p class="lede">Proposal, not approved. Crow's foot schema. Each box is an entity, and the rows inside it are its attributes. Click one for the rule on each attribute. No tables have been created.</p>
+    <p class="note">Every row carries account_id. Deleting the account removes the rows and the stored bytes. A source can also point at a file or a knowledge file, and a run can point at a message. Those keys are in the foreign key table.</p>
+    <div class="stage">
+      <svg id="map" class="map" role="img" aria-label="Crow's foot entity relationship diagram. Each box lists the entity and its attributes."></svg>
+    </div>
+    <div class="legend">
+      <span><svg width="42" height="16" viewBox="0 0 42 16" aria-hidden="true"><path d="M2 8 H30" stroke="#5c6570" fill="none"/><path d="M30 2 V14" stroke="#5c6570"/></svg> Exactly one</span>
+      <span><svg width="54" height="16" viewBox="0 0 54 16" aria-hidden="true"><path d="M2 8 H28" stroke="#5c6570" fill="none"/><circle cx="34" cy="8" r="4" fill="none" stroke="#5c6570"/><path d="M46 2 V14" stroke="#5c6570"/></svg> Zero or one</span>
+      <span><svg width="54" height="16" viewBox="0 0 54 16" aria-hidden="true"><path d="M2 8 H24" stroke="#5c6570" fill="none"/><circle cx="30" cy="8" r="4" fill="none" stroke="#5c6570"/><path d="M40 8 L52 2 M40 8 L52 8 M40 8 L52 14" stroke="#5c6570" fill="none"/></svg> Zero or many</span>
+    </div>
+    <div id="picker" class="picker"></div>
+    <section class="detail" aria-live="polite">
+      <h2 id="detail-title">account</h2>
+      <p id="detail-body"></p>
+      <table>
+        <thead>
+          <tr>
+            <th>Attribute</th>
+            <th>Type</th>
+            <th>Required</th>
+            <th>Key</th>
+            <th>Rule</th>
+          </tr>
+        </thead>
+        <tbody id="detail-rows"></tbody>
+      </table>
+      <p class="meta" id="detail-index"></p>
+    </section>
+    <h2>Foreign keys</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Parent</th>
+          <th>Child</th>
+          <th>Column</th>
+          <th>Cardinality</th>
+          <th>On delete</th>
+        </tr>
+      </thead>
+      <tbody id="key-rows"></tbody>
+    </table>
+    <p class="meta">A stored path is <code>accounts/{account_id}/.../{row id}/...</code>. A report file is <code>accounts/{account_id}/reports/{report_id}/{filename}</code>. The knowledge text is the row. The report text is the row, and the file at its path is the download. Report bytes sit outside the 5 GB upload and task-file count. On this machine the prefix is a directory, not Cloud Storage.</p>
+    <h2>All attributes</h2>
+    <div id="catalog"></div>
+  </main>
+  <script>
+    const BOX_W = 268;
+    const ROW_H = 16;
+    const HEAD_H = 28;
+
+    function attr(name, type, required, key, rule) {
+      return { name: name, type: type, required: required, key: key || "", rule: rule || "" };
+    }
+
+    const entities = [
+      {
+        id: "account", name: "account", x: 24, y: 276, pk: "id", group: "Identity",
+        blurb: "The person. One email, one account. The cap and the stop live on the email.",
+        indexes: "Unique email, stored in lowercase. Unique firebase_uid.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("email", "text", "yes", "unique, FK", "Stored in lowercase. One email holds one account. Points at email_limit."),
+          attr("firebase_uid", "text", "no", "unique", "On this machine, local:{email} until Firebase replaces it."),
+          attr("display_name", "text", "no", "", "Empty until set. Then 1 to 40 characters."),
+          attr("created_at", "timestamptz", "yes")
+        ]
+      },
+      {
+        id: "email_limit", name: "email_limit", x: 24, y: 20, pk: "email", group: "Identity",
+        blurb: "The token cap and the stop for one email. Deleting the account leaves this row.",
+        indexes: "Primary key is the lowercase email.",
+        attrs: [
+          attr("email", "text", "yes", "PK", "Stored in lowercase."),
+          attr("token_cap", "bigint", "yes", "", "Default 10000000. Does not reset. A new account for this email keeps it."),
+          attr("stopped", "boolean", "yes", "", "Default false. Set by khamseaffan@gmail.com. A new account for this email keeps it.")
+        ]
+      },
+      {
+        id: "session", name: "session", x: 250, y: 84, pk: "id", group: "Identity",
+        blurb: "An account has at most two sessions. A third sign-in locks the account row and ends the oldest session in that same save.",
+        indexes: "Index on account_id where ended_at is null. The account row is locked during that save.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("created_at", "timestamptz", "yes"),
+          attr("last_active_at", "timestamptz", "yes", "", "Moves when the person or the assistant acts."),
+          attr("ended_at", "timestamptz", "no", "", "Set after 30 minutes of silence, or when a newer sign-in replaces it.")
+        ]
+      },
+      {
+        id: "integration", name: "integration", x: 250, y: 148, pk: "id", group: "Identity",
+        blurb: "One connection for this account and one provider. Drive is the provider google_drive. The secret is wrapped.",
+        indexes: "Unique on account_id and provider.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("provider", "text", "yes", "", "google_drive for Drive."),
+          attr("external_account", "text", "no", "", "For Drive, the Google email. Empty when the provider has no account name."),
+          attr("secret_wrapped", "bytea", "yes", "", "Envelope-encrypted. A local key stands in for Cloud KMS."),
+          attr("key_version", "text", "yes", "", "local on this machine."),
+          attr("connected_at", "timestamptz", "yes")
+        ]
+      },
+      {
+        id: "browser_cookie", name: "browser_cookie", x: 250, y: 212, pk: "account_id, site", group: "Identity",
+        blurb: "Cookies kept between browser tasks for one account and one site.",
+        indexes: "Primary key is account_id and site.",
+        attrs: [
+          attr("account_id", "uuid", "yes", "PK, FK"),
+          attr("site", "text", "yes", "PK"),
+          attr("cookies_wrapped", "bytea", "yes"),
+          attr("key_version", "text", "yes", "", "local on this machine."),
+          attr("updated_at", "timestamptz", "yes")
+        ]
+      },
+      {
+        id: "thread", name: "thread", x: 250, y: 276, pk: "id", group: "Conversation",
+        blurb: "A new thread is named New thread. Deleting it removes its messages, summary, and schedules.",
+        indexes: "Unique on id and account_id. Index on account_id and created_at.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("name", "text", "yes", "", "Default New thread."),
+          attr("summary", "text", "no", "", "The person cannot see or edit it."),
+          attr("created_at", "timestamptz", "yes")
+        ]
+      },
+      {
+        id: "message", name: "message", x: 490, y: 148, pk: "id", group: "Conversation",
+        blurb: "One Enter from the person, or one reply from the assistant. A run may also leave a question, a result, or a failure line.",
+        indexes: "Unique on id and account_id. Index on thread_id and created_at. One question, one result, and one failure message per run.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("thread_id", "uuid", "yes", "FK"),
+          attr("run_id", "uuid", "no", "FK", "Set when this block belongs to a run."),
+          attr("role", "text", "yes", "", "person or assistant."),
+          attr("kind", "text", "yes", "", "chat, question, result, or failure."),
+          attr("body", "text", "yes", "", "No length limit."),
+          attr("created_at", "timestamptz", "yes")
+        ]
+      },
+      {
+        id: "schedule", name: "schedule", x: 490, y: 276, pk: "id", group: "Work",
+        blurb: "The task, the person's words for when, and the next time the agent set. Code fires at that time and does not parse the words.",
+        indexes: "Unique on id and account_id. Index on next_run_at where it is set. Deleting the thread deletes the schedule.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("thread_id", "uuid", "yes", "FK"),
+          attr("task", "text", "yes"),
+          attr("when_text", "text", "yes", "", "What the person said."),
+          attr("next_run_at", "timestamptz", "no", "", "Null means it does not fire."),
+          attr("created_at", "timestamptz", "yes"),
+          attr("updated_at", "timestamptz", "yes")
+        ]
+      },
+      {
+        id: "confirmation", name: "confirmation", x: 490, y: 404, pk: "id", group: "Work",
+        blurb: "One card for one send on a website. The person's words are stored as the reason. Those words do not authorize the send.",
+        indexes: "Index on account_id where used_at is null.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("thread_id", "uuid", "yes", "FK", "The card stays in the thread."),
+          attr("run_id", "uuid", "no", "FK"),
+          attr("site", "text", "yes"),
+          attr("fields", "jsonb", "yes", "", "Field names and values."),
+          attr("involves_money_or_personal", "boolean", "yes", "", "The model sets this. Code does not read the field text to decide it."),
+          attr("reason", "text", "yes", "", "The person's words."),
+          attr("created_at", "timestamptz", "yes"),
+          attr("expires_at", "timestamptz", "yes", "", "24 hours after the card appears."),
+          attr("used_at", "timestamptz", "no", "", "Set when that submit runs.")
+        ]
+      },
+      {
+        id: "run", name: "run", x: 730, y: 212, pk: "id", group: "Work",
+        blurb: "The job. Its id is the job id. delivered_at is set in the same transaction as the one result, so a second delivery writes nothing.",
+        indexes: "Unique on id and account_id. Index on status where queued. One queued, working, or waiting run per schedule.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK", "Also the queue job id."),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("thread_id", "uuid", "no", "FK", "Cleared when the thread is deleted. The run is cancelled if it was still in flight."),
+          attr("schedule_id", "uuid", "no", "FK", "Cleared when the schedule is deleted."),
+          attr("kind", "text", "yes", "", "research, schedule, browser, or web."),
+          attr("status", "text", "yes", "", "queued, working, waiting, ready, failed, cancelled, or dead."),
+          attr("task", "text", "yes"),
+          attr("question", "text", "no", "", "Set while the run is waiting."),
+          attr("work_ms", "integer", "yes", "", "Default 0. Time spent waiting is not included."),
+          attr("attempt_count", "integer", "yes", "", "Default 0. A dead provider is tried once, then three more times."),
+          attr("delivered_at", "timestamptz", "no", "", "Set with the one report or the one result message.")
+        ]
+      },
+      {
+        id: "usage", name: "usage", x: 730, y: 360, pk: "id", group: "Work",
+        blurb: "One row per model call. Missing usage is stored as missing and adds nothing to the cap. Deleting the account clears account_id and leaves the row. The cap for an email is the sum of these rows.",
+        indexes: "Index on email. Index on account_id and at where account_id is set. Index on account_id, provider, and model.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "no", "FK", "Cleared when the account is deleted. The row stays."),
+          attr("email", "text", "yes", "", "Stored in lowercase. The cap sums every row for this email."),
+          attr("at", "timestamptz", "yes"),
+          attr("provider", "text", "yes"),
+          attr("model", "text", "yes"),
+          attr("input_tokens", "bigint", "no", "", "Null when usage is missing."),
+          attr("output_tokens", "bigint", "no"),
+          attr("total_tokens", "bigint", "no"),
+          attr("expected_cost", "numeric", "no", "", "Not shown to the person. Null when usage is missing, never zero by assumption."),
+          attr("usage_missing", "boolean", "yes"),
+          attr("message_id", "uuid", "no", "FK", "The assistant message, when the call is a chat turn."),
+          attr("run_id", "uuid", "no", "FK"),
+          attr("operation", "text", "yes", "", "chat, research, schedule, transcription, or browser.")
+        ]
+      },
+      {
+        id: "report", name: "report", x: 970, y: 148, pk: "id", group: "Research",
+        blurb: "Inserted once, already ready. The question, the text, how the run stopped, the source list, and the ready status commit together. Cancelling writes no row.",
+        indexes: "Unique on id and account_id. Unique run_id. Index on account_id and created_at.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("thread_id", "uuid", "no", "FK", "Cleared when the thread is deleted. The report stays."),
+          attr("run_id", "uuid", "yes", "FK, unique", "One report for that run."),
+          attr("name", "text", "yes"),
+          attr("question", "text", "yes", "", "The question the run answered."),
+          attr("body", "text", "yes", "", "The report text."),
+          attr("stop_note", "text", "yes", "", "A few lines on how the run stopped."),
+          attr("status", "text", "yes", "", "ready."),
+          attr("storage_key", "text", "yes", "", "accounts/{account_id}/reports/{id}/{filename}. The body is the report text. This file is the download."),
+          attr("content_type", "text", "yes"),
+          attr("byte_size", "bigint", "yes"),
+          attr("created_at", "timestamptz", "yes")
+        ]
+      },
+      {
+        id: "report_source", name: "report_source", x: 970, y: 276, pk: "report_id, position", group: "Research",
+        blurb: "One opened page, account file, or Drive copy. A page that was not opened is not a row. The rows commit with the report text.",
+        indexes: "Primary key is report_id and position.",
+        attrs: [
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("report_id", "uuid", "yes", "PK, FK"),
+          attr("position", "integer", "yes", "PK"),
+          attr("kind", "text", "yes", "", "page, file, or drive_copy."),
+          attr("title", "text", "yes"),
+          attr("url", "text", "no", "", "The page address. A file uses its name."),
+          attr("used_for", "text", "yes", "", "One line on what this source was used for."),
+          attr("file_id", "uuid", "no", "FK", "An upload, a task file, or a Drive copy. Cleared if that file is deleted. The title stays."),
+          attr("knowledge_file_id", "uuid", "no", "FK", "Cleared if that knowledge file is deleted. The title stays.")
+        ]
+      },
+      {
+        id: "knowledge_file", name: "knowledge_file", x: 250, y: 340, pk: "id", group: "Memory",
+        blurb: "Markdown memory. profile.md is one of these and is included in every model call. Deleting the profile deletes these rows and leaves abilities.",
+        indexes: "Unique on id and account_id. Unique account_id and name. English full-text index on body.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("name", "text", "yes", "", "Unique per account. profile.md is the manner file."),
+          attr("body", "text", "yes", "", "Word search uses this text. The model reads the opened text."),
+          attr("byte_size", "bigint", "yes"),
+          attr("storage_key", "text", "yes", "", "accounts/{account_id}/knowledge/{id}/... The body is the text the model reads."),
+          attr("created_at", "timestamptz", "yes"),
+          attr("updated_at", "timestamptz", "yes")
+        ]
+      },
+      {
+        id: "ability", name: "ability", x: 250, y: 404, pk: "id", group: "Memory",
+        blurb: "A way of working the agent remembers. Deleting the profile does not remove it. Deleting the account does.",
+        indexes: "Index on account_id.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("name", "text", "yes"),
+          attr("body", "text", "yes"),
+          attr("created_at", "timestamptz", "yes"),
+          attr("updated_at", "timestamptz", "yes")
+        ]
+      },
+      {
+        id: "file", name: "file", x: 250, y: 468, pk: "id", group: "Files",
+        blurb: "An upload, a task file, or a Drive copy. The account row is locked while the byte sum is checked. Knowledge files are a separate table.",
+        indexes: "Unique on id and account_id. Index on account_id and kind.",
+        attrs: [
+          attr("id", "uuid", "yes", "PK"),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("kind", "text", "yes", "", "upload, task, or drive."),
+          attr("name", "text", "yes"),
+          attr("content_type", "text", "yes"),
+          attr("byte_size", "bigint", "yes", "", "Uploads and task files count toward 5 GB. Drive copies do not."),
+          attr("storage_key", "text", "yes", "", "accounts/{account_id}/files/{id}/..."),
+          attr("status", "text", "yes", "", "pending or stored."),
+          attr("pending_expires_at", "timestamptz", "no", "", "An unfinished upload is discarded after 24 hours."),
+          attr("created_at", "timestamptz", "yes")
+        ]
+      }
+    ];
+
+    const keys = [
+      { from: "email_limit", to: "account", column: "email", card: "one", onDelete: "restrict", draw: "fan" },
+      { from: "account", to: "session", column: "account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "account", to: "integration", column: "account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "account", to: "browser_cookie", column: "account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "account", to: "thread", column: "account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "account", to: "knowledge_file", column: "account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "account", to: "ability", column: "account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "account", to: "file", column: "account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "account", to: "message", column: "account_id", card: "many", onDelete: "cascade", draw: "none" },
+      { from: "account", to: "schedule", column: "account_id", card: "many", onDelete: "cascade", draw: "none" },
+      { from: "account", to: "confirmation", column: "account_id", card: "many", onDelete: "cascade", draw: "none" },
+      { from: "account", to: "run", column: "account_id", card: "many", onDelete: "cascade", draw: "none" },
+      { from: "account", to: "usage", column: "account_id", card: "many", onDelete: "set null", draw: "none" },
+      { from: "account", to: "report", column: "account_id", card: "many", onDelete: "cascade", draw: "none" },
+      { from: "account", to: "report_source", column: "account_id", card: "many", onDelete: "cascade", draw: "none" },
+      { from: "thread", to: "message", column: "thread_id, account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "thread", to: "schedule", column: "thread_id, account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "thread", to: "confirmation", column: "thread_id, account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "thread", to: "run", column: "thread_id, account_id", card: "many", onDelete: "set null", draw: "none" },
+      { from: "thread", to: "report", column: "thread_id, account_id", card: "many", onDelete: "set null", draw: "none" },
+      { from: "schedule", to: "run", column: "schedule_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
+      { from: "run", to: "report", column: "run_id, account_id", card: "one", onDelete: "restrict", draw: "fan" },
+      { from: "run", to: "message", column: "run_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
+      { from: "run", to: "confirmation", column: "run_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
+      { from: "run", to: "usage", column: "run_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
+      { from: "message", to: "usage", column: "message_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
+      { from: "report", to: "report_source", column: "report_id, account_id", card: "many", onDelete: "cascade", draw: "fan" },
+      { from: "file", to: "report_source", column: "file_id, account_id", card: "many", onDelete: "set null", draw: "bus" },
+      { from: "knowledge_file", to: "report_source", column: "knowledge_file_id, account_id", card: "many", onDelete: "set null", draw: "bus" }
+    ];
+
+    const svg = document.getElementById("map");
+    const titleEl = document.getElementById("detail-title");
+    const bodyEl = document.getElementById("detail-body");
+    const detailRows = document.getElementById("detail-rows");
+    const detailIndex = document.getElementById("detail-index");
+    const keyRows = document.getElementById("key-rows");
+    const picker = document.getElementById("picker");
+    const catalog = document.getElementById("catalog");
+    let active = "account";
+
+    function byId(id) {
+      return entities.find(function (item) { return item.id === id; });
+    }
+
+    function el(name, attrs) {
+      const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+      Object.entries(attrs).forEach(function (entry) {
+        node.setAttribute(entry[0], String(entry[1]));
+      });
+      return node;
+    }
+
+    function html(name, attrs) {
+      const node = document.createElement(name);
+      Object.entries(attrs || {}).forEach(function (entry) {
+        node.setAttribute(entry[0], String(entry[1]));
+      });
+      return node;
+    }
+
+    function addCell(tr, value) {
+      const cell = html("td");
+      cell.textContent = value;
+      tr.appendChild(cell);
+    }
+
+    const lines = [
+      { from: "email_limit", to: "account", card: "01", axis: "h" },
+      { from: "account", to: "session", card: "n", axis: "h" },
+      { from: "account", to: "integration", card: "n", axis: "h" },
+      { from: "account", to: "browser_cookie", card: "n", axis: "h" },
+      { from: "account", to: "thread", card: "n", axis: "h" },
+      { from: "account", to: "knowledge_file", card: "n", axis: "h" },
+      { from: "account", to: "ability", card: "n", axis: "h" },
+      { from: "account", to: "file", card: "n", axis: "h" },
+      { from: "thread", to: "message", card: "n", axis: "h" },
+      { from: "thread", to: "schedule", card: "n", axis: "h" },
+      { from: "thread", to: "confirmation", card: "n", axis: "h" },
+      { from: "schedule", to: "run", card: "n", axis: "h" },
+      { from: "run", to: "report", card: "01", axis: "h" },
+      { from: "run", to: "usage", card: "n", axis: "v" },
+      { from: "report", to: "report_source", card: "n", axis: "v" }
+    ];
+
+    function boxHeight(entity) {
+      return HEAD_H + entity.attrs.length * ROW_H + 8;
+    }
+
+    function layout() {
+      function placeColumn(ids, x, y) {
+        ids.forEach(function (id) {
+          const entity = byId(id);
+          entity.w = BOX_W;
+          entity.h = boxHeight(entity);
+          entity.x = x;
+          entity.y = y;
+          y += entity.h + 16;
+        });
+      }
+
+      placeColumn(
+        ["email_limit", "session", "integration", "browser_cookie", "thread", "knowledge_file", "ability", "file"],
+        360,
+        20
+      );
+      const columnBottom = byId("file").y + byId("file").h;
+      const account = byId("account");
+      account.w = BOX_W;
+      account.h = boxHeight(account);
+      account.x = 16;
+      account.y = 20 + (columnBottom - 20 - account.h) / 2;
+
+      const thread = byId("thread");
+      ["message", "schedule", "confirmation"].forEach(function (id) {
+        const entity = byId(id);
+        entity.w = BOX_W;
+        entity.h = boxHeight(entity);
+        entity.x = 700;
+      });
+      const schedule = byId("schedule");
+      const message = byId("message");
+      const confirmation = byId("confirmation");
+      schedule.y = thread.y + thread.h / 2 - schedule.h / 2;
+      message.y = schedule.y - 16 - message.h;
+      confirmation.y = schedule.y + schedule.h + 16;
+
+      ["run", "usage"].forEach(function (id) {
+        const entity = byId(id);
+        entity.w = BOX_W;
+        entity.h = boxHeight(entity);
+        entity.x = 1040;
+      });
+      const run = byId("run");
+      const usage = byId("usage");
+      run.y = schedule.y + schedule.h / 2 - run.h / 2;
+      usage.y = run.y + run.h + 16;
+
+      ["report", "report_source"].forEach(function (id) {
+        const entity = byId(id);
+        entity.w = BOX_W;
+        entity.h = boxHeight(entity);
+        entity.x = 1380;
+      });
+      const report = byId("report");
+      const source = byId("report_source");
+      report.y = run.y + run.h / 2 - report.h / 2;
+      source.y = report.y + report.h + 16;
+
+      let minY = 0;
+      entities.forEach(function (entity) {
+        if (entity.y < minY) minY = entity.y;
+      });
+      if (minY < 20) {
+        const shift = 20 - minY;
+        entities.forEach(function (entity) { entity.y += shift; });
+      }
+
+      let maxX = 0;
+      let maxY = 0;
+      entities.forEach(function (entity) {
+        maxX = Math.max(maxX, entity.x + entity.w);
+        maxY = Math.max(maxY, entity.y + entity.h);
+      });
+      const width = maxX + 28;
+      const height = maxY + 28;
+      svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+      svg.setAttribute("width", String(width));
+      svg.setAttribute("height", String(height));
+    }
+
+    function route(line, slot, count) {
+      const from = byId(line.from);
+      const to = byId(line.to);
+      if (line.axis === "v") {
+        const x = from.x + from.w / 2;
+        return [[x, from.y + from.h], [x, to.y]];
+      }
+      const y1 = from.y + ((slot + 1) * from.h) / (count + 1);
+      const y2 = to.y + to.h / 2;
+      const x1 = from.x + from.w;
+      const x2 = to.x;
+      const mid = Math.round(x1 + (x2 - x1) * 0.5);
+      return [[x1, y1], [mid, y1], [mid, y2], [x2, y2]];
+    }
+
+    function shorten(points, startDist, endDist) {
+      const out = points.map(function (point) { return point.slice(); });
+      let a = out[0];
+      let b = out[1];
+      let dx = b[0] - a[0];
+      let dy = b[1] - a[1];
+      let len = Math.hypot(dx, dy) || 1;
+      out[0] = [a[0] + (dx / len) * startDist, a[1] + (dy / len) * startDist];
+      a = out[out.length - 2];
+      b = out[out.length - 1];
+      dx = b[0] - a[0];
+      dy = b[1] - a[1];
+      len = Math.hypot(dx, dy) || 1;
+      out[out.length - 1] = [b[0] - (dx / len) * endDist, b[1] - (dy / len) * endDist];
+      return out;
+    }
+
+    function cardinality(x, y, ux, uy, kind, color) {
+      const px = -uy;
+      const py = ux;
+      const group = el("g", { stroke: color, fill: "none", "stroke-width": 1.25 });
+      if (kind === "one") {
+        const bx = x - ux * 2;
+        const by = y - uy * 2;
+        group.appendChild(el("path", {
+          d: "M " + (bx + px * 7) + " " + (by + py * 7) + " L " + (bx - px * 7) + " " + (by - py * 7)
+        }));
+        return group;
+      }
+      if (kind === "01") {
+        group.appendChild(el("circle", { cx: x - ux * 11, cy: y - uy * 11, r: 4 }));
+        const bx = x - ux * 2;
+        const by = y - uy * 2;
+        group.appendChild(el("path", {
+          d: "M " + (bx + px * 7) + " " + (by + py * 7) + " L " + (bx - px * 7) + " " + (by - py * 7)
+        }));
+        return group;
+      }
+      const tipX = x - ux * 2;
+      const tipY = y - uy * 2;
+      const baseX = x - ux * 11;
+      const baseY = y - uy * 11;
+      group.appendChild(el("circle", { cx: x - ux * 17, cy: y - uy * 17, r: 3.5 }));
+      group.appendChild(el("path", {
+        d: "M " + tipX + " " + tipY + " L " + (baseX + px * 6) + " " + (baseY + py * 6)
+          + " M " + tipX + " " + tipY + " L " + baseX + " " + baseY
+          + " M " + tipX + " " + tipY + " L " + (baseX - px * 6) + " " + (baseY - py * 6)
+      }));
+      return group;
+    }
+
+    function fillTable(tbody, rows) {
+      tbody.replaceChildren();
+      rows.forEach(function (row) {
+        const tr = html("tr");
+        row.forEach(function (value) { addCell(tr, value); });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function show(id) {
+      active = id;
+      const entity = byId(id);
+      titleEl.textContent = entity.name;
+      bodyEl.textContent = entity.blurb;
+      fillTable(detailRows, entity.attrs.map(function (item) {
+        return [item.name, item.type, item.required, item.key, item.rule];
+      }));
+      detailIndex.textContent = entity.indexes;
+      keyRows.querySelectorAll("tr").forEach(function (tr) {
+        tr.classList.toggle("hit", tr.dataset.from === id || tr.dataset.to === id);
+      });
+      picker.querySelectorAll("button").forEach(function (button) {
+        button.classList.toggle("current", button.dataset.id === id);
+      });
+      catalog.querySelectorAll(".entity").forEach(function (section) {
+        section.classList.toggle("current", section.dataset.id === id);
+      });
+      draw();
+    }
+
+    function markerFor(key) {
+      if (key.indexOf("PK") !== -1) return "PK";
+      if (key.indexOf("FK") !== -1) return "FK";
+      if (key === "unique") return "UQ";
+      return "";
+    }
+
+    function draw() {
+      svg.replaceChildren();
+      const slots = {};
+      lines.forEach(function (line) {
+        slots[line.from] = (slots[line.from] || 0) + 1;
+      });
+      const seen = {};
+      lines.forEach(function (line) {
+        const index = seen[line.from] || 0;
+        seen[line.from] = index + 1;
+        const hot = line.from === active || line.to === active;
+        const color = hot ? "#1c3f73" : "#8b939c";
+        const points = route(line, index, slots[line.from]);
+        const endGap = line.card === "n" ? 22 : 16;
+        const drawn = shorten(points, 6, endGap);
+        const d = drawn.map(function (point, i) {
+          return (i === 0 ? "M" : "L") + point[0] + " " + point[1];
+        }).join(" ");
+        svg.appendChild(el("path", { d: d, fill: "none", stroke: color, "stroke-width": hot ? 1.6 : 1.15 }));
+        const parentDirX = points[0][0] - points[1][0];
+        const parentDirY = points[0][1] - points[1][1];
+        const parentLen = Math.hypot(parentDirX, parentDirY) || 1;
+        svg.appendChild(cardinality(points[0][0], points[0][1], parentDirX / parentLen, parentDirY / parentLen, "one", color));
+        const last = points[points.length - 1];
+        const prev = points[points.length - 2];
+        const childLen = Math.hypot(last[0] - prev[0], last[1] - prev[1]) || 1;
+        svg.appendChild(cardinality(
+          last[0],
+          last[1],
+          (last[0] - prev[0]) / childLen,
+          (last[1] - prev[1]) / childLen,
+          line.card,
+          color
+        ));
+      });
+
+      entities.forEach(function (entity) {
+        const selected = entity.id === active;
+        const group = el("g", { class: "part", role: "button", tabindex: "0" });
+        const title = el("title", {});
+        title.textContent = entity.name;
+        group.appendChild(title);
+        group.appendChild(el("rect", {
+          x: entity.x, y: entity.y, width: entity.w, height: entity.h,
+          fill: "#ffffff", stroke: "none"
+        }));
+        group.appendChild(el("rect", {
+          x: entity.x, y: entity.y, width: entity.w, height: HEAD_H, fill: "#1c3f73"
+        }));
+        group.appendChild(el("rect", {
+          x: entity.x, y: entity.y, width: entity.w, height: entity.h,
+          fill: "none", stroke: selected ? "#1c3f73" : "#c5cad1", "stroke-width": selected ? 2 : 1
+        }));
+        const heading = el("text", {
+          x: entity.x + 10, y: entity.y + 18, fill: "#ffffff", "font-size": 13
+        });
+        heading.textContent = entity.name;
+        group.appendChild(heading);
+        entity.attrs.forEach(function (item, index) {
+          const yy = entity.y + HEAD_H + 14 + index * ROW_H;
+          const mark = markerFor(item.key);
+          if (mark) {
+            const badge = el("text", {
+              x: entity.x + 8, y: yy, fill: mark === "PK" ? "#1c3f73" : "#5c6570", "font-size": 10
+            });
+            badge.textContent = mark;
+            group.appendChild(badge);
+          }
+          const name = el("text", { x: entity.x + 34, y: yy, fill: "#1a1a1a", "font-size": 12 });
+          name.textContent = item.name;
+          group.appendChild(name);
+          const type = el("text", {
+            x: entity.x + entity.w - 8, y: yy, fill: "#5c6570", "font-size": 11, "text-anchor": "end"
+          });
+          type.textContent = item.type;
+          group.appendChild(type);
+        });
+        group.addEventListener("click", function () { show(entity.id); });
+        group.addEventListener("keydown", function (event) {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            show(entity.id);
+          }
+        });
+        svg.appendChild(group);
+      });
+    }
+
+    const groups = ["Identity", "Conversation", "Work", "Memory", "Files", "Research"];
+    groups.forEach(function (group) {
+      const label = html("div", { class: "group" });
+      label.textContent = group;
+      picker.appendChild(label);
+      entities.filter(function (entity) { return entity.group === group; }).forEach(function (entity) {
+        const button = html("button", { type: "button" });
+        button.dataset.id = entity.id;
+        button.textContent = entity.name;
+        button.addEventListener("click", function () { show(entity.id); });
+        picker.appendChild(button);
+      });
+    });
+
+    keys.forEach(function (key) {
+      const tr = html("tr");
+      tr.dataset.from = key.from;
+      tr.dataset.to = key.to;
+      [key.from, key.to, key.column, key.card === "one" ? "1 to 0..1" : "1 to many", key.onDelete]
+        .forEach(function (value) { addCell(tr, value); });
+      keyRows.appendChild(tr);
+    });
+
+    entities.forEach(function (entity) {
+      const section = html("section", { class: "entity" });
+      section.dataset.id = entity.id;
+      section.id = "entity-" + entity.id;
+      const heading = html("h3");
+      heading.textContent = entity.name;
+      const copy = html("p");
+      copy.textContent = entity.blurb;
+      const table = html("table");
+      const head = html("thead");
+      const hr = html("tr");
+      ["Attribute", "Type", "Required", "Key", "Rule"].forEach(function (label) {
+        const th = html("th");
+        th.textContent = label;
+        hr.appendChild(th);
+      });
+      head.appendChild(hr);
+      const body = html("tbody");
+      entity.attrs.forEach(function (item) {
+        const tr = html("tr");
+        [item.name, item.type, item.required, item.key, item.rule].forEach(function (value) {
+          addCell(tr, value);
+        });
+        body.appendChild(tr);
+      });
+      table.appendChild(head);
+      table.appendChild(body);
+      const meta = html("p", { class: "meta" });
+      meta.textContent = entity.indexes;
+      section.append(heading, copy, table, meta);
+      catalog.appendChild(section);
+    });
+
+    layout();
+    show("account");
+  </script>
+</body>
+</html>

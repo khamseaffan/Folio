@@ -116,7 +116,7 @@
     ];
 
     const copy = {
-      person: "An invited account. Sign-in is Firebase Authentication, with Google or a magic link. The person types, or speaks and that speech becomes a message. Memory, files, Drive, research, and scheduled runs belong to this account and are not shared.",
+      person: "An account. The site opens on one public page, and the person signs in from that page. Sign-in is Firebase Authentication, with Google or a magic link. The person types, or speaks and that speech becomes a message. Memory, files, Drive, research, and scheduled runs belong to this account and are not shared.",
       web: "Next.js on Vercel. It is the only surface the person uses. It calls the API. It does not hold the database, the files, or the keys.",
       drive: "A read-only import of one file the person picks in Google's picker. The copy is from that moment and is private. Later edits at the source wait for another import. The refresh token is envelope-encrypted. Disconnecting removes the token and leaves the copies.",
       api: "Cloud Run. A short chat turn runs here: it reads the profile and this account's files, calls the model, and returns the reply. Browser work, a long web read, and research are enqueued instead.",
@@ -126,9 +126,9 @@
       browser: "Chrome on the worker. An account may run more than one browser task. Two tasks may not drive the same signed-in site at the same time. A page read does not send data. A send on a website runs only for a confirmation of that exact send. A send that may already have completed is not repeated.",
       model: "The platform holds the key. The current model is Gemini. The person cannot change it. A short chat calls from the API. Research and scheduled runs call from the worker. Each call records tokens and expected cost. The person sees the tokens. The account stops at 10 million recorded total tokens unless that cap is raised. Missing usage is stored as missing.",
       publicWeb: "Read during research, and during a scheduled run when the task needs it. A send on a website still requires a confirmation of that exact send.",
-      postgres: "Cloud SQL in us-central1, private IP, primary for reads and writes. This is the record of the account, the thread, the profile, the report, and the scheduled run. The tables and columns are not designed yet. When Postgres is unavailable, the app stops and shows that the system is down.",
+      postgres: "Cloud SQL in us-central1, private IP, primary for reads and writes. This is the record of the account, the thread, the profile, the report, and the scheduled run. The record picture is drawn. Each table is created when the work that writes it is built. When Postgres is unavailable, the app stops and shows that the system is down.",
       files: "Cloud Storage. Bytes for one account live under that account's prefix. A file is visible only after the bytes are stored and the database row commits. Uploads and task files are counted, and the count stops at 5 GB. Knowledge files and Drive copies are outside that count.",
-      keys: "Cloud KMS envelope-encrypts the platform model keys and the Drive refresh token. Secret Manager holds app secrets only. Deleting an account removes the Drive token. It does not remove the platform model keys."
+      keys: "Cloud KMS envelope-encrypts the platform model keys and integration secrets. Secret Manager holds app secrets only. Deleting an account removes the integration secrets. It does not remove the platform model keys."
     };
 
     const notes = {

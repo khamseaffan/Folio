@@ -1,15 +1,8 @@
 # Folio
 
-Personal AI agent. Each invited person has a private account, and their own memory, files, research, and scheduled runs. The platform holds the model keys.
+Personal AI agent. Each person has a private account, and their own memory, files, research, and scheduled runs. The platform holds the model keys.
 
-## Product
-
-- Conversation with the platform model. The current model is Gemini. The person cannot change it.
-- Deep research reports the person can leave and reopen.
-- Voice, file, and read-only Google Drive input.
-- Long-term memory used in later answers.
-- Scheduled runs that leave a message or a report in the app.
-- Accounts: create, log in, log out, delete.
+The product rules are in [docs/product](docs/product). The record picture is [docs/diagrams/schema.html](docs/diagrams/schema.html).
 
 ## Stack
 
@@ -20,8 +13,8 @@ Personal AI agent. Each invited person has a private account, and their own memo
 | Data | Cloud SQL for Postgres, Cloud Storage |
 | Sign-in | Firebase Authentication |
 | Jobs | Cloud Tasks, Cloud Scheduler |
-| Secrets | Cloud KMS for model keys. Secret Manager for app secrets. |
-| Infrastructure | Terraform, Google Cloud, `us-central1` |
+| Secrets | Cloud KMS for model keys and integration secrets. Secret Manager for app secrets. |
+| Infrastructure | Terraform for Google Cloud, `us-central1`. The website is on Vercel. |
 | CI | GitHub Actions |
 
 ## Status
@@ -30,6 +23,7 @@ Personal AI agent. Each invited person has a private account, and their own memo
 | --- | --- |
 | API health check and tests | Accounts, chat, memory, research, files, schedules |
 | Web app shell | Google Cloud and Vercel deploy |
+| Record picture | The tables. Each table is created when the work that writes it is built. |
 
 ## Run
 
@@ -66,6 +60,7 @@ Install the commit hook once: `uvx pre-commit install`.
 - [Screens](docs/product/screens.md)
 - [Failure](docs/product/failure.md)
 - [Records](docs/product/records.md)
+- [Schema picture](docs/diagrams/schema.html)
 - [Models](docs/product/models.md)
 - [Conversations](docs/product/conversations.md)
 - [Profile](docs/product/profile.md)

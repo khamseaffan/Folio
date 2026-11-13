@@ -1,6 +1,6 @@
 # Failure
 
-Deleting an account is immediate. It removes the Firebase sign-in, sessions, rows, files, the Drive token, browser cookies, and schedules. The owned rows go by a foreign key. Detail is in `docs/product/records.md`. It does not remove the platform model keys. A deleted account cannot be restored.
+Deleting an account is immediate. It removes the Firebase sign-in, sessions, rows, files, the integration secrets, browser cookies, and schedules. The usage rows stay, with the email kept and the account id cleared. The token cap and the stop for that email stay. The other owned rows go by a foreign key. Detail is in `docs/product/records.md`. It does not remove the platform model keys. A deleted account cannot be restored.
 
 When Postgres is unavailable, the app stops. A popup says the system is down and repair is underway. The app accepts no work until Postgres is back.
 
