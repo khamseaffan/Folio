@@ -1,26 +1,239 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #1c2836;
+  --muted: #6d7886;
+  --alert: #9a4038;
+  --panel: rgba(255, 252, 248, 0.82);
+  --field: #f3f6fa;
+  --button: #2a3848;
+  --button-ink: #f6f3ee;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  color: var(--ink);
+  font-family: var(--font-outfit), "Avenir Next", "Segoe UI", sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.4;
+  background:
+    radial-gradient(ellipse 60% 48% at 8% 92%, #f6e2cc 0%, transparent 72%),
+    radial-gradient(ellipse 42% 36% at 96% 0%, #d5e7f4 0%, transparent 70%),
+    linear-gradient(160deg, #eef3f6 0%, #f7f2ea 70%);
+}
+
+button,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--button);
+  outline-offset: 3px;
+}
+
+.stage {
+  box-sizing: border-box;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem 2rem;
+}
+
+.panel {
+  box-sizing: border-box;
+  width: min(100%, 28rem);
+  padding: 1.7rem 1.55rem 1.35rem;
+  border-radius: 1.6rem;
+  background: var(--panel);
+  box-shadow: 0 22px 50px rgba(70, 84, 98, 0.12);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 2.7rem;
+  height: 2.7rem;
+  flex: 0 0 auto;
+  border-radius: 0.85rem;
+  background: #e8eef3;
+  color: var(--button);
+}
+
+.mark svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.kicker,
+.mail,
+.notice,
+.status,
+.hint {
+  margin: 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.kicker {
+  margin-bottom: 0.2rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0;
+  text-align: left;
+  font-size: clamp(1.55rem, 5vw, 1.85rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.mail {
+  margin-top: 0.35rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.notice,
+.status,
+.hint {
+  margin-top: 1rem;
+}
+
+.notice {
+  color: var(--alert);
+}
+
+.status,
+.hint {
+  color: var(--muted);
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1.35rem;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  min-height: 3.05rem;
+  padding: 0 0.95rem;
+  border-radius: 0.95rem;
+  background: var(--field);
+}
+
+.field svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.field input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0.75rem 0;
+  border: 0;
+  background: transparent;
+}
+
+.field input::placeholder {
+  color: #98a2ae;
+}
+
+.primary,
+.quiet,
+.text-button {
+  border: 0;
+  cursor: pointer;
+}
+
+.primary {
+  width: 100%;
+  min-height: 3.05rem;
+  border-radius: 999px;
+  background: var(--button);
+  color: var(--button-ink);
+  font-weight: 500;
+}
+
+.quiet,
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.4rem;
+  width: 100%;
+  min-height: 2.4rem;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.quiet svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.primary:disabled,
+.quiet:disabled,
+.text-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.down-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(210, 224, 234, 0.62);
+}
+
+.down-panel {
+  box-sizing: border-box;
+  width: min(100%, 22rem);
+  padding: 1.8rem 1.4rem;
+  border-radius: 1.6rem;
+  background: rgba(255, 252, 248, 0.94);
+  box-shadow: 0 24px 60px rgba(48, 72, 96, 0.16);
+}
+
+.down-panel p {
+  margin: 0;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
