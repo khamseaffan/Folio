@@ -11,9 +11,11 @@ from app.model import (
     FakeModel,
     ModelError,
     Reply,
+    ToolCall,
+    ToolSpec,
     open_model,
 )
-from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
 
 class _Chat:
@@ -357,3 +359,114 @@ def test_provider_failure_hides_the_key(monkeypatch: pytest.MonkeyPatch) -> None
     assert "test-key-value" not in str(caught.value)
     assert caught.value.__cause__ is None
     assert caught.value.__suppress_context__ is True
+
+
+class _ToolChat(_Chat):
+    def __init__(self, message: AIMessage, chunks: list[AIMessageChunk] | None = None) -> None:
+        super().__init__(message, chunks=chunks)
+        self.bound: list[object] = []
+
+    def bind_tools(self, tools: list[object]) -> "_ToolChat":
+        self.bound = list(tools)
+        return self
+
+
+_RENAME = ToolSpec(
+    name="rename_thread",
+    description="Rename a thread.",
+    schema={"type": "object", "properties": {"name": {"type": "string"}}},
+)
+
+
+def test_block_allows_tool_role_with_call_id() -> None:
+    block = Block(role="tool", text='{"ok": true}', call_id="c1")
+    assert block.call_id == "c1"
+    assert block.tool_calls == ()
+
+
+def test_fake_model_plays_a_script_then_falls_back() -> None:
+    call = ToolCall(id="c1", name="list_threads", arguments={})
+    model = FakeModel(reply="done", script=(Reply("", 1, 1, 2, (call,)),))
+    first = model.stream("p", [], (ToolSpec("list_threads", "d", {}),))
+    assert list(first) == []
+    assert first.reply().tool_calls == (call,)
+    assert first.reply().total_tokens == 2
+    second = model.stream("p", [])
+    assert list(second) == ["done"]
+    assert second.reply().tool_calls == ()
+    assert model.seen[0][1][0].name == "list_threads"
+    assert model.seen[1][1] == ()
+
+
+def test_fake_model_script_text_streams_as_one_chunk() -> None:
+    model = FakeModel(script=(Reply("Renamed.", 1, 1, 2),))
+    assert list(model.stream("p", [])) == ["Renamed."]
+    assert FakeModel(script=(Reply("Renamed.", 1, 1, 2),)).complete("p", []).text == "Renamed."
+
+
+def test_brain_maps_tool_blocks_to_langchain_messages() -> None:
+    chat = _ToolChat(AIMessage(content="ok"))
+    call = ToolCall(id="c1", name="rename_thread", arguments={"name": "Tax"})
+    LangChainBrain(chat).complete(
+        "p",
+        [
+            Block(role="person", text="rename it"),
+            Block(role="assistant", text="", tool_calls=(call,)),
+            Block(role="tool", text='{"ok": true}', call_id="c1"),
+        ],
+    )
+    sent = chat.sent[0]
+    assert isinstance(sent[2], AIMessage)
+    assert sent[2].tool_calls[0]["id"] == "c1"
+    assert sent[2].tool_calls[0]["name"] == "rename_thread"
+    assert sent[2].tool_calls[0]["args"] == {"name": "Tax"}
+    assert isinstance(sent[3], ToolMessage)
+    assert sent[3].tool_call_id == "c1"
+    assert sent[3].content == '{"ok": true}'
+
+
+def test_brain_binds_tools_and_reads_tool_calls() -> None:
+    chat = _ToolChat(
+        AIMessage(
+            content="",
+            tool_calls=[{"id": "c1", "name": "rename_thread", "args": {"name": "Tax"}}],
+        )
+    )
+    reply = LangChainBrain(chat).complete("p", _blocks(), (_RENAME,))
+    assert reply.tool_calls == (ToolCall("c1", "rename_thread", {"name": "Tax"}),)
+    assert chat.bound == [
+        {
+            "type": "function",
+            "function": {
+                "name": "rename_thread",
+                "description": "Rename a thread.",
+                "parameters": _RENAME.schema,
+            },
+        }
+    ]
+
+
+def test_brain_does_not_bind_when_there_are_no_tools() -> None:
+    chat = _ToolChat(AIMessage(content="ok"))
+    LangChainBrain(chat).complete("p", _blocks())
+    assert chat.bound == []
+
+
+def test_brain_stream_joins_a_tool_call_that_arrives_in_pieces() -> None:
+    chunks = [
+        AIMessageChunk(
+            content="",
+            tool_call_chunks=[{"id": "c1", "name": "rename_thread", "args": '{"na', "index": 0}],
+        ),
+        AIMessageChunk(
+            content="",
+            tool_call_chunks=[{"id": None, "name": None, "args": 'me": "Tax"}', "index": 0}],
+            usage_metadata={"input_tokens": 3, "output_tokens": 2, "total_tokens": 5},
+        ),
+    ]
+    chat = _ToolChat(AIMessage(content=""), chunks=chunks)
+    stream = LangChainBrain(chat).stream("p", _blocks(), (_RENAME,))
+    assert list(stream) == []
+    reply = stream.reply()
+    assert reply.tool_calls == (ToolCall("c1", "rename_thread", {"name": "Tax"}),)
+    assert reply.total_tokens == 5

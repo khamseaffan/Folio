@@ -41,7 +41,7 @@ class FakeModel:
         self._later_mark = later_mark
         self._later_text = later_text
 
-    def complete(self, prompt: str, blocks: list[Block]) -> Reply:
+    def complete(self, prompt: str, blocks: list[Block], tools=()) -> Reply:
         self.prompts.append(prompt)
         self.completed.append(list(blocks))
         if self._error is not None:

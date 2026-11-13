@@ -97,7 +97,7 @@ class FakeModel:
         self.seen: list[tuple[str, list[tuple[str, str]]]] = []
         self.folded: list[tuple[str, list[tuple[str, str]]]] = []
 
-    def complete(self, prompt: str, blocks: list[Block]) -> Reply:
+    def complete(self, prompt: str, blocks: list[Block], tools=()) -> Reply:
         self.completed += 1
         self.order.append("complete")
         self.folded.append((prompt, [(block.role, block.text) for block in blocks]))
@@ -109,7 +109,7 @@ class FakeModel:
             raise self._error
         return self._reply
 
-    def stream(self, prompt: str, blocks: list[Block]) -> _Script:
+    def stream(self, prompt: str, blocks: list[Block], tools=()) -> _Script:
         self.calls += 1
         self.order.append("stream")
         self.seen.append((prompt, [(block.role, block.text) for block in blocks]))

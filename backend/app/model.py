@@ -1,6 +1,6 @@
 import os
 import threading
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -44,12 +44,28 @@ def _api_key() -> str | None:
 
 
 @dataclass(frozen=True)
+class ToolSpec:
+    name: str
+    description: str
+    schema: dict[str, object]
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict[str, object]
+
+
+@dataclass(frozen=True)
 class Block:
-    role: Literal["person", "assistant"]
+    role: Literal["person", "assistant", "tool"]
     text: str
+    tool_calls: tuple[ToolCall, ...] = ()
+    call_id: str | None = None
 
     def __post_init__(self) -> None:
-        if self.role not in ("person", "assistant"):
+        if self.role not in ("person", "assistant", "tool"):
             raise ValueError("block role is not allowed")
 
 
@@ -59,6 +75,7 @@ class Reply:
     input_tokens: int | None
     output_tokens: int | None
     total_tokens: int | None
+    tool_calls: tuple[ToolCall, ...] = ()
 
 
 class TextStream(Protocol):
@@ -68,11 +85,21 @@ class TextStream(Protocol):
 
 
 class Model(Protocol):
-    def complete(self, prompt: str, blocks: list[Block]) -> Reply: ...
+    def complete(
+        self,
+        prompt: str,
+        blocks: list[Block],
+        tools: Sequence[ToolSpec] = (),
+    ) -> Reply: ...
 
     def count_tokens(self, prompt: str, blocks: list[Block]) -> int: ...
 
-    def stream(self, prompt: str, blocks: list[Block]) -> TextStream: ...
+    def stream(
+        self,
+        prompt: str,
+        blocks: list[Block],
+        tools: Sequence[ToolSpec] = (),
+    ) -> TextStream: ...
 
 
 class _FakeStream:
@@ -109,6 +136,7 @@ class _FakeStream:
             input_tokens=self._usage.input_tokens,
             output_tokens=self._usage.output_tokens,
             total_tokens=self._usage.total_tokens,
+            tool_calls=self._usage.tool_calls,
         )
 
 
@@ -122,7 +150,10 @@ class FakeModel:
         input_tokens: int | None = None,
         output_tokens: int | None = None,
         total_tokens: int | None = None,
+        script: tuple[Reply, ...] = (),
     ) -> None:
+        self._script = list(script)
+        self.seen: list[tuple[list[Block], tuple[ToolSpec, ...]]] = []
         self._reply = reply
         self._token_count = token_count
         self._chunks = chunks
@@ -131,7 +162,21 @@ class FakeModel:
         self._output_tokens = output_tokens
         self._total_tokens = total_tokens
 
-    def complete(self, prompt: str, blocks: list[Block]) -> Reply:
+    def _next(self, blocks: list[Block], tools: Sequence[ToolSpec]) -> Reply | None:
+        self.seen.append((list(blocks), tuple(tools)))
+        if self._script:
+            return self._script.pop(0)
+        return None
+
+    def complete(
+        self,
+        prompt: str,
+        blocks: list[Block],
+        tools: Sequence[ToolSpec] = (),
+    ) -> Reply:
+        scripted = self._next(blocks, tools)
+        if scripted is not None:
+            return scripted
         return Reply(
             text=self._reply,
             input_tokens=self._input_tokens,
@@ -142,7 +187,16 @@ class FakeModel:
     def count_tokens(self, prompt: str, blocks: list[Block]) -> int:
         return self._token_count
 
-    def stream(self, prompt: str, blocks: list[Block]) -> _FakeStream:
+    def stream(
+        self,
+        prompt: str,
+        blocks: list[Block],
+        tools: Sequence[ToolSpec] = (),
+    ) -> _FakeStream:
+        scripted = self._next(blocks, tools)
+        if scripted is not None:
+            chunks = (scripted.text,) if scripted.text != "" else ()
+            return _FakeStream(chunks, (), scripted)
         if self._chunks is None:
             chunks = (self._reply,) if self._reply != "" else ()
         else:
