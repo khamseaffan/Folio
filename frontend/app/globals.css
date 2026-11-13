@@ -100,14 +100,12 @@ input {
   width: 2.9rem;
   height: 2.9rem;
   flex: 0 0 auto;
-  border-radius: 0.85rem;
-  background: var(--sky);
-  color: var(--fuji);
+  background: transparent;
 }
 
 .mark svg {
-  width: 1.7rem;
-  height: 1.7rem;
+  width: 100%;
+  height: 100%;
 }
 
 .kicker,

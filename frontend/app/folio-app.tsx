@@ -22,10 +22,11 @@ import {
 
 function Mark() {
   return (
-    <svg viewBox="0 0 32 32" aria-hidden="true">
-      <path fill="currentColor" d="M2 26.5C8 25 11 20 14.2 15.2 15.2 13.2 15.6 10.6 16 8.2c.4 2.4.8 5 1.8 7 3.2 4.8 6.2 9.8 12.2 11.3Z" />
-      <path fill="#f7f4f1" d="M14.2 13.4c.6-1.6 1.2-3.6 1.8-5.2.6 1.6 1.2 3.6 1.8 5.2-.8-.5-1.6-.8-1.8-.8s-1 .3-1.8.8z" />
-      <circle cx="24.2" cy="8.4" r="1.7" fill="#d98996" />
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <rect width="64" height="64" rx="14" fill="#2B3AC9" />
+      <path d="M18 12h20l10 10v30H18z" fill="#FAFBFC" />
+      <path d="M38 12l10 10H38z" fill="#B9C0FF" />
+      <path d="M24 26h18v5H29v3h8v4h-8v8h-5z" fill="#2B3AC9" />
     </svg>
   );
 }
