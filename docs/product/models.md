@@ -4,7 +4,7 @@ The platform holds the provider keys. A person does not bring, store, or replace
 
 The keys stay envelope-encrypted with Cloud KMS.
 
-Chat, research, scheduled runs, the browser, and memory use one platform model at a time. `khamseaffan@gmail.com` selects the provider and the model in settings. Another account cannot change them and does not bring a key. The starting selection is provider Google and model `gemini-4-argon`, with thinking level medium and a context window of 1,048,576 tokens. A later selection uses that model's own thinking control, context window, and published price. Expected cost uses the published price for the selected provider and model. The usage row stores the provider, the model, and the token counts that provider returns.
+Chat, research, scheduled runs, the browser, and memory use one platform model at a time. `khamseaffan@gmail.com` selects the provider and the model in settings. Another account cannot change them and does not bring a key. The starting selection is provider OpenAI and model `gpt-6.1-sol`, with reasoning effort medium and a context window of 1,050,000 tokens. A later selection uses that model's own thinking control, context window, and published price. Expected cost uses the published price for the selected provider and model. The usage row stores the provider, the model, and the token counts that provider returns.
 
 The call goes through a LangChain chat model. LangGraph is the loop in the Python API and the worker. The website does not call the model. The graph, the tools, and the memory stay the same when the provider or the model changes. Google ADK is not the loop. The Vercel AI SDK does not call the model.
 

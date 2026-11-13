@@ -8,7 +8,7 @@
 4. The person sets a display name of 1 to 40 characters.
 5. The person can end a session. A session also ends after 30 minutes of silence from the person and the assistant, and an account has at most two sessions.
 6. Deleting an account is immediate and cannot be restored. The usage rows, the token cap, and the stop for that email stay.
-7. `khamseaffan@gmail.com` selects the provider and the model. The person talks with that one platform model and cannot change it. The starting selection is Google and `gemini-4-argon`. The call goes through a LangChain chat model. LangGraph is the loop. Tools, memory, and the graph stay the same.
+7. `khamseaffan@gmail.com` selects the provider and the model. The person talks with that one platform model and cannot change it. The starting selection is OpenAI and `gpt-6.1-sol`. The call goes through a LangChain chat model. LangGraph is the loop. Tools, memory, and the graph stay the same.
 8. The person has many threads, and the agent renames or deletes a thread when told.
 9. A message has no length limit, and a call includes the newest blocks that fit, including the latest 10 person blocks and the latest 10 assistant blocks.
 10. A reply streams, the person can stop it, and the partial reply is kept.

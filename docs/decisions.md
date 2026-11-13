@@ -32,7 +32,7 @@ The colors are a cherry blossom morning in front of Mount Fuji.
 ## Models
 
 - The platform holds the provider keys.
-- `khamseaffan@gmail.com` selects the provider and the model in settings. Another account cannot. The starting selection is Google and `gemini-4-argon`. Tools, memory, and the loop stay the same. Detail is in `docs/product/models.md`.
+- `khamseaffan@gmail.com` selects the provider and the model in settings. Another account cannot. The starting selection is OpenAI and `gpt-6.1-sol`. Tools, memory, and the loop stay the same. Detail is in `docs/product/models.md`.
 - The call goes through a LangChain chat model inside the LangGraph loop. The website does not call the model.
 - Each email stops at 10 million recorded total tokens unless that cap is raised. The cap and the stop stay with the email after the account is deleted. The person sees tokens and the file byte count.
 

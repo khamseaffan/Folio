@@ -19,7 +19,7 @@ Folio is a private assistant for one person.
 
 **Model**
 
-- I select the provider and the model in settings. The starting model is `gemini-4-argon`. I pay for it.
+- I select the provider and the model in settings. The starting model is `gpt-6.1-sol`. I pay for it.
 - You do not pick another model, and you do not paste in a key. The tools, the memory, and the loop stay the same when I change the model.
 
 **Who can join**

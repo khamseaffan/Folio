@@ -548,7 +548,7 @@ def test_post_message_streams_chunks_in_order_and_stores_one_usage_row(
         assert "424242" not in posted.text
         assert "434343" not in posted.text
         assert "858585" not in posted.text
-        assert "gemini-4-argon" not in posted.text
+        assert "gpt-6.1-sol" not in posted.text
         assert "expected_cost" not in posted.text
         body = _assert_thread(loaded.json())
         messages = body["messages"]
@@ -570,8 +570,8 @@ def test_post_message_streams_chunks_in_order_and_stores_one_usage_row(
         assert usage == [
             (
                 "chat",
-                "google",
-                "gemini-4-argon",
+                "openai",
+                "gpt-6.1-sol",
                 424242,
                 434343,
                 858585,
@@ -694,7 +694,7 @@ def test_model_error_keeps_the_person_message_and_hides_the_cause(
         assert _events(response.text) == [{"failed": True}]
         assert CAUSE not in response.text
         assert "summary" not in response.text
-        assert "gemini-4-argon" not in response.text
+        assert "gpt-6.1-sol" not in response.text
         assert "expected_cost" not in response.text
         body = _assert_thread(loaded.json())
         messages = body["messages"]
@@ -709,7 +709,7 @@ def test_model_error_keeps_the_person_message_and_hides_the_cause(
         assert assistant["kind"] == "failure"
         assert assistant["body"] == FAILED
         assert CAUSE not in loaded.text
-        assert _usage_rows(email) == [("chat", "google", "gemini-4-argon", None, None, None, None)]
+        assert _usage_rows(email) == [("chat", "openai", "gpt-6.1-sol", None, None, None, None)]
         assert model.calls == 1
         assert model.completed == 0
     finally:
@@ -792,7 +792,7 @@ def test_stop_after_the_first_chunk_stores_that_text_and_one_usage_row(
         assert _last_active(session_id) > after_person
         rows = _usage_rows(email)
         assert len(rows) == 1
-        assert rows[0][0:6] == ("chat", "google", "gemini-4-argon", None, None, None)
+        assert rows[0][0:6] == ("chat", "openai", "gpt-6.1-sol", None, None, None)
         assert rows[0][6] == _assistant_id(thread_id)
         assert FAILED not in "".join(body for _, _, body in _stored_messages(thread_id))
     finally:
@@ -829,7 +829,7 @@ def test_stop_before_any_word_stores_usage_and_no_reply(
             release.set()
             assert _next_event(response.iter_lines()) == {"done": True}
         assert _stored_messages(thread_id) == [("person", "chat", "hello")]
-        assert _usage_rows(email) == [("chat", "google", "gemini-4-argon", None, None, None, None)]
+        assert _usage_rows(email) == [("chat", "openai", "gpt-6.1-sol", None, None, None, None)]
     finally:
         release.set()
         _remove(email)
@@ -882,7 +882,7 @@ def test_closing_the_stream_does_not_stop_the_reply(
         ]
         rows = _usage_rows(email)
         assert len(rows) == 1
-        assert rows[0][0:6] == ("chat", "google", "gemini-4-argon", 424242, 434343, 858585)
+        assert rows[0][0:6] == ("chat", "openai", "gpt-6.1-sol", 424242, 434343, 858585)
         stored = "".join(body for _, _, body in _stored_messages(thread_id))
         assert FAILED not in stored
     finally:
@@ -927,7 +927,7 @@ def test_ending_the_session_does_not_stop_the_reply(
             ("assistant", "chat", "keptlater"),
         ]
         assert _usage_rows(email) == [
-            ("chat", "google", "gemini-4-argon", 7, 8, 15, _assistant_id(thread_id))
+            ("chat", "openai", "gpt-6.1-sol", 7, 8, 15, _assistant_id(thread_id))
         ]
     finally:
         release.set()
@@ -1007,14 +1007,14 @@ def test_mid_stream_model_error_keeps_the_arrived_text_and_hides_the_cause(
         assert response.status_code == 200
         assert _events(response.text) == [{"text": "kept"}, {"failed": True}]
         assert CAUSE not in response.text
-        assert "gemini-4-argon" not in response.text
+        assert "gpt-6.1-sol" not in response.text
         assert _stored_messages(thread_id) == [
             ("person", "chat", "hello"),
             ("assistant", "chat", "kept"),
             ("assistant", "failure", FAILED),
         ]
         assert _usage_rows(email) == [
-            ("chat", "google", "gemini-4-argon", None, None, None, _assistant_id(thread_id))
+            ("chat", "openai", "gpt-6.1-sol", None, None, None, _assistant_id(thread_id))
         ]
     finally:
         _remove(email)
@@ -1111,7 +1111,7 @@ def test_retry_replaces_the_partial_and_keeps_one_person_row(
         assert "424242" not in posted.text
         assert "434343" not in posted.text
         assert "858585" not in posted.text
-        assert "gemini-4-argon" not in posted.text
+        assert "gpt-6.1-sol" not in posted.text
         after = _message_rows(thread_id)
         assert after == [
             (person_id, "person", "chat", "hello"),
@@ -1119,8 +1119,8 @@ def test_retry_replaces_the_partial_and_keeps_one_person_row(
         ]
         assert _last_active(session_id) > active
         assert set(_usage_rows(email)) == {
-            ("chat", "google", "gemini-4-argon", None, None, None, partial_id),
-            ("chat", "google", "gemini-4-argon", 424242, 434343, 858585, partial_id),
+            ("chat", "openai", "gpt-6.1-sol", None, None, None, partial_id),
+            ("chat", "openai", "gpt-6.1-sol", 424242, 434343, 858585, partial_id),
         }
         assert len(_usage_rows(email)) == 2
         assert retry.calls == 1
@@ -1215,7 +1215,7 @@ def test_retry_failure_keeps_one_of_each_row_and_hides_the_cause(
         assert _events(posted.text) == [{"text": "fresh"}, {"failed": True}]
         assert CAUSE not in posted.text
         assert "424242" not in posted.text
-        assert "gemini-4-argon" not in posted.text
+        assert "gpt-6.1-sol" not in posted.text
         assert "summary" not in posted.text
         after = _message_rows(thread_id)
         assert after == [
@@ -1227,7 +1227,7 @@ def test_retry_failure_keeps_one_of_each_row_and_hides_the_cause(
         rows = _usage_rows(email)
         assert len(rows) == 2
         assert all(
-            row == ("chat", "google", "gemini-4-argon", None, None, None, partial_id)
+            row == ("chat", "openai", "gpt-6.1-sol", None, None, None, partial_id)
             for row in rows
         )
         assert not _cause_stored(thread_id, email, CAUSE)
@@ -1272,8 +1272,8 @@ def test_retry_inserts_a_reply_when_the_failure_has_no_partial(
         reply_id = after[1][0]
         assert _last_active(session_id) > active
         assert set(_usage_rows(email)) == {
-            ("chat", "google", "gemini-4-argon", None, None, None, None),
-            ("chat", "google", "gemini-4-argon", 8, 9, 17, reply_id),
+            ("chat", "openai", "gpt-6.1-sol", None, None, None, None),
+            ("chat", "openai", "gpt-6.1-sol", 8, 9, 17, reply_id),
         }
         assert len(_usage_rows(email)) == 2
     finally:
@@ -1532,8 +1532,8 @@ def test_short_thread_sends_every_chat_message_and_skips_the_summary(
         assert _usage_full(email) == [
             (
                 "chat",
-                "google",
-                "gemini-4-argon",
+                "openai",
+                "gpt-6.1-sol",
                 5,
                 6,
                 11,
@@ -1575,8 +1575,8 @@ def test_a_long_thread_writes_the_summary_before_the_reply(
         assert len(rows) == 2
         summary_row = next(row for row in rows if row[6] is None)
         reply_row = next(row for row in rows if row[6] is not None)
-        assert summary_row == ("chat", "google", "gemini-4-argon", 7, 8, 15, None, None)
-        assert reply_row == ("chat", "google", "gemini-4-argon", 5, 6, 11, reply_id, None)
+        assert summary_row == ("chat", "openai", "gpt-6.1-sol", 7, 8, 15, None, None)
+        assert reply_row == ("chat", "openai", "gpt-6.1-sol", 5, 6, 11, reply_id, None)
     finally:
         _remove(email)
 
@@ -1608,7 +1608,7 @@ def test_a_failed_summary_keeps_the_older_messages_and_one_failure_line(
         stored = _stored_messages(thread_id)
         assert [row for row in stored if row[1] == "failure"] == [("assistant", "failure", FAILED)]
         assert _usage_full(email) == [
-            ("chat", "google", "gemini-4-argon", None, None, None, None, None)
+            ("chat", "openai", "gpt-6.1-sol", None, None, None, None, None)
         ]
     finally:
         _remove(email)
@@ -1644,8 +1644,8 @@ def test_retry_on_a_long_thread_writes_the_summary_before_the_reply(
         assert len(rows) == 2
         summary_row = next(row for row in rows if row[6] is None)
         reply_row = next(row for row in rows if row[6] is not None)
-        assert summary_row == ("chat", "google", "gemini-4-argon", 7, 8, 15, None, None)
-        assert reply_row == ("chat", "google", "gemini-4-argon", 5, 6, 11, reply_id, None)
+        assert summary_row == ("chat", "openai", "gpt-6.1-sol", 7, 8, 15, None, None)
+        assert reply_row == ("chat", "openai", "gpt-6.1-sol", 5, 6, 11, reply_id, None)
         assert all(row[1] != "failure" for row in _stored_messages(thread_id))
     finally:
         _remove(email)

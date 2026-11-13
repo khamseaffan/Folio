@@ -56,9 +56,9 @@ def _blocks() -> list[Block]:
 
 
 def test_constants() -> None:
-    assert MODEL_ID == "gemini-4-argon"
+    assert MODEL_ID == "gpt-6.1-sol"
     assert THINKING == "medium"
-    assert CONTEXT_TOKENS == 1048576
+    assert CONTEXT_TOKENS == 1_050_000
 
 
 def test_fake_returns_configured_reply_and_scripted_count() -> None:
@@ -94,8 +94,8 @@ def test_block_role_must_be_person_or_assistant() -> None:
 
 
 def test_open_model_without_a_key_returns_the_fake(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.setenv("GOOGLE_API_KEY", "other-key")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "other-key")
     missing = open_model()
     assert isinstance(missing, FakeModel)
     noted = missing.complete("prompt", [])
@@ -104,17 +104,17 @@ def test_open_model_without_a_key_returns_the_fake(monkeypatch: pytest.MonkeyPat
     assert noted.output_tokens is None
     assert noted.total_tokens is None
     assert list(missing.stream("prompt", [])) == ["Noted."]
-    monkeypatch.setenv("GEMINI_API_KEY", "   ")
+    monkeypatch.setenv("OPENAI_API_KEY", "   ")
     assert isinstance(open_model(), FakeModel)
 
 
 def test_open_model_with_a_key_does_not_call_the_api(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key-value")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-value")
     built: list[object] = []
 
     def build(model: str, **kwargs: object) -> object:
-        assert model == "google_genai:gemini-4-argon"
-        assert kwargs.get("thinking_level") == "medium"
+        assert model == "openai:gpt-6.1-sol"
+        assert kwargs.get("reasoning_effort") == "medium"
         chat = object()
         built.append(chat)
         return chat

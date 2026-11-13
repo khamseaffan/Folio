@@ -13,8 +13,8 @@ from app.model import (
     _api_key,
 )
 
-PROVIDER = "google"
-_LANGCHAIN_PROVIDER = "google_genai"
+PROVIDER = "openai"
+_LANGCHAIN_PROVIDER = "openai"
 
 
 def open_brain() -> Model:
@@ -22,7 +22,7 @@ def open_brain() -> Model:
         return FakeModel(reply="Noted.")
     chat = init_chat_model(
         f"{_LANGCHAIN_PROVIDER}:{MODEL_ID}",
-        thinking_level=THINKING,
+        reasoning_effort=THINKING,
     )
     return LangChainBrain(chat)
 

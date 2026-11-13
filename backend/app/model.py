@@ -4,12 +4,12 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
-MODEL_ID = "gemini-4-argon"
+MODEL_ID = "gpt-6.1-sol"
 THINKING = "medium"
-CONTEXT_TOKENS = 1048576
+CONTEXT_TOKENS = 1_050_000
 
-_KEY_ENV = "GEMINI_API_KEY"
-_KEY_ENVS = (_KEY_ENV, "GOOGLE_API_KEY")
+_KEY_ENV = "OPENAI_API_KEY"
+_KEY_ENVS = (_KEY_ENV, "GEMINI_API_KEY", "GOOGLE_API_KEY", "ANTHROPIC_API_KEY")
 
 
 class ModelError(Exception):

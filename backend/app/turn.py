@@ -21,7 +21,7 @@ from app.session import set_last_active_at
 from app.thread import ThreadRow, get_thread, set_summary
 from app.usage import record_usage, tokens_for_email
 
-_PROVIDER = "google"
+_PROVIDER = "openai"
 
 
 def _window(model: Model) -> int:

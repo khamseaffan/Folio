@@ -10,8 +10,8 @@ from app.message import insert_message
 from app.thread import create_thread
 from app.usage import apply, record_usage, tokens_for_email
 
-PROVIDER = "google"
-MODEL = "gemini-4-argon"
+PROVIDER = "openai"
+MODEL = "gpt-6.1-sol"
 
 
 def _account_existed(email: str) -> bool:
