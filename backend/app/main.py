@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.account import ensure_account, load_account
+from app.account import ensure_account, load_account, set_display_name
 from app.db import database_ready
 from app.session import end_session, open_session, start_session
 from app.sign_in_proof import NOT_ALLOWED, NOT_PROVEN, SignInError, verify_allowed_sign_in
@@ -13,6 +13,7 @@ from app.sign_in_proof import NOT_ALLOWED, NOT_PROVEN, SignInError, verify_allow
 app = FastAPI()
 
 _CONTINUE = "Sign in to continue."
+_NAME = "Enter a name, up to 40 characters."
 _LOCAL_ORIGIN = "http://localhost:3000"
 
 
@@ -95,6 +96,22 @@ def _session_id(request: Request) -> uuid.UUID | None:
         return None
 
 
+async def _submitted_name(request: Request) -> str | None:
+    try:
+        body = await request.json()
+    except Exception:
+        return None
+    if not isinstance(body, dict):
+        return None
+    raw = body.get("display_name")
+    if not isinstance(raw, str):
+        return None
+    name = raw.strip()
+    if len(name) < 1 or len(name) > 40:
+        return None
+    return name
+
+
 async def _id_token(request: Request) -> str | None:
     try:
         body = await request.json()
@@ -164,3 +181,27 @@ def get_session(request: Request) -> Response:
     except Exception:
         return _down()
     return JSONResponse(content={"email": email, "display_name": display_name})
+
+
+@app.post("/display-name")
+async def post_display_name(request: Request) -> Response:
+    session_id = _session_id(request)
+    if session_id is None:
+        return _error(401, _CONTINUE)
+    try:
+        account_id = open_session(session_id)
+    except Exception:
+        return _down()
+    if account_id is None:
+        return _error(401, _CONTINUE)
+    display_name = await _submitted_name(request)
+    if display_name is None:
+        return _error(400, _NAME)
+    try:
+        saved = set_display_name(account_id, session_id, display_name)
+    except Exception:
+        return _down()
+    if saved is None:
+        return _error(401, _CONTINUE)
+    email, stored_name = saved
+    return JSONResponse(content={"email": email, "display_name": stored_name})

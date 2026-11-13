@@ -40,6 +40,49 @@ def ensure_account(firebase_uid: str, email: str) -> uuid.UUID:
     return account_id
 
 
+class _SessionClosed(Exception):
+    pass
+
+
+def set_display_name(
+    account_id: uuid.UUID,
+    session_id: uuid.UUID,
+    display_name: str,
+) -> tuple[str, str] | None:
+    try:
+        with connect() as connection:
+            with connection.transaction():
+                named = connection.execute(
+                    """
+                    UPDATE account
+                    SET display_name = %s
+                    WHERE id = %s
+                    RETURNING email, display_name
+                    """,
+                    (display_name, account_id),
+                ).fetchone()
+                if named is None or not isinstance(named[1], str):
+                    raise RuntimeError("account is missing")
+                active = connection.execute(
+                    """
+                    UPDATE session
+                    SET last_active_at = now()
+                    WHERE id = %s
+                      AND account_id = %s
+                      AND ended_at IS NULL
+                    RETURNING id
+                    """,
+                    (session_id, account_id),
+                ).fetchone()
+                if active is None:
+                    raise _SessionClosed()
+                email = named[0]
+                stored_name = named[1]
+        return email, stored_name
+    except _SessionClosed:
+        return None
+
+
 def load_account(account_id: uuid.UUID) -> tuple[str, str | None]:
     with connect() as connection:
         row = connection.execute(
