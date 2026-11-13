@@ -1,5 +1,8 @@
 # Folio
 
+[![Vercel](https://img.shields.io/github/deployments/khamseaffan/Folio/Production?label=vercel&logo=vercel)](https://folio.khamseaffan.com)
+[![CI](https://github.com/khamseaffan/Folio/actions/workflows/ci.yml/badge.svg)](https://github.com/khamseaffan/Folio/actions/workflows/ci.yml)
+
 Personal AI agent. Each person has a private account, and their own memory, files, research, and scheduled runs. The platform holds the model keys.
 
 The product rules are in [docs/product](docs/product). The record picture is [docs/diagrams/schema.html](docs/diagrams/schema.html).
