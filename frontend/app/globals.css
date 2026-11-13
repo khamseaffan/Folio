@@ -407,40 +407,57 @@ h1 {
   border-radius: 1.6rem;
   background: var(--panel);
   box-shadow: 0 22px 50px rgba(70, 84, 98, 0.12);
+  font-size: 15px;
 }
 
-.desk-head {
+.rail-brand {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem 1.25rem;
+  align-items: center;
+  gap: 0.55rem;
   min-width: 0;
+  padding: 0.15rem 0.2rem 0.35rem;
 }
 
-.desk-head .panel-head {
-  flex: 1 1 12rem;
-  justify-content: flex-start;
-  min-width: 0;
+.rail-brand .mark {
+  width: 2rem;
+  height: 2rem;
+}
+
+.rail-brand .kicker,
+.desk .mail {
+  margin: 0;
+  font-size: 0.86em;
 }
 
 .desk-account {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 0.1rem;
   min-width: 0;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(61, 88, 114, 0.12);
+}
+
+.account-name {
+  margin: 0;
   max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
 }
 
 .desk-account .mail {
   margin-top: 0;
-  text-align: right;
+  text-align: left;
 }
 
 .desk-account .quiet {
   width: auto;
-  justify-content: flex-end;
+  justify-content: flex-start;
+  margin-top: 0.2rem;
 }
 
 .desk .notice,
@@ -496,16 +513,16 @@ h1 {
 .new-thread {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
   flex: 0 0 auto;
   gap: 0.4rem;
   width: 100%;
-  min-height: 2.5rem;
-  padding: 0.35rem 0.7rem;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--fuji);
-  font-weight: 500;
+  min-height: 2.6rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 0.85rem;
+  background: var(--ink);
+  color: var(--button-ink);
+  font-weight: 600;
 }
 
 .new-thread svg {
@@ -542,11 +559,43 @@ h1 {
   gap: 0.75rem;
 }
 
+.thread-empty {
+  justify-content: center;
+}
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 auto;
+  max-width: 28rem;
+  text-align: center;
+}
+
+.welcome-hello {
+  margin: 0;
+  color: var(--blossom);
+  font-family: var(--font-mincho), "Iowan Old Style", Palatino, serif;
+  font-size: 1.35em;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.welcome h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 1.6em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
 .thread-name {
   margin: 0;
   min-width: 0;
   font-family: var(--font-mincho), "Iowan Old Style", Palatino, serif;
-  font-size: 1.2rem;
+  font-size: 1.1em;
   font-weight: 600;
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -627,6 +676,15 @@ h1 {
   align-items: flex-end;
   gap: 0.55rem;
   min-width: 0;
+  padding: 0.35rem 0.35rem 0.35rem 0.85rem;
+  border: 1px solid rgba(61, 88, 114, 0.14);
+  border-radius: 1.15rem;
+  background: #fff;
+}
+
+.thread-empty .composer {
+  width: min(100%, 36rem);
+  margin: 1.4rem auto 0;
 }
 
 .composer textarea {
@@ -634,13 +692,14 @@ h1 {
   flex: 1 1 auto;
   width: 100%;
   min-width: 0;
-  min-height: 3.05rem;
-  max-height: 8rem;
+  min-height: 2.6em;
+  max-height: 7em;
+  font-size: 1em;
   margin: 0;
   padding: 0.7rem 0.95rem;
   border: 0;
   border-radius: 0.95rem;
-  background: var(--field);
+  background: transparent;
   resize: none;
   line-height: 1.4;
 }
