@@ -122,7 +122,14 @@ def test_block_role_must_be_person_or_assistant() -> None:
 def test_open_model_without_a_key_returns_the_fake(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setenv("GOOGLE_API_KEY", "other-key")
-    assert isinstance(open_model(), FakeModel)
+    missing = open_model()
+    assert isinstance(missing, FakeModel)
+    noted = missing.complete("prompt", [])
+    assert noted.text == "Noted."
+    assert noted.input_tokens is None
+    assert noted.output_tokens is None
+    assert noted.total_tokens is None
+    assert list(missing.stream("prompt", [])) == ["Noted."]
     monkeypatch.setenv("GEMINI_API_KEY", "   ")
     assert isinstance(open_model(), FakeModel)
 

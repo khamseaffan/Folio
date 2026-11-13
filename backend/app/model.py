@@ -158,7 +158,7 @@ class FakeModel:
 
 def open_model() -> Model:
     if _api_key() is None:
-        return FakeModel()
+        return FakeModel(reply="Noted.")
     from app.gemini import build_gemini
 
     return build_gemini()
