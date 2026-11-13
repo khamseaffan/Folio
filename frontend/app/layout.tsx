@@ -1,19 +1,13 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Atkinson_Hyperlegible, Literata } from "next/font/google";
+import { Newsreader } from "next/font/google";
 import "./globals.css";
 
-const atkinson = Atkinson_Hyperlegible({
+const newsreader = Newsreader({
   subsets: ["latin"],
-  weight: ["400", "700"],
-  variable: "--font-atkinson",
-  display: "swap",
-});
-
-const literata = Literata({
-  subsets: ["latin"],
-  weight: ["600"],
-  variable: "--font-literata",
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+  variable: "--font-newsreader",
   display: "swap",
 });
 
@@ -24,7 +18,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${atkinson.variable} ${literata.variable} h-full`}>
+    <html lang="en" className={`${newsreader.variable} h-full`}>
       <body className="min-h-full">{children}</body>
     </html>
   );

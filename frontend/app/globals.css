@@ -1,12 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --paper: #e4ebf0;
-  --ink: #17212b;
-  --stamp: #1e4d6b;
-  --card: #f7fbfc;
-  --muted: #3e5160;
-  --alert: #7a2e2e;
+  --paper: #f3efe4;
+  --ink: #16130f;
+  --rule: #16130f;
+  --alert: #8d2b24;
+  --quiet: #5c5348;
 }
 
 html {
@@ -22,179 +21,211 @@ body {
   overflow-x: clip;
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-atkinson), "Atkinson Hyperlegible", sans-serif;
-  font-size: 1.0625rem;
-  line-height: 1.45;
-  border-left: 8px solid var(--stamp);
+  font-family: var(--font-newsreader), "Iowan Old Style", Palatino, serif;
+  font-size: 1.125rem;
+  line-height: 1.35;
 }
 
 button,
 input {
   font: inherit;
+  color: inherit;
 }
 
 :focus-visible {
-  outline: 2px solid var(--stamp);
+  outline: 1px solid var(--ink);
   outline-offset: 3px;
 }
 
-.app {
+.sheet {
+  box-sizing: border-box;
   min-height: 100%;
   max-width: 100%;
+  padding: clamp(1.25rem, 4vw, 3.25rem);
 }
 
-.shell-header {
+.mast {
+  max-width: 100%;
+}
+
+.running {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  max-width: 100%;
+  font-size: clamp(4.4rem, 16vw, 9.5rem);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+  line-height: 0.82;
+  overflow-wrap: anywhere;
+}
+
+.title-name {
+  font-size: clamp(2.4rem, 7vw, 5.5rem);
+  line-height: 0.92;
+  letter-spacing: -0.035em;
+}
+
+.rule-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  column-gap: 1rem;
-  row-gap: 0.5rem;
-  max-width: 100%;
-  padding: 1.25rem 1rem 0.25rem;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem 1.5rem;
+  margin-top: 1rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--rule);
 }
 
-.wordmark {
-  flex: 0 0 auto;
+.dateline,
+.credit {
   margin: 0;
-  font-family: var(--font-literata), "Iowan Old Style", Palatino, serif;
-  font-size: 2rem;
-  font-weight: 600;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
+  font-size: 1rem;
+  font-style: italic;
+  font-weight: 400;
 }
 
-.person {
-  flex: 1 1 10rem;
-  min-width: 0;
-  margin: 0;
+.credit {
   overflow-wrap: anywhere;
 }
 
 .sign-out {
-  flex: 0 0 auto;
-  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   margin-left: auto;
-  min-height: 2.75rem;
-  padding: 0.4rem 0.15rem;
+  padding: 0.15rem 0;
   border: 0;
   background: transparent;
-  color: var(--stamp);
-  font-weight: 700;
   cursor: pointer;
+}
+
+.sign-out svg {
+  width: 1.05rem;
+  height: 1.05rem;
 }
 
 .sign-out:disabled,
+.ink-word:disabled,
+.line:disabled,
 .text-button:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.45;
 }
 
-.text-button {
-  width: auto;
+.entry {
+  width: min(100%, 36rem);
   max-width: 100%;
-  min-height: 2.75rem;
-  padding: 0.4rem 0;
-  border: 0;
-  background: transparent;
-  color: var(--stamp);
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
+  margin-top: 2.25rem;
 }
 
-.main {
-  width: 100%;
-  max-width: 100%;
-  padding: 1.25rem 1rem 2.5rem;
-}
-
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  width: min(100%, 24rem);
-  max-width: 100%;
-}
-
-.lead,
 .notice,
 .status,
-.or {
-  margin: 0;
-  max-width: 36ch;
+.hint {
+  margin: 0 0 1rem;
+  max-width: 36rem;
   overflow-wrap: anywhere;
-}
-
-.lead {
-  color: var(--ink);
-}
-
-.or {
-  color: var(--muted);
 }
 
 .notice {
   color: var(--alert);
-  margin-bottom: 0.85rem;
 }
 
-.status {
-  margin-bottom: 0.85rem;
+.status,
+.hint {
+  color: var(--quiet);
+  font-style: italic;
 }
 
-.field {
+.line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.85rem 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.line svg,
+.ink-word svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  flex: 0 0 auto;
+}
+
+.write {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   min-width: 0;
-  max-width: 100%;
+  padding-top: 0.95rem;
 }
 
 label {
-  font-weight: 700;
+  flex: 0 0 auto;
+  font-weight: 400;
+}
+
+.write-line {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  min-width: 0;
+  border-bottom: 1px solid var(--rule);
 }
 
 input {
   box-sizing: border-box;
+  flex: 1 1 auto;
   width: 100%;
+  min-width: 0;
   max-width: 100%;
-  min-height: 2.75rem;
-  padding: 0.55rem 0.7rem;
-  border: 1px solid var(--stamp);
+  margin: 0;
+  padding: 0.7rem 0;
+  border: 0;
   border-radius: 0;
-  background: var(--card);
-  color: var(--ink);
+  background: transparent;
+  appearance: none;
 }
 
-.primary,
-.secondary {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  min-height: 2.75rem;
-  padding: 0.55rem 0.8rem;
-  border-radius: 0;
+input::placeholder {
+  color: var(--quiet);
+  font-style: italic;
+}
+
+.name-line input {
+  padding-top: 0.15rem;
+  font-size: clamp(2rem, 6vw, 3.4rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.ink-word,
+.text-button {
+  flex: 0 0 auto;
+  padding: 0.45rem 0;
+  border: 0;
+  background: transparent;
+  white-space: nowrap;
   cursor: pointer;
 }
 
-.primary {
-  border: 1px solid var(--stamp);
-  background: var(--stamp);
-  color: var(--card);
-  font-weight: 700;
-}
-
-.secondary {
-  border: 1px solid var(--stamp);
-  background: transparent;
-  color: var(--stamp);
-  font-weight: 700;
-}
-
-.primary:disabled,
-.secondary:disabled {
-  cursor: default;
-  opacity: 0.6;
+.text-button {
+  margin-top: 0.85rem;
+  color: var(--quiet);
+  font-style: italic;
 }
 
 .down-layer {
@@ -202,24 +233,25 @@ input {
   inset: 0;
   z-index: 20;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  background: rgba(23, 33, 43, 0.55);
+  align-items: flex-start;
+  background: rgba(243, 239, 228, 0.55);
 }
 
 .down-panel {
   box-sizing: border-box;
-  width: min(100%, 22rem);
+  width: 100%;
   max-width: 100%;
-  padding: 1.5rem 1.25rem;
-  border-left: 8px solid var(--stamp);
-  background: var(--card);
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  background: var(--ink);
+  color: var(--paper);
 }
 
 .down-panel p {
   margin: 0;
-  font-size: 1.25rem;
-  line-height: 1.35;
+  max-width: 18ch;
+  font-size: clamp(1.7rem, 4vw, 2.6rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
   overflow-wrap: anywhere;
 }

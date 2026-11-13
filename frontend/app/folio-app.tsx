@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { ArrowRightIcon, ArrowRightStartOnRectangleIcon } from "@heroicons/react/24/outline";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type KeyboardEvent } from "react";
 import {
   getReady,
   getSession,
@@ -31,6 +32,7 @@ type BootResult = {
   notice: string | null;
   status: string | null;
   displayName: string | null;
+  accountEmail: string | null;
   linkHref: string | null;
 };
 
@@ -40,16 +42,38 @@ const QUIET: BootResult = {
   notice: null,
   status: null,
   displayName: null,
+  accountEmail: null,
   linkHref: null,
 };
 
 let bootTask: Promise<BootResult> | null = null;
 
+function subscribeToNothing(): () => void {
+  return () => {};
+}
+
+function datelineNow(): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
+}
+
+function datelineOnServer(): string {
+  return "";
+}
+
 function accountBoot(account: Account): BootResult {
   if (account.display_name === null || account.display_name.trim() === "") {
-    return { ...QUIET, view: "ask-name" };
+    return { ...QUIET, view: "ask-name", accountEmail: account.email };
   }
-  return { ...QUIET, view: "ready", displayName: account.display_name };
+  return {
+    ...QUIET,
+    view: "ready",
+    displayName: account.display_name,
+    accountEmail: account.email,
+  };
 }
 
 function clearLink(): void {
@@ -117,6 +141,8 @@ export function FolioApp() {
   const [email, setEmail] = useState("");
   const [draftName, setDraftName] = useState("");
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  const dateline = useSyncExternalStore(subscribeToNothing, datelineNow, datelineOnServer);
   const linkHref = useRef<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -126,6 +152,7 @@ export function FolioApp() {
     setNotice(result.notice);
     setStatus(result.status);
     setDisplayName(result.displayName);
+    setAccountEmail(result.accountEmail);
     linkHref.current = result.linkHref;
   }
 
@@ -211,11 +238,13 @@ export function FolioApp() {
         if (result.unauthorized) {
           await signOutFirebase();
           setDisplayName(null);
+          setAccountEmail(null);
           setView("signed-out");
         }
         return;
       }
       const saved = result.value.display_name;
+      setAccountEmail(result.value.email);
       if (saved === null || saved.trim() === "") {
         setView("ask-name");
         return;
@@ -243,6 +272,7 @@ export function FolioApp() {
       }
       await signOutFirebase();
       setDisplayName(null);
+      setAccountEmail(null);
       setDraftName("");
       setStatus(null);
       setEmail("");
@@ -265,27 +295,31 @@ export function FolioApp() {
   }
 
   const signedIn = view === "ask-name" || view === "ready";
+  const named = view === "ready" && displayName !== null && displayName !== "";
 
   return (
     <>
-      <div className="app" inert={down}>
-        <header className="shell-header">
-          <h1 className="wordmark">Folio</h1>
-          {view === "ready" && displayName ? (
-            <p className="person">{displayName}</p>
-          ) : null}
-          {signedIn ? (
-            <button
-              type="button"
-              className="sign-out"
-              onClick={() => void onSignOut()}
-              disabled={pending}
-            >
-              Sign out
-            </button>
-          ) : null}
+      <div className="sheet" inert={down}>
+        <header className="mast">
+          {named ? <p className="running">Folio</p> : null}
+          <h1 className={named ? "title title-name" : "title"}>{named ? displayName : "Folio"}</h1>
+          <div className="rule-row">
+            <p className="dateline">{dateline}</p>
+            {signedIn && accountEmail ? <p className="credit">{accountEmail}</p> : null}
+            {signedIn ? (
+              <button
+                type="button"
+                className="sign-out"
+                onClick={() => void onSignOut()}
+                disabled={pending}
+              >
+                <ArrowRightStartOnRectangleIcon aria-hidden="true" />
+                Sign out
+              </button>
+            ) : null}
+          </div>
         </header>
-        <main className="main">
+        <main className="entry">
           {notice ? (
             <p role="alert" className="notice">
               {notice}
@@ -296,27 +330,24 @@ export function FolioApp() {
               {status}
             </p>
           ) : null}
-          {view === "checking" ? <p className="lead">One moment.</p> : null}
+          {view === "checking" ? <p className="hint">One moment.</p> : null}
           {view === "signed-out" || view === "link-email" ? (
-            <div className="stack">
-              <p className="lead">
-                {view === "link-email"
-                  ? "Enter the email address the link was sent to."
-                  : "Sign in with Google, or an email link."}
-              </p>
-              {view === "link-email" ? null : (
+            <>
+              {view === "link-email" ? (
+                <p className="hint">Enter the email address the link was sent to.</p>
+              ) : (
                 <button
                   type="button"
-                  className="primary"
+                  className="line"
                   onClick={() => void onGoogle()}
                   disabled={pending}
                 >
-                  Continue with Google
+                  Google
+                  <ArrowRightIcon aria-hidden="true" />
                 </button>
               )}
-              {view === "link-email" ? null : <p className="or">or</p>}
-              <form className="stack" onSubmit={(event) => void onEmail(event)} aria-busy={pending}>
-                <div className="field">
+              <form onSubmit={(event) => void onEmail(event)} aria-busy={pending}>
+                <div className="write-line">
                   <label htmlFor="email">Email</label>
                   <input
                     id="email"
@@ -326,46 +357,43 @@ export function FolioApp() {
                     autoCapitalize="none"
                     autoCorrect="off"
                     inputMode="email"
+                    placeholder="address"
                     required
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
                   />
+                  <button type="submit" className="ink-word" disabled={pending}>
+                    {view === "link-email" ? "Continue" : "Send a link"}
+                  </button>
                 </div>
-                <button type="submit" className="secondary" disabled={pending}>
-                  {view === "link-email" ? "Continue" : "Email me a link"}
-                </button>
               </form>
               {view === "link-email" ? (
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={leaveLink}
-                  disabled={pending}
-                >
+                <button type="button" className="text-button" onClick={leaveLink} disabled={pending}>
                   Use another sign-in
                 </button>
               ) : null}
-            </div>
+            </>
           ) : null}
           {view === "ask-name" ? (
-            <form className="stack" onSubmit={(event) => void onName(event)} aria-busy={pending}>
-              <p className="lead">Enter a name.</p>
-              <div className="field">
+            <form onSubmit={(event) => void onName(event)} aria-busy={pending}>
+              <div className="write">
                 <label htmlFor="display-name">Name</label>
-                <input
-                  id="display-name"
-                  name="display-name"
-                  type="text"
-                  autoComplete="name"
-                  autoCapitalize="words"
-                  required
-                  value={draftName}
-                  onChange={(event) => setDraftName(event.target.value)}
-                />
+                <div className="write-line name-line">
+                  <input
+                    id="display-name"
+                    name="display-name"
+                    type="text"
+                    autoComplete="name"
+                    autoCapitalize="words"
+                    required
+                    value={draftName}
+                    onChange={(event) => setDraftName(event.target.value)}
+                  />
+                  <button type="submit" className="ink-word" disabled={pending}>
+                    Save
+                  </button>
+                </div>
               </div>
-              <button type="submit" className="primary" disabled={pending}>
-                Save
-              </button>
             </form>
           ) : null}
         </main>
