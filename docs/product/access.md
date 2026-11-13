@@ -10,7 +10,7 @@ The site opens on one public page. The person signs in from that page, and sign-
 
 The person signs in through Firebase Authentication with Google or a magic link. Firebase holds that sign-in. The Google account's email must be on the allowlist. The magic link works once and expires after 24 hours. That sign-in verifies the email. The account stores no password.
 
-The person sets a display name. The name is required and is 1 to 40 characters.
+The person sets a display name when the account is created. The name is required and is 1 to 40 characters. The agent uses that name. Settings can change it.
 
 A session ends after 30 minutes in which the person sends nothing and the assistant does nothing. An account may have two sessions. A third sign-in locks the account row and ends the oldest session in that same save. The person can see the sessions and end one. Ending a session is logging out.
 

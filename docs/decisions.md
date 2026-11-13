@@ -15,6 +15,9 @@
 - Each person has a private account.
 - The person changes product records by telling the agent in the chat. The direct controls are in `docs/product/control.md`.
 - Day one screens are chat, reports, files, a profile panel, and settings. Detail is in `docs/product/screens.md`.
+- A new account asks for a display name. The agent uses that name. Detail is in `docs/product/access.md`.
+- A short chat and a long chat look the same. The thread summary is ready before a call leaves an older message out. Detail is in `docs/product/conversations.md`.
+- A failed chat reply keeps the person's message. The thread says "That didn't go through." Try again sends that same message once more. Detail is in `docs/product/failure.md`.
 - Memory, files, Drive, research, and scheduled runs are not shared across accounts.
 
 ## Models
@@ -76,7 +79,7 @@
 The local build has five stages. The deployment pipeline is stage 2.5.
 
 - Stage 1 is an account on this machine. An allowed email signs in through Firebase, a session exists, and ending it is logging out.
-- Stage 2 is one chat turn. One thread, one reply, and one usage row.
+- Stage 2 is one chat turn. One thread, one reply, and one usage row. The thread summary follows that turn, before a call leaves an older message out.
 - Stage 2.5 is the CI/CD pipeline. The checks already run on a pull request. This stage adds deployment, after that chat turn and before files. The website stays on Vercel. Terraform describes Google Cloud.
 - Stage 3 is files and memory.
 - Stage 4 is research and a schedule. These are the first jobs on the queue.

@@ -4,6 +4,8 @@ Deleting an account is immediate. It removes the Firebase sign-in, sessions, row
 
 When Postgres is unavailable, the app stops. A popup says the system is down and repair is underway. The app accepts no work until Postgres is back.
 
+A failed chat reply keeps the person's message. Words that had already arrived stay. The thread shows the line "That didn't go through." and Try again. Try again sends that same message once more. A reply that then arrives replaces those words and removes the line. The screen shows no cause.
+
 A worker crash is told in the thread. A send on a website that may already have completed is not repeated. The agent tells the person what happened. When nothing was sent, the agent decides the next step, and it can ask the person whether to try again.
 
 A queued run retries a dead provider three times after the first attempt. A stopped account is not retried. After the third retry the run stops. The failed run stays on a dead letter queue for developers. The person sees one line in the thread that the run failed.
