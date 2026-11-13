@@ -43,6 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE: ${{ vars.IMAGE_REPO }}/api:${{ github.event.workflow_run.head_sha }}
+      # The 0.1 base is set here only. A GitHub release tag becomes the version later.
+      VERSION: v0.1.${{ github.run_number }}
       REGION: ${{ vars.GCP_REGION }}
       PROJECT: ${{ vars.GCP_PROJECT }}
     steps:
@@ -61,7 +63,10 @@ jobs:
         with:
           context: backend
           push: true
-          tags: ${{ env.IMAGE }}
+          build-args: VERSION=${{ env.VERSION }}
+          tags: |
+            ${{ env.IMAGE }}
+            ${{ vars.IMAGE_REPO }}/api:${{ env.VERSION }}
       - name: Migrate the database
         run: |
           gcloud run jobs update folio-migrate --image "$IMAGE" --region "$REGION" --project "$PROJECT"
