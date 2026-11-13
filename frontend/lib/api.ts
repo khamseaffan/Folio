@@ -93,7 +93,7 @@ async function readBody(response: Response): Promise<unknown> {
 
 async function call(
   path: string,
-  method: "GET" | "POST",
+  method: "GET" | "POST" | "PATCH" | "DELETE",
   body?: string,
 ): Promise<HttpResult | ApiMessage> {
   const headers = new Headers();
@@ -263,6 +263,23 @@ export async function createThread(): Promise<ApiResult<Thread>> {
   const result = await call("/threads", "POST");
   if ("kind" in result) return result;
   return threadCall(result, threadFrom);
+}
+
+export async function renameThread(id: string, name: string): Promise<ApiResult<Thread>> {
+  const result = await call(
+    `/threads/${encodeURIComponent(id)}`,
+    "PATCH",
+    JSON.stringify({ name }),
+  );
+  if ("kind" in result) return result;
+  return threadCall(result, threadFrom);
+}
+
+export async function deleteThread(id: string): Promise<ApiResult<true>> {
+  const result = await call(`/threads/${encodeURIComponent(id)}`, "DELETE");
+  if ("kind" in result) return result;
+  if (result.status === 204) return { kind: "value", value: true };
+  return threadCall(result, () => true);
 }
 
 export async function getThread(id: string): Promise<ApiResult<ThreadWithMessages>> {
