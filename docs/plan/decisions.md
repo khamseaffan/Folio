@@ -28,6 +28,9 @@ None of these is chosen yet.
 - D12. Chat is refused until the display name is set. This is a reading of "required".
 - D13. Two chat turns may overlap. The cap is checked at the start of each turn. A call that crosses the cap finishes, and the next turn is refused.
 - D14. SQLAlchemy 2, Alembic, and psycopg 3 for the database. Vitest and Testing Library for the frontend.
+- D15. A thread name is trimmed and is 1 to 80 characters. The check is in the operation. The table has no check.
+- D16. A chat turn runs at most 8 rounds of tool calls. The reply then says "I stopped after 8 tool steps."
+- D17. An action on a record is one operation in `backend/app/operations.py`. A route and the agent both call it. Account actions are routes only.
 
 ## Open questions
 

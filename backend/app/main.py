@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app import operations
 from app.account import ensure_account, load_account, set_display_name
 from app.db import connect, database_ready
 from app.live import stop_reply
@@ -13,7 +14,7 @@ from app.message import MessageRow, list_messages
 from app.model import open_model
 from app.session import end_session, open_session, start_session
 from app.sign_in_proof import NOT_ALLOWED, NOT_PROVEN, SignInError, verify_allowed_sign_in
-from app.thread import ThreadRow, create_thread, get_thread, list_threads
+from app.thread import ThreadRow, get_thread
 from app.turn import NO_FAILURE, start_reply, start_retry
 
 app = FastAPI()
@@ -43,7 +44,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_BrowserOrigins(),
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -290,32 +291,100 @@ def _thread_view(
     }
 
 
+async def _name_body(request: Request) -> dict[str, object] | None:
+    raw = await request.body()
+    if raw.strip() == b"":
+        return {}
+    try:
+        body = await request.json()
+    except Exception:
+        return None
+    if not isinstance(body, dict) or set(body) - {"name"}:
+        return None
+    return body
+
+
+def _operate(
+    account_id: uuid.UUID,
+    name: str,
+    arguments: dict[str, object],
+) -> dict[str, object] | JSONResponse:
+    try:
+        with connect() as connection:
+            result = operations.call(
+                connection,
+                account_id,
+                operations.Context(None),
+                name,
+                arguments,
+            )
+    except Exception:
+        return _down()
+    if result.get("ok") is True:
+        return result
+    if result.get("code") == "not_found":
+        return _error(404, _NOT_FOUND)
+    if arguments.keys() & {"name"} or name == "create_thread":
+        return _error(400, operations.BAD_NAME)
+    return _error(400, str(result.get("error")))
+
+
 @app.get("/threads")
 def get_threads(request: Request) -> Response:
     opened = _open_account(request)
     if isinstance(opened, JSONResponse):
         return opened
     _, account_id = opened
-    try:
-        with connect() as connection:
-            rows = list_threads(connection, account_id)
-    except Exception:
-        return _down()
-    return JSONResponse(content=[_thread_item(row) for row in rows])
+    result = _operate(account_id, "list_threads", {})
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse(content=result["threads"])
 
 
 @app.post("/threads")
-def post_thread(request: Request) -> Response:
+async def post_thread(request: Request) -> Response:
     opened = _open_account(request)
     if isinstance(opened, JSONResponse):
         return opened
     _, account_id = opened
-    try:
-        with connect() as connection:
-            created = create_thread(connection, account_id)
-    except Exception:
-        return _down()
-    return JSONResponse(content=_thread_item(created))
+    body = await _name_body(request)
+    if body is None:
+        return _error(400, operations.BAD_NAME)
+    result = _operate(account_id, "create_thread", body)
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse(content=result["thread"])
+
+
+@app.patch("/threads/{thread_id}")
+async def patch_thread(request: Request, thread_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    if _parse_thread_id(thread_id) is None:
+        return _error(404, _NOT_FOUND)
+    body = await _name_body(request)
+    if body is None or "name" not in body:
+        return _error(400, operations.BAD_NAME)
+    result = _operate(account_id, "rename_thread", {"thread_id": thread_id, **body})
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse(content=result["thread"])
+
+
+@app.delete("/threads/{thread_id}")
+def delete_thread(request: Request, thread_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    if _parse_thread_id(thread_id) is None:
+        return _error(404, _NOT_FOUND)
+    result = _operate(account_id, "delete_thread", {"thread_id": thread_id})
+    if isinstance(result, JSONResponse):
+        return result
+    return Response(status_code=204)
 
 
 @app.get("/threads/{thread_id}")

@@ -1842,3 +1842,147 @@ def test_database_failure_inside_a_tool_fails_the_turn(monkeypatch: pytest.Monke
         assert len(model.seen) == 1
     finally:
         _remove(email)
+
+
+BAD_NAME = "A thread name is 1 to 80 characters."
+
+
+def test_patch_renames_and_trims(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Patch")
+    _remove(email)
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        renamed = client.patch(f"/threads/{thread_id}", json={"name": "  Tax  "})
+        assert renamed.status_code == 200
+        _assert_item(renamed.json())
+        assert renamed.json()["name"] == "Tax"
+        assert renamed.json()["id"] == thread_id
+        assert [item["name"] for item in client.get("/threads").json()] == ["Tax"]
+    finally:
+        _remove(email)
+
+
+def test_patch_refuses_bad_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("PatchBad")
+    _remove(email)
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        for body in ({"name": ""}, {"name": "   "}, {"name": "x" * 81}, {"name": 7}, {}, []):
+            refused = client.patch(f"/threads/{thread_id}", json=body)
+            assert refused.status_code == 400
+            assert refused.json() == {"error": BAD_NAME}
+        unreadable = client.patch(f"/threads/{thread_id}", content=b"not json")
+        assert unreadable.status_code == 400
+        assert _thread_name(client, thread_id) == "New thread"
+        assert client.patch(f"/threads/{thread_id}", json={"name": "x" * 80}).status_code == 200
+    finally:
+        _remove(email)
+
+
+def test_patch_and_delete_another_accounts_thread_are_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = _email("Owner")
+    stranger = _email("Stranger")
+    _remove(owner)
+    _remove(stranger)
+    try:
+        owner_client, thread_id = _open_thread(monkeypatch, owner)
+        other = _sign_in(monkeypatch, stranger)
+        renamed = other.patch(f"/threads/{thread_id}", json={"name": "Mine"})
+        deleted = other.delete(f"/threads/{thread_id}")
+        assert renamed.status_code == 404
+        assert renamed.json() == {"error": "Not found"}
+        assert deleted.status_code == 404
+        assert deleted.json() == {"error": "Not found"}
+        assert other.patch("/threads/not-a-uuid", json={"name": "Mine"}).status_code == 404
+        assert other.delete("/threads/not-a-uuid").status_code == 404
+        assert _thread_name(owner_client, thread_id) == "New thread"
+    finally:
+        _remove(owner)
+        _remove(stranger)
+
+
+def test_delete_returns_204_and_the_thread_is_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Delete")
+    _remove(email)
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        kept = client.post("/threads").json()["id"]
+        deleted = client.delete(f"/threads/{thread_id}")
+        assert deleted.status_code == 204
+        assert deleted.content == b""
+        assert client.get(f"/threads/{thread_id}").status_code == 404
+        assert [item["id"] for item in client.get("/threads").json()] == [kept]
+        assert client.delete(f"/threads/{thread_id}").status_code == 404
+    finally:
+        _remove(email)
+
+
+def test_post_thread_with_a_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Named")
+    _remove(email)
+    try:
+        client = _sign_in(monkeypatch, email)
+        named = client.post("/threads", json={"name": " Trip "})
+        assert named.status_code == 200
+        assert named.json()["name"] == "Trip"
+        refused = client.post("/threads", json={"name": "x" * 81})
+        assert refused.status_code == 400
+        assert refused.json() == {"error": BAD_NAME}
+        assert len(client.get("/threads").json()) == 1
+    finally:
+        _remove(email)
+
+
+def test_rename_and_delete_need_a_session() -> None:
+    client = TestClient(app)
+    thread_id = str(uuid.uuid4())
+    renamed = client.patch(f"/threads/{thread_id}", json={"name": "Tax"})
+    deleted = client.delete(f"/threads/{thread_id}")
+    assert renamed.status_code == 401
+    assert deleted.status_code == 401
+
+
+def test_delete_while_the_reply_is_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("DeleteLive")
+    _remove(email)
+    release = threading.Event()
+    arrived = threading.Event()
+    model = FakeModel(
+        reply=Reply("first second", 11, 12, 23),
+        chunks=("first", " second"),
+        holds=(None, release),
+        arrived=arrived,
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        with client.stream(
+            "POST",
+            f"/threads/{thread_id}/messages",
+            json={"text": "hello"},
+        ) as response:
+            lines = response.iter_lines()
+            assert _next_event(lines) == {"text": "first"}
+            assert arrived.wait(2)
+            assert client.delete(f"/threads/{thread_id}").status_code == 204
+            release.set()
+            assert _next_event(lines) == {"done": True}
+        assert _message_count(thread_id) == 0
+        assert client.get(f"/threads/{thread_id}").status_code == 404
+        assert _usage_rows(email) == [("chat", "openai", "gpt-6.1-sol", None, None, None, None)]
+    finally:
+        release.set()
+        _remove(email)
+
+
+def test_the_browser_may_send_patch_and_delete() -> None:
+    client = TestClient(app)
+    for method in ("PATCH", "DELETE"):
+        allowed = client.options(
+            "/threads/x",
+            headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": method},
+        )
+        assert allowed.status_code == 200
+        assert method in allowed.headers["access-control-allow-methods"]

@@ -27,7 +27,7 @@ Live at https://folio.khamseaffan.com.
 | Present | Not built |
 | --- | --- |
 | Sign-in with an email allowlist, sessions, a display name | Memory, research, files, schedules |
-| Threads and one streamed chat turn with usage rows | Drive, the browser, voice |
+| Threads with create, rename, and delete by a control or by the agent, and a streamed chat turn with usage rows | Drive, the browser, voice |
 | Deployment: Terraform on Google Cloud, Vercel, and CI/CD | Admin limits and the settings screen |
 
 ## Deploy
