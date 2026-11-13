@@ -1,0 +1,61 @@
+name: Deploy
+
+# Runs after CI passes on main. The website is deployed by Vercel's GitHub connection.
+# This workflow deploys the API and checks that the live site answers.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  api:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ vars.IMAGE_REPO }}/api:${{ github.event.workflow_run.head_sha }}
+      REGION: ${{ vars.GCP_REGION }}
+      PROJECT: ${{ vars.GCP_PROJECT }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOY_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Let Docker push to Artifact Registry
+        run: gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+      - name: Build and push the API image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: ${{ env.IMAGE }}
+      - name: Migrate the database
+        run: |
+          gcloud run jobs update folio-migrate --image "$IMAGE" --region "$REGION" --project "$PROJECT"
+          gcloud run jobs execute folio-migrate --region "$REGION" --project "$PROJECT" --wait
+      - name: Deploy the API
+        run: gcloud run deploy folio-api --image "$IMAGE" --region "$REGION" --project "$PROJECT"
+      - name: Check the live site
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            body=$(curl -fsS https://folio.khamseaffan.com/api/ready || true)
+            if [ "$body" = '{"status":"ok"}' ]; then
+              echo "live site is ready"
+              exit 0
+            fi
+            echo "attempt $attempt: not ready yet ($body)"
+            sleep 10
+          done
+          exit 1

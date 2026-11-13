@@ -1,0 +1,14 @@
+# Only the website is deployed to Vercel. Everything else stays out of the upload.
+backend
+infra
+docs
+reports
+research_notes
+.superpowers
+.github
+.git
+Goal.md
+frontend/node_modules
+frontend/.next
+frontend/.env.local
+.env

@@ -48,11 +48,12 @@ type HttpResult = {
 
 function apiBase(): string {
   const configured = process.env.NEXT_PUBLIC_API_URL;
-  const raw =
-    typeof configured === "string" && configured.trim() !== ""
-      ? configured.trim()
-      : "http://localhost:8000";
-  return raw.replace(/\/+$/, "");
+  if (typeof configured === "string" && configured.trim() !== "") {
+    return configured.trim().replace(/\/+$/, "");
+  }
+  // In production the site forwards /api/* to the API, so the browser sees one origin and the
+  // session cookie is sent. Locally the API answers on its own port.
+  return process.env.NODE_ENV === "production" ? "/api" : "http://localhost:8000";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

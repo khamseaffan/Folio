@@ -69,7 +69,11 @@ def _error(status_code: int, message: str) -> JSONResponse:
 
 
 def _https(request: Request) -> bool:
-    return request.url.scheme == "https"
+    if request.url.scheme == "https":
+        return True
+    # Behind Cloud Run the app sees plain http and the proxy says what the browser used.
+    forwarded = request.headers.get("x-forwarded-proto", "")
+    return forwarded.split(",")[0].strip().lower() == "https"
 
 
 def _store_session(response: Response, request: Request, session_id: uuid.UUID) -> None:

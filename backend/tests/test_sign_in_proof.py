@@ -3,6 +3,7 @@ import pytest
 from app.sign_in_proof import (
     SignInError,
     email_allowed,
+    firebase_credential,
     service_account_path,
     verify_allowed_sign_in,
 )
@@ -148,3 +149,19 @@ def test_unreadable_credential_file_fails_closed(monkeypatch, tmp_path):
     assert "service_account" not in message
     with pytest.raises(ValueError):
         firebase_admin.get_app()
+
+
+def test_credential_uses_application_default_when_flagged(monkeypatch, tmp_path):
+    sentinel = object()
+    monkeypatch.setenv("FIREBASE_USE_ADC", "1")
+    monkeypatch.setenv("FIREBASE_SERVICE_ACCOUNT_PATH", str(tmp_path / "missing.json"))
+    monkeypatch.setattr("app.sign_in_proof.credentials.ApplicationDefault", lambda: sentinel)
+
+    assert firebase_credential() is sentinel
+
+
+def test_credential_is_none_without_flag_or_key_file(monkeypatch, tmp_path):
+    monkeypatch.delenv("FIREBASE_USE_ADC", raising=False)
+    monkeypatch.setenv("FIREBASE_SERVICE_ACCOUNT_PATH", str(tmp_path / "missing.json"))
+
+    assert firebase_credential() is None

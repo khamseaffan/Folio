@@ -77,6 +77,25 @@ def _cookie_header(response: Response) -> str:
     return ", ".join(response.headers.get_list("set-cookie"))
 
 
+def test_session_cookie_is_secure_behind_a_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Proxied.SignIn")
+    _allow(monkeypatch, email)
+    _remove(email)
+    try:
+        proxied = TestClient(app).post(
+            "/sign-in",
+            json={"id_token": "token"},
+            headers={"X-Forwarded-Proto": "https"},
+        )
+        plain = TestClient(app).post("/sign-in", json={"id_token": "token"})
+
+        assert proxied.status_code == 200
+        assert "Secure" in _cookie_header(proxied)
+        assert "Secure" not in _cookie_header(plain)
+    finally:
+        _remove(email)
+
+
 def test_allowed_sign_in_sets_the_session_cookie(monkeypatch: pytest.MonkeyPatch) -> None:
     email = _email("Allowed.SignIn")
     stored = email.lower()
