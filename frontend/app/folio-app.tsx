@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowPathIcon,
   ArrowRightStartOnRectangleIcon,
   BookOpenIcon,
   ClockIcon,
@@ -24,6 +25,7 @@ import {
   postSignOut,
   postStop,
   streamThreadMessage,
+  streamThreadRetry,
   type Account,
   type ApiDown,
   type ApiMessage,
@@ -132,6 +134,46 @@ function threadsNewestFirst(threads: Thread[]): Thread[] {
     if (left.created_at === right.created_at) return 0;
     return left.created_at < right.created_at ? 1 : -1;
   });
+}
+
+function retryTarget(current: ThreadMessage[]): string {
+  let failureIndex = -1;
+  for (let index = 0; index < current.length; index += 1) {
+    const message = current[index];
+    if (message !== undefined && message.kind === "failure") failureIndex = index;
+  }
+  if (failureIndex < 0) return crypto.randomUUID();
+  for (let index = failureIndex - 1; index >= 0; index -= 1) {
+    const message = current[index];
+    if (message === undefined) continue;
+    if (message.role === "person") break;
+    if (message.role === "assistant" && message.kind === "chat") return message.id;
+  }
+  return crypto.randomUUID();
+}
+
+function applyRetryChunk(
+  current: ThreadMessage[],
+  assistantId: string,
+  chunk: string,
+  replace: boolean,
+): ThreadMessage[] {
+  if (current.some((message) => message.id === assistantId)) {
+    return current.map((message) => {
+      if (message.id !== assistantId) return message;
+      return { ...message, body: replace ? chunk : message.body + chunk };
+    });
+  }
+  const created: ThreadMessage = {
+    id: assistantId,
+    role: "assistant",
+    kind: "chat",
+    body: chunk,
+    created_at: new Date().toISOString(),
+  };
+  const failureIndex = current.findIndex((message) => message.kind === "failure");
+  if (failureIndex < 0) return [...current, created];
+  return [...current.slice(0, failureIndex), created, ...current.slice(failureIndex)];
 }
 
 function threadSummary(thread: Thread): Thread {
@@ -647,6 +689,60 @@ export function FolioApp() {
     }
   }
 
+  async function onRetry() {
+    if (openId === null || acting.current || pending || streaming) return;
+    if (!messages.some((message) => message.kind === "failure")) return;
+    const threadId = openId;
+    const assistantId = retryTarget(messages);
+    acting.current = true;
+    const generation = ++requestGeneration.current;
+    const controller = new AbortController();
+    streamAbort.current = controller;
+    setNotice(null);
+    let opened = false;
+    let first = true;
+    try {
+      const result = await streamThreadRetry(
+        threadId,
+        controller.signal,
+        () => {
+          if (requestGeneration.current !== generation) return;
+          opened = true;
+          setStreaming(() => requestGeneration.current === generation);
+        },
+        (chunk) => {
+          if (requestGeneration.current !== generation) return;
+          const replace = first;
+          first = false;
+          setMessages((current) => {
+            if (requestGeneration.current !== generation) return current;
+            return applyRetryChunk(current, assistantId, chunk, replace);
+          });
+        },
+      );
+      if (requestGeneration.current !== generation) return;
+      if (result.kind === "done" && first) {
+        const page = await getThread(threadId);
+        if (requestGeneration.current !== generation) return;
+        if (page.kind === "value") {
+          setMessages(page.value.messages);
+          return;
+        }
+      }
+      if (result.kind === "done") {
+        setMessages((current) => current.filter((message) => message.kind !== "failure"));
+        return;
+      }
+      if (result.kind === "closed" || result.kind === "failed") return;
+      if (opened && result.kind === "message") return;
+      await showChatError(result);
+    } finally {
+      if (streamAbort.current === controller) streamAbort.current = null;
+      acting.current = false;
+      if (requestGeneration.current === generation) setStreaming(false);
+    }
+  }
+
   async function onStop() {
     if (openId === null || stopping.current) return;
     stopping.current = true;
@@ -775,17 +871,36 @@ export function FolioApp() {
                     <section className="thread" aria-label={openThread.name}>
                       <h2 className="thread-name">{openThread.name}</h2>
                       <div className="messages" ref={messagePane} tabIndex={0} aria-label="Messages">
-                        {messages.map((message) => (
-                          <p
-                            key={message.id}
-                            className={message.role === "person" ? "message person" : "message reply"}
-                          >
-                            <span className="speaker">
-                              {message.role === "person" ? "You" : "Folio"}
-                            </span>
-                            {message.body}
-                          </p>
-                        ))}
+                        {messages.map((message) =>
+                          message.kind === "failure" ? (
+                            <div className="failure-row" key={message.id}>
+                              <p className="failure-line">{message.body}</p>
+                              {streaming ? null : (
+                                <button
+                                  type="button"
+                                  className="quiet retry"
+                                  onClick={() => void onRetry()}
+                                  disabled={pending}
+                                >
+                                  <ArrowPathIcon aria-hidden="true" />
+                                  Try again
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <p
+                              key={message.id}
+                              className={
+                                message.role === "person" ? "message person" : "message reply"
+                              }
+                            >
+                              <span className="speaker">
+                                {message.role === "person" ? "You" : "Folio"}
+                              </span>
+                              {message.body}
+                            </p>
+                          ),
+                        )}
                       </div>
                       <form className="composer" onSubmit={(event) => void sendDraft(event)}>
                         <textarea

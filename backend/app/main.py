@@ -13,7 +13,7 @@ from app.model import open_model
 from app.session import end_session, open_session, start_session
 from app.sign_in_proof import NOT_ALLOWED, NOT_PROVEN, SignInError, verify_allowed_sign_in
 from app.thread import ThreadRow, create_thread, get_thread, list_threads
-from app.turn import start_reply, stop_reply
+from app.turn import NO_FAILURE, start_reply, start_retry, stop_reply
 
 app = FastAPI()
 
@@ -356,6 +356,39 @@ async def post_message(request: Request, thread_id: str) -> Response:
             )
     except Exception:
         return _down()
+    if isinstance(started, str):
+        return _error(403, started)
+    if started is None:
+        return _error(404, _NOT_FOUND)
+    return StreamingResponse(
+        started.events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
+@app.post("/threads/{thread_id}/retry")
+async def retry_message(request: Request, thread_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    session_id, account_id = opened
+    parsed = _parse_thread_id(thread_id)
+    if parsed is None:
+        return _error(404, _NOT_FOUND)
+    try:
+        with connect() as connection:
+            started = start_retry(
+                connection,
+                session_id,
+                account_id,
+                parsed,
+                open_model(),
+            )
+    except Exception:
+        return _down()
+    if started == NO_FAILURE:
+        return _error(400, NO_FAILURE)
     if isinstance(started, str):
         return _error(403, started)
     if started is None:
