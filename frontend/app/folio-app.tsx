@@ -872,19 +872,21 @@ export function FolioApp() {
                     <div className="desk-account">
                       <p className="account-name">{displayName}</p>
                       {accountEmail ? <p className="mail">{accountEmail}</p> : null}
-                      <button type="button" className="quiet" onClick={() => setSettingsOpen(true)}>
-                        <Cog6ToothIcon aria-hidden="true" />
-                        Settings
-                      </button>
-                      <button
-                        type="button"
-                        className="quiet"
-                        onClick={() => void onSignOut()}
-                        disabled={pending}
-                      >
-                        <ArrowRightStartOnRectangleIcon aria-hidden="true" />
-                        Sign out
-                      </button>
+                      <div className="account-actions">
+                        <button type="button" className="quiet" onClick={() => setSettingsOpen(true)}>
+                          <Cog6ToothIcon aria-hidden="true" />
+                          Settings
+                        </button>
+                        <button
+                          type="button"
+                          className="quiet"
+                          onClick={() => void onSignOut()}
+                          disabled={pending}
+                        >
+                          <ArrowRightStartOnRectangleIcon aria-hidden="true" />
+                          Sign out
+                        </button>
+                      </div>
                     </div>
                   </div>
                   {settingsOpen ? (
