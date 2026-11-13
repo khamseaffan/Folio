@@ -4,7 +4,7 @@
 
 1. A person has a private account.
 2. An account is created for khamseaffan@gmail.com or an address at sakana.ai. Any other email is refused at sign-in.
-3. Sign-in is Firebase Authentication with Google or a one-time magic link.
+3. Sign-in is Firebase Authentication with Google or a one-time magic link. The link expires after 6 hours.
 4. The person sets a display name of 1 to 40 characters.
 5. The person can end a session. A session also ends after 30 minutes of silence from the person and the assistant, and an account has at most two sessions.
 6. Deleting an account is immediate and cannot be restored. The usage rows, the token cap, and the stop for that email stay.

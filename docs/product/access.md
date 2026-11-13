@@ -8,7 +8,7 @@ An account can be created for `khamseaffan@gmail.com`, or for an address at `sak
 
 The site opens on one public page. The person signs in from that page, and sign-in opens the app.
 
-The person signs in through Firebase Authentication with Google or a magic link. Firebase holds that sign-in. The Google account's email must be on the allowlist. The magic link works once and expires after 24 hours. That sign-in verifies the email. The account stores no password.
+The person signs in through Firebase Authentication with Google or a magic link. Firebase holds that sign-in. The Google account's email must be on the allowlist. The magic link works once and expires after 6 hours. That sign-in verifies the email. The account stores no password.
 
 The person sets a display name when the account is created. The name is required and is 1 to 40 characters. The agent uses that name. Settings can change it.
 

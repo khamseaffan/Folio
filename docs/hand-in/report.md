@@ -23,7 +23,7 @@ Folio is a private assistant for one person.
 - The site opens on one public page. You sign in from that page.
 - My email is the first account.
 - An account is `khamseaffan@gmail.com` or `@sakana.ai`. Any other email is refused at sign-in.
-- Sign-in is Google, or a magic link that works once and lasts a day.
+- Sign-in is Google, or a magic link that works once and lasts six hours.
 - You can end your session. A third sign-in ends the oldest one.
 - Deleting an account is immediate, and the account cannot be restored. The token rows for that email stay, so a new account does not start from zero.
 
