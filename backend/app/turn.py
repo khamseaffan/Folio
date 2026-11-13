@@ -2,22 +2,29 @@ import asyncio
 import json
 import threading
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 
 import psycopg
 
 from app.db import connect
-from app.message import MessageRow, insert_message, list_messages
+from app.message import (
+    MessageRow,
+    delete_failure,
+    insert_message,
+    list_messages,
+    update_message_body,
+)
 from app.model import CONTEXT_TOKENS, MODEL_ID, Block, Model, Reply
 from app.session import set_last_active_at
-from app.thread import get_thread
+from app.thread import ThreadRow, get_thread
 from app.usage import record_usage, tokens_for_email
 
 _PROVIDER = "google"
 _STOPPED = "A system admin has stopped your account. Contact khamseaffan@gmail.com."
 _CAPPED = "You have reached the allowed usage limit."
 _FAILED = "That didn't go through."
+NO_FAILURE = "There is no failed reply."
 _HARM = "A task that would cause physical harm stops and asks."
 _KEPT = 10
 
@@ -117,6 +124,13 @@ class _Prepared:
     omitted: list[MessageRow]
 
 
+@dataclass
+class _Retry:
+    prepared: _Prepared
+    failure_id: uuid.UUID
+    partial_id: uuid.UUID | None
+
+
 class LiveReply:
     def __init__(self) -> None:
         self.stop = threading.Event()
@@ -190,14 +204,11 @@ def stop_reply(account_id: uuid.UUID, thread_id: uuid.UUID) -> None:
         live.stop.set()
 
 
-def _prepare(
+def _open_turn(
     connection: psycopg.Connection,
-    session_id: uuid.UUID,
     account_id: uuid.UUID,
     thread_id: uuid.UUID,
-    text: str,
-    model: Model,
-) -> _Prepared | str | None:
+) -> tuple[ThreadRow, str, str | None] | str | None:
     thread = get_thread(connection, account_id, thread_id)
     if thread is None:
         return None
@@ -207,6 +218,21 @@ def _prepare(
         return _STOPPED
     if tokens_for_email(connection, email) >= token_cap:
         return _CAPPED
+    return thread, email, display_name
+
+
+def _prepare(
+    connection: psycopg.Connection,
+    session_id: uuid.UUID,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    text: str,
+    model: Model,
+) -> _Prepared | str | None:
+    opened = _open_turn(connection, account_id, thread_id)
+    if not isinstance(opened, tuple):
+        return opened
+    thread, email, display_name = opened
     person = insert_message(connection, account_id, thread_id, "person", "chat", text)
     if person is None:
         return None
@@ -385,7 +411,170 @@ def _save(prepared: _Prepared, text: str, reply: Reply | None, failed: bool, sto
         )
 
 
-def _write_reply(live: LiveReply, model: Model, prepared: _Prepared) -> None:
+def _failed_turn(
+    messages: list[MessageRow],
+) -> tuple[uuid.UUID, uuid.UUID | None] | None:
+    ordered = sorted(messages, key=lambda message: (message[7], str(message[0])))
+    failure_id: uuid.UUID | None = None
+    for message in ordered:
+        if message[5] == "failure":
+            failure_id = message[0]
+    if failure_id is None:
+        return None
+    partial_id: uuid.UUID | None = None
+    saw_person = False
+    for message in ordered:
+        if message[0] == failure_id:
+            break
+        if message[4] == "person" and message[5] == "chat":
+            saw_person = True
+            partial_id = None
+        elif saw_person and message[4] == "assistant" and message[5] == "chat":
+            partial_id = message[0]
+    if not saw_person:
+        return None
+    return failure_id, partial_id
+
+
+def _prepare_retry(
+    connection: psycopg.Connection,
+    session_id: uuid.UUID,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    model: Model,
+) -> _Retry | str | None:
+    opened = _open_turn(connection, account_id, thread_id)
+    if not isinstance(opened, tuple):
+        return opened
+    thread, email, display_name = opened
+    messages = list_messages(connection, account_id, thread_id)
+    if messages is None:
+        raise RuntimeError("thread is missing")
+    failed = _failed_turn(messages)
+    if failed is None:
+        return NO_FAILURE
+    failure_id, partial_id = failed
+    prompt = _system_prompt(display_name, thread[3])
+    context = [
+        message
+        for message in messages
+        if partial_id is None or message[0] != partial_id
+    ]
+    blocks, omitted = select_blocks(prompt, context, model)
+    prepared = _Prepared(
+        session_id=session_id,
+        account_id=account_id,
+        thread_id=thread_id,
+        email=email,
+        prompt=prompt,
+        blocks=blocks,
+        omitted=omitted,
+    )
+    return _Retry(prepared=prepared, failure_id=failure_id, partial_id=partial_id)
+
+
+def _place_failure_after(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    failure_id: uuid.UUID,
+    partial_at: object,
+) -> None:
+    # now() is one timestamp for the transaction, so the line would tie the partial.
+    connection.execute(
+        """
+        UPDATE message
+        SET created_at = %s + interval '1 microsecond'
+        WHERE id = %s
+          AND account_id = %s
+          AND kind = 'failure'
+        """,
+        (partial_at, failure_id, account_id),
+    )
+
+
+def _save_retry(
+    retry: _Retry,
+    text: str,
+    reply: Reply | None,
+    failed: bool,
+    stopped: bool,
+) -> None:
+    input_tokens, output_tokens, total_tokens = _counts(reply)
+    prepared = retry.prepared
+    with connect() as connection:
+        message_id: uuid.UUID | None = None
+        if text == "" and (failed or stopped):
+            record_usage(
+                connection,
+                prepared.account_id,
+                prepared.email,
+                "chat",
+                _PROVIDER,
+                MODEL_ID,
+                input_tokens,
+                output_tokens,
+                total_tokens,
+                None,
+                None,
+            )
+            return
+        if retry.partial_id is None:
+            stored = insert_message(
+                connection,
+                prepared.account_id,
+                prepared.thread_id,
+                "assistant",
+                "chat",
+                text,
+            )
+        else:
+            stored = update_message_body(
+                connection,
+                prepared.account_id,
+                prepared.thread_id,
+                retry.partial_id,
+                text,
+            )
+        if stored is None:
+            raise RuntimeError("assistant message was not stored")
+        message_id = stored[0]
+        if failed:
+            if retry.partial_id is None:
+                _place_failure_after(
+                    connection,
+                    prepared.account_id,
+                    retry.failure_id,
+                    stored[7],
+                )
+        else:
+            delete_failure(
+                connection,
+                prepared.account_id,
+                prepared.thread_id,
+                retry.failure_id,
+            )
+            set_last_active_at(connection, prepared.session_id, prepared.account_id)
+        record_usage(
+            connection,
+            prepared.account_id,
+            prepared.email,
+            "chat",
+            _PROVIDER,
+            MODEL_ID,
+            input_tokens,
+            output_tokens,
+            total_tokens,
+            message_id,
+            None,
+        )
+
+
+def _write_reply(
+    live: LiveReply,
+    model: Model,
+    prepared: _Prepared,
+    persist: Callable[[str, Reply | None, bool, bool], None],
+) -> None:
     parts: list[str] = []
     failed = False
     stream: object | None = None
@@ -407,7 +596,7 @@ def _write_reply(live: LiveReply, model: Model, prepared: _Prepared) -> None:
     reply = _reply_or_none(stream) if stream is not None else None
     stopped = live.stop.is_set()
     try:
-        _save(prepared, "".join(parts), reply, failed, stopped)
+        persist("".join(parts), reply, failed, stopped)
     except Exception:
         failed = True
     if failed:
@@ -416,6 +605,28 @@ def _write_reply(live: LiveReply, model: Model, prepared: _Prepared) -> None:
         live.publish({"done": True})
     live.finish()
     _unregister(prepared.account_id, prepared.thread_id, live)
+
+
+def _start(
+    connection: psycopg.Connection,
+    prepared: _Prepared,
+    model: Model,
+    persist: Callable[[str, Reply | None, bool, bool], None],
+) -> LiveReply:
+    # The reply thread can emit a chunk before this request transaction closes.
+    connection.commit()
+    live = LiveReply()
+    _register(prepared.account_id, prepared.thread_id, live)
+    try:
+        threading.Thread(
+            target=_write_reply,
+            args=(live, model, prepared, persist),
+            name="folio-reply",
+        ).start()
+    except Exception:
+        _unregister(prepared.account_id, prepared.thread_id, live)
+        raise
+    return live
 
 
 def start_reply(
@@ -429,17 +640,25 @@ def start_reply(
     prepared = _prepare(connection, session_id, account_id, thread_id, text, model)
     if not isinstance(prepared, _Prepared):
         return prepared
-    # The reply thread can emit a chunk before this request transaction closes.
-    connection.commit()
-    live = LiveReply()
-    _register(account_id, thread_id, live)
-    try:
-        threading.Thread(
-            target=_write_reply,
-            args=(live, model, prepared),
-            name="folio-reply",
-        ).start()
-    except Exception:
-        _unregister(account_id, thread_id, live)
-        raise
-    return live
+
+    def persist(text: str, reply: Reply | None, failed: bool, stopped: bool) -> None:
+        _save(prepared, text, reply, failed, stopped)
+
+    return _start(connection, prepared, model, persist)
+
+
+def start_retry(
+    connection: psycopg.Connection,
+    session_id: uuid.UUID,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    model: Model,
+) -> LiveReply | str | None:
+    prepared = _prepare_retry(connection, session_id, account_id, thread_id, model)
+    if not isinstance(prepared, _Retry):
+        return prepared
+
+    def persist(text: str, reply: Reply | None, failed: bool, stopped: bool) -> None:
+        _save_retry(prepared, text, reply, failed, stopped)
+
+    return _start(connection, prepared.prepared, model, persist)

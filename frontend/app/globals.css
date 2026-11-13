@@ -587,6 +587,27 @@ h1 {
   color: var(--ink);
 }
 
+.failure-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  max-width: 100%;
+}
+
+.failure-line {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.retry {
+  width: auto;
+  max-width: 100%;
+  color: var(--fuji);
+}
+
 .speaker {
   position: absolute;
   width: 1px;
@@ -651,7 +672,8 @@ h1 {
     align-items: stretch;
   }
 
-  .send {
+  .send,
+  .retry {
     width: 100%;
   }
 }

@@ -296,22 +296,23 @@ function streamEvent(block: string): { text: string } | { done: true } | { faile
   return null;
 }
 
-export async function streamThreadMessage(
-  id: string,
-  text: string,
+async function streamPost(
+  path: string,
+  body: string | null,
   signal: AbortSignal,
   onOpen: () => void,
   onText: (chunk: string) => void,
 ): Promise<StreamResult> {
   let response: Response;
   try {
-    response = await fetch(`${apiBase()}/threads/${encodeURIComponent(id)}/messages`, {
+    response = await fetch(`${apiBase()}${path}`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
       cache: "no-store",
       signal,
+      ...(body === null
+        ? {}
+        : { headers: { "Content-Type": "application/json" }, body }),
     });
   } catch {
     if (signal.aborted) return { kind: "closed" };
@@ -361,6 +362,37 @@ export async function streamThreadMessage(
   if (failed) return { kind: "failed" };
   if (done) return { kind: "done" };
   return { kind: "closed" };
+}
+
+export async function streamThreadMessage(
+  id: string,
+  text: string,
+  signal: AbortSignal,
+  onOpen: () => void,
+  onText: (chunk: string) => void,
+): Promise<StreamResult> {
+  return streamPost(
+    `/threads/${encodeURIComponent(id)}/messages`,
+    JSON.stringify({ text }),
+    signal,
+    onOpen,
+    onText,
+  );
+}
+
+export async function streamThreadRetry(
+  id: string,
+  signal: AbortSignal,
+  onOpen: () => void,
+  onText: (chunk: string) => void,
+): Promise<StreamResult> {
+  return streamPost(
+    `/threads/${encodeURIComponent(id)}/retry`,
+    null,
+    signal,
+    onOpen,
+    onText,
+  );
 }
 
 export async function postStop(id: string): Promise<ApiResult<true>> {

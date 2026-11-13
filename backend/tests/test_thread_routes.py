@@ -84,6 +84,7 @@ class FakeModel:
         self._holds = holds
         self._error_at = error_at
         self._arrived = arrived if arrived is not None else threading.Event()
+        self.seen: list[tuple[str, list[tuple[str, str]]]] = []
 
     def complete(self, prompt: str, blocks: list[Block]) -> Reply:
         self.completed += 1
@@ -93,6 +94,7 @@ class FakeModel:
 
     def stream(self, prompt: str, blocks: list[Block]) -> _Script:
         self.calls += 1
+        self.seen.append((prompt, [(block.role, block.text) for block in blocks]))
         if self._chunks is None:
             chunks = () if self._error is not None else (self._reply.text,)
         else:
@@ -376,12 +378,15 @@ def _assert_not_found(
         json={"text": "cross-account-text"},
     )
     stopped = client.post(f"/threads/{thread_id}/stop")
+    retried = client.post(f"/threads/{thread_id}/retry")
     assert loaded.status_code == 404
     assert loaded.json() == {"error": "Not found"}
     assert posted.status_code == 404
     assert posted.json() == {"error": "Not found"}
     assert stopped.status_code == 404
     assert stopped.json() == {"error": "Not found"}
+    assert retried.status_code == 404
+    assert retried.json() == {"error": "Not found"}
     assert model.completed == 0
     assert model.calls == 0
 
@@ -399,6 +404,7 @@ def test_no_session_uses_the_sign_in_status(monkeypatch: pytest.MonkeyPatch) -> 
         client.get(f"/threads/{thread_id}"),
         client.post(f"/threads/{thread_id}/messages", json={"text": "hello"}),
         client.post(f"/threads/{thread_id}/stop"),
+        client.post(f"/threads/{thread_id}/retry"),
     ]
     client.cookies.set("session", "not-a-session")
     invalid = client.get("/threads")
@@ -986,5 +992,395 @@ def test_mid_stream_model_error_keeps_the_arrived_text_and_hides_the_cause(
         assert _usage_rows(email) == [
             ("chat", "google", "gemini-4-argon", None, None, None, _assistant_id(thread_id))
         ]
+    finally:
+        _remove(email)
+
+
+HARM = "A task that would cause physical harm stops and asks."
+NO_FAILURE = "There is no failed reply."
+
+
+def _message_rows(thread_id: str) -> list[tuple[uuid.UUID, str, str, str]]:
+    with connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, role, kind, body
+            FROM message
+            WHERE thread_id = %s
+            ORDER BY created_at ASC, id ASC
+            """,
+            (thread_id,),
+        ).fetchall()
+    return [(row[0], row[1], row[2], row[3]) for row in rows]
+
+
+def _cause_stored(thread_id: str, email: str, cause: str) -> bool:
+    with connect() as connection:
+        messages = connection.execute(
+            """
+            SELECT body FROM message WHERE thread_id = %s
+            UNION ALL
+            SELECT name FROM thread WHERE id = %s
+            UNION ALL
+            SELECT coalesce(summary, '') FROM thread WHERE id = %s
+            """,
+            (thread_id, thread_id, thread_id),
+        ).fetchall()
+        usage = connection.execute(
+            "SELECT * FROM usage WHERE email = %s",
+            (email.lower(),),
+        ).fetchall()
+    if any(cause in str(row[0]) for row in messages):
+        return True
+    return any(cause in str(row) for row in usage)
+
+
+def test_retry_replaces_the_partial_and_keeps_one_person_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Retry")
+    _remove(email)
+    failed = FakeModel(
+        chunks=("kept", "later"),
+        error=RuntimeError(CAUSE),
+        error_at=1,
+    )
+    retry = FakeModel(
+        reply=Reply("newreply", 424242, 434343, 858585),
+        chunks=("new", "reply"),
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        named = client.post("/display-name", json={"display_name": "Ada"})
+        assert named.status_code == 200
+        with connect() as connection:
+            connection.execute(
+                "UPDATE thread SET summary = %s WHERE id = %s",
+                (SUMMARY, thread_id),
+            )
+        session_raw = client.cookies.get("session")
+        assert session_raw is not None
+        session_id = uuid.UUID(session_raw)
+        _use_model(monkeypatch, failed)
+        first = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert first.status_code == 200
+        before = _message_rows(thread_id)
+        assert [(role, kind, body) for _, role, kind, body in before] == [
+            ("person", "chat", "hello"),
+            ("assistant", "chat", "kept"),
+            ("assistant", "failure", FAILED),
+        ]
+        person_id = before[0][0]
+        partial_id = before[1][0]
+        active = _last_active(session_id)
+        _use_model(monkeypatch, retry)
+        posted = client.post(f"/threads/{thread_id}/retry")
+        assert posted.status_code == 200
+        events = _events(posted.text)
+        assert events == [{"text": "new"}, {"text": "reply"}, {"done": True}]
+        for event in events:
+            if "text" in event:
+                assert set(event) == {"text"}
+        assert CAUSE not in posted.text
+        assert SUMMARY not in posted.text
+        assert "summary" not in posted.text
+        assert "424242" not in posted.text
+        assert "434343" not in posted.text
+        assert "858585" not in posted.text
+        assert "gemini-4-argon" not in posted.text
+        after = _message_rows(thread_id)
+        assert after == [
+            (person_id, "person", "chat", "hello"),
+            (partial_id, "assistant", "chat", "newreply"),
+        ]
+        assert _last_active(session_id) > active
+        assert set(_usage_rows(email)) == {
+            ("chat", "google", "gemini-4-argon", None, None, None, partial_id),
+            ("chat", "google", "gemini-4-argon", 424242, 434343, 858585, partial_id),
+        }
+        assert len(_usage_rows(email)) == 2
+        assert retry.calls == 1
+        assert retry.completed == 0
+        assert retry.seen == [
+            (
+                f"The person's name is Ada.\n{HARM}\n{SUMMARY}",
+                [("person", "hello")],
+            )
+        ]
+    finally:
+        _remove(email)
+
+
+def test_retry_sends_earlier_chat_and_leaves_out_the_partial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Context")
+    _remove(email)
+    first_model = FakeModel(reply=Reply("full", 1, 1, 2), chunks=("full",))
+    failed = FakeModel(
+        chunks=("kept", "later"),
+        error=RuntimeError(CAUSE),
+        error_at=1,
+    )
+    retry = FakeModel(reply=Reply("done", 5, 6, 11), chunks=("done",))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, first_model)
+        earlier = client.post(f"/threads/{thread_id}/messages", json={"text": "earlier"})
+        assert earlier.status_code == 200
+        _use_model(monkeypatch, failed)
+        again = client.post(f"/threads/{thread_id}/messages", json={"text": "again"})
+        assert again.status_code == 200
+        before = _message_rows(thread_id)
+        assert [row[1] for row in before].count("person") == 2
+        partial_id = next(row[0] for row in before if row[3] == "kept")
+        _use_model(monkeypatch, retry)
+        posted = client.post(f"/threads/{thread_id}/retry")
+        assert posted.status_code == 200
+        after = _message_rows(thread_id)
+        assert [row[1] for row in after].count("person") == 2
+        assert [row[0] for row in after if row[1] == "person"] == [
+            row[0] for row in before if row[1] == "person"
+        ]
+        assert (partial_id, "assistant", "chat", "done") in after
+        assert all(row[2] != "failure" for row in after)
+        assert retry.seen == [
+            (
+                HARM,
+                [
+                    ("person", "earlier"),
+                    ("assistant", "full"),
+                    ("person", "again"),
+                ],
+            )
+        ]
+        assert "kept" not in [text for _, blocks in retry.seen for _, text in blocks]
+    finally:
+        _remove(email)
+
+
+def test_retry_failure_keeps_one_of_each_row_and_hides_the_cause(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Again")
+    _remove(email)
+    failed = FakeModel(
+        chunks=("kept", "later"),
+        error=RuntimeError(CAUSE),
+        error_at=1,
+    )
+    retry = FakeModel(
+        chunks=("fresh", "hidden"),
+        error=RuntimeError(CAUSE),
+        error_at=1,
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        session_raw = client.cookies.get("session")
+        assert session_raw is not None
+        session_id = uuid.UUID(session_raw)
+        _use_model(monkeypatch, failed)
+        first = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert first.status_code == 200
+        before = _message_rows(thread_id)
+        person_id, partial_id, failure_id = (row[0] for row in before)
+        active = _last_active(session_id)
+        _use_model(monkeypatch, retry)
+        posted = client.post(f"/threads/{thread_id}/retry")
+        assert posted.status_code == 200
+        assert _events(posted.text) == [{"text": "fresh"}, {"failed": True}]
+        assert CAUSE not in posted.text
+        assert "424242" not in posted.text
+        assert "gemini-4-argon" not in posted.text
+        assert "summary" not in posted.text
+        after = _message_rows(thread_id)
+        assert after == [
+            (person_id, "person", "chat", "hello"),
+            (partial_id, "assistant", "chat", "fresh"),
+            (failure_id, "assistant", "failure", FAILED),
+        ]
+        assert _last_active(session_id) == active
+        rows = _usage_rows(email)
+        assert len(rows) == 2
+        assert all(
+            row == ("chat", "google", "gemini-4-argon", None, None, None, partial_id)
+            for row in rows
+        )
+        assert not _cause_stored(thread_id, email, CAUSE)
+        assert retry.calls == 1
+        assert retry.seen == [(HARM, [("person", "hello")])]
+    finally:
+        _remove(email)
+
+
+def test_retry_inserts_a_reply_when_the_failure_has_no_partial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Insert")
+    _remove(email)
+    failed = FakeModel(error=RuntimeError(CAUSE))
+    retry = FakeModel(reply=Reply("arrived", 8, 9, 17), chunks=("arrived",))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        session_raw = client.cookies.get("session")
+        assert session_raw is not None
+        session_id = uuid.UUID(session_raw)
+        _use_model(monkeypatch, failed)
+        first = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert first.status_code == 200
+        before = _message_rows(thread_id)
+        assert [(role, kind, body) for _, role, kind, body in before] == [
+            ("person", "chat", "hello"),
+            ("assistant", "failure", FAILED),
+        ]
+        person_id = before[0][0]
+        active = _last_active(session_id)
+        _use_model(monkeypatch, retry)
+        posted = client.post(f"/threads/{thread_id}/retry")
+        assert posted.status_code == 200
+        assert _events(posted.text) == [{"text": "arrived"}, {"done": True}]
+        assert CAUSE not in posted.text
+        assert "8" not in posted.text
+        after = _message_rows(thread_id)
+        assert len(after) == 2
+        assert after[0] == (person_id, "person", "chat", "hello")
+        assert after[1][1:] == ("assistant", "chat", "arrived")
+        reply_id = after[1][0]
+        assert _last_active(session_id) > active
+        assert set(_usage_rows(email)) == {
+            ("chat", "google", "gemini-4-argon", None, None, None, None),
+            ("chat", "google", "gemini-4-argon", 8, 9, 17, reply_id),
+        }
+        assert len(_usage_rows(email)) == 2
+    finally:
+        _remove(email)
+
+
+def test_retry_stopped_email_adds_no_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("RetryStopped")
+    stored = email.lower()
+    _remove(email)
+    failed = FakeModel(error=RuntimeError(CAUSE))
+    retry = FakeModel(reply=Reply("should-not-run", 9, 9, 18))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, failed)
+        first = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert first.status_code == 200
+        before = _stored_messages(thread_id)
+        usage = _usage_count(stored)
+        with connect() as connection:
+            connection.execute(
+                "UPDATE email_limit SET stopped = true WHERE email = %s",
+                (stored,),
+            )
+        _use_model(monkeypatch, retry)
+        response = client.post(f"/threads/{thread_id}/retry")
+        assert response.status_code == 403
+        assert response.json() == {"error": STOPPED}
+        assert _stored_messages(thread_id) == before
+        assert _usage_count(stored) == usage
+        assert retry.calls == 0
+        assert retry.completed == 0
+    finally:
+        _remove(email)
+
+
+def test_retry_at_the_cap_adds_no_row_and_no_figures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("RetryCapped")
+    stored = email.lower()
+    _remove(email)
+    failed = FakeModel(error=RuntimeError(CAUSE))
+    retry = FakeModel(reply=Reply("should-not-run", 9, 9, 18))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, failed)
+        first = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert first.status_code == 200
+        before = _stored_messages(thread_id)
+        usage = _usage_count(stored)
+        with connect() as connection:
+            connection.execute(
+                "UPDATE email_limit SET token_cap = %s WHERE email = %s",
+                (0, stored),
+            )
+        _use_model(monkeypatch, retry)
+        response = client.post(f"/threads/{thread_id}/retry")
+        assert response.status_code == 403
+        assert response.json() == {"error": CAPPED}
+        assert not any(character.isdigit() for character in response.text)
+        assert _stored_messages(thread_id) == before
+        assert _usage_count(stored) == usage
+        assert retry.calls == 0
+        assert retry.completed == 0
+    finally:
+        _remove(email)
+
+
+def test_another_account_cannot_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    owner_email = _email("Owner")
+    other_email = _email("Other")
+    _remove(owner_email)
+    _remove(other_email)
+    allowed_existed = _account_exists(ALLOWED)
+    allowed_usage = _usage_ids(ALLOWED)
+    allowed_threads = _thread_ids(ALLOWED)
+    allowed_session: uuid.UUID | None = None
+    failed = FakeModel(error=RuntimeError(CAUSE))
+    retry = FakeModel(reply=Reply("should-not-run", 3, 4, 7))
+    try:
+        owner, thread_id = _open_thread(monkeypatch, owner_email)
+        _use_model(monkeypatch, failed)
+        first = owner.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert first.status_code == 200
+        before = _message_count(thread_id)
+        usage = _usage_count(owner_email)
+        other = _sign_in(monkeypatch, other_email)
+        _use_model(monkeypatch, retry)
+        refused = other.post(f"/threads/{thread_id}/retry")
+        assert refused.status_code == 404
+        assert refused.json() == {"error": "Not found"}
+        admin, allowed_session = _allowed_client()
+        admin_retry = admin.post(f"/threads/{thread_id}/retry")
+        assert admin_retry.status_code == 404
+        assert admin_retry.json() == {"error": "Not found"}
+        assert _message_count(thread_id) == before
+        assert _usage_count(owner_email) == usage
+        assert retry.calls == 0
+        assert retry.completed == 0
+    finally:
+        _remove(owner_email)
+        _remove(other_email)
+        _cleanup_allowed(allowed_existed, allowed_usage, allowed_threads, allowed_session)
+
+
+def test_retry_without_a_failure_line_does_not_call_or_insert(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Plain")
+    _remove(email)
+    model = FakeModel(reply=Reply("fakereply", 1, 1, 2), chunks=("fakereply",))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        empty = client.post(f"/threads/{thread_id}/retry")
+        assert empty.status_code == 400
+        assert empty.json() == {"error": NO_FAILURE}
+        assert model.calls == 0
+        assert model.completed == 0
+        assert _message_count(thread_id) == 0
+        sent = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert sent.status_code == 200
+        stored = _stored_messages(thread_id)
+        calls = model.calls
+        again = client.post(f"/threads/{thread_id}/retry")
+        assert again.status_code == 400
+        assert again.json() == {"error": NO_FAILURE}
+        assert model.calls == calls
+        assert model.completed == 0
+        assert _stored_messages(thread_id) == stored
+        assert _message_count(thread_id) == 2
     finally:
         _remove(email)

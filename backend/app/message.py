@@ -59,6 +59,49 @@ def insert_message(
     return created
 
 
+def update_message_body(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    message_id: uuid.UUID,
+    body: str,
+) -> MessageRow | None:
+    apply(connection)
+    updated = connection.execute(
+        """
+        UPDATE message
+        SET body = %s
+        WHERE id = %s
+          AND account_id = %s
+          AND thread_id = %s
+          AND role = 'assistant'
+          AND kind = 'chat'
+        RETURNING id, account_id, thread_id, run_id, role, kind, body, created_at
+        """,
+        (body, message_id, account_id, thread_id),
+    ).fetchone()
+    return updated
+
+
+def delete_failure(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    message_id: uuid.UUID,
+) -> None:
+    apply(connection)
+    connection.execute(
+        """
+        DELETE FROM message
+        WHERE id = %s
+          AND account_id = %s
+          AND thread_id = %s
+          AND kind = 'failure'
+        """,
+        (message_id, account_id, thread_id),
+    )
+
+
 def list_messages(
     connection: psycopg.Connection,
     account_id: uuid.UUID,
