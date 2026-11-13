@@ -3,6 +3,24 @@ export type Account = {
   display_name: string | null;
 };
 
+export type Thread = {
+  id: string;
+  name: string;
+  created_at: string;
+};
+
+export type ThreadMessage = {
+  id: string;
+  role: string;
+  kind: string;
+  body: string;
+  created_at: string;
+};
+
+export type ThreadWithMessages = Thread & {
+  messages: ThreadMessage[];
+};
+
 export type ApiValue<T> = {
   kind: "value";
   value: T;
@@ -162,6 +180,107 @@ export async function postDisplayName(
   );
   if ("kind" in result) return result;
   return classify(result, accountFrom);
+}
+
+function textField(body: Record<string, unknown>, key: string): string | null {
+  const value = body[key];
+  if (typeof value !== "string") return null;
+  return value;
+}
+
+function threadFrom(body: unknown): Thread | null {
+  if (!isRecord(body)) return null;
+  const id = textField(body, "id");
+  const name = textField(body, "name");
+  const createdAt = textField(body, "created_at");
+  if (id === null || id === "" || name === null || createdAt === null) return null;
+  return { id, name, created_at: createdAt };
+}
+
+function messageFrom(body: unknown): ThreadMessage | null {
+  if (!isRecord(body)) return null;
+  const id = textField(body, "id");
+  const role = textField(body, "role");
+  const kind = textField(body, "kind");
+  const messageBody = textField(body, "body");
+  const createdAt = textField(body, "created_at");
+  if (
+    id === null ||
+    id === "" ||
+    role === null ||
+    kind === null ||
+    messageBody === null ||
+    createdAt === null
+  ) {
+    return null;
+  }
+  return { id, role, kind, body: messageBody, created_at: createdAt };
+}
+
+function threadListFrom(body: unknown): Thread[] | null {
+  if (!Array.isArray(body)) return null;
+  const threads: Thread[] = [];
+  for (const item of body) {
+    const thread = threadFrom(item);
+    if (thread === null) return null;
+    threads.push(thread);
+  }
+  return threads;
+}
+
+function threadPageFrom(body: unknown): ThreadWithMessages | null {
+  const thread = threadFrom(body);
+  if (thread === null || !isRecord(body) || !Array.isArray(body.messages)) return null;
+  const messages: ThreadMessage[] = [];
+  for (const item of body.messages) {
+    const message = messageFrom(item);
+    if (message === null) return null;
+    messages.push(message);
+  }
+  return { ...thread, messages };
+}
+
+function threadCall<T>(http: HttpResult, parse: (body: unknown) => T | null): ApiResult<T> {
+  if (http.status === 404) {
+    return {
+      kind: "message",
+      message: "Not found",
+      unauthorized: false,
+      refused: true,
+    };
+  }
+  return classify(http, parse);
+}
+
+export async function listThreads(): Promise<ApiResult<Thread[]>> {
+  const result = await call("/threads", "GET");
+  if ("kind" in result) return result;
+  return threadCall(result, threadListFrom);
+}
+
+export async function createThread(): Promise<ApiResult<Thread>> {
+  const result = await call("/threads", "POST");
+  if ("kind" in result) return result;
+  return threadCall(result, threadFrom);
+}
+
+export async function getThread(id: string): Promise<ApiResult<ThreadWithMessages>> {
+  const result = await call(`/threads/${encodeURIComponent(id)}`, "GET");
+  if ("kind" in result) return result;
+  return threadCall(result, threadPageFrom);
+}
+
+export async function postThreadMessage(
+  id: string,
+  text: string,
+): Promise<ApiResult<ThreadWithMessages>> {
+  const result = await call(
+    `/threads/${encodeURIComponent(id)}/messages`,
+    "POST",
+    JSON.stringify({ text }),
+  );
+  if ("kind" in result) return result;
+  return threadCall(result, threadPageFrom);
 }
 
 export async function postSignOut(): Promise<ApiResult<true>> {

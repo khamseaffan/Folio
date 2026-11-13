@@ -7,16 +7,27 @@ import {
   DocumentTextIcon,
   EnvelopeIcon,
   MagnifyingGlassIcon,
+  PaperAirplaneIcon,
+  PlusIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType, SVGProps } from "react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import {
+  createThread,
   getReady,
   getSession,
+  getThread,
+  listThreads,
   postDisplayName,
   postSignIn,
   postSignOut,
+  postThreadMessage,
   type Account,
+  type ApiDown,
+  type ApiMessage,
+  type Thread,
+  type ThreadMessage,
+  type ThreadWithMessages,
 } from "../lib/api";
 import {
   completeEmailLink,
@@ -113,6 +124,17 @@ const QUIET: BootResult = {
 
 let bootTask: Promise<BootResult> | null = null;
 
+function threadsNewestFirst(threads: Thread[]): Thread[] {
+  return [...threads].sort((left, right) => {
+    if (left.created_at === right.created_at) return 0;
+    return left.created_at < right.created_at ? 1 : -1;
+  });
+}
+
+function threadSummary(thread: Thread): Thread {
+  return { id: thread.id, name: thread.name, created_at: thread.created_at };
+}
+
 function accountBoot(account: Account): BootResult {
   if (account.display_name === null || account.display_name.trim() === "") {
     return { ...QUIET, view: "ask-name", accountEmail: account.email };
@@ -191,8 +213,16 @@ export function FolioApp() {
   const [draftName, setDraftName] = useState("");
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [threadsLoaded, setThreadsLoaded] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ThreadMessage[]>([]);
+  const [draft, setDraft] = useState("");
   const linkHref = useRef<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const messagePane = useRef<HTMLDivElement>(null);
+  const requestGeneration = useRef(0);
+  const acting = useRef(false);
 
   function applyBoot(result: BootResult) {
     setDown(result.down);
@@ -218,6 +248,99 @@ export function FolioApp() {
     if (!down) return;
     dialogRef.current?.focus();
   }, [down]);
+
+  useEffect(() => {
+    if (view !== "ready" || displayName === null || displayName === "") return;
+    const generation = ++requestGeneration.current;
+    let active = true;
+    void (async () => {
+      const listed = await listThreads();
+      if (!active || requestGeneration.current !== generation) return;
+      if (listed.kind === "down") {
+        setDown(true);
+        setThreadsLoaded(true);
+        return;
+      }
+      if (listed.kind === "message") {
+        if (listed.unauthorized) {
+          requestGeneration.current += 1;
+          setNotice(listed.message);
+          await signOutFirebase();
+          if (!active) return;
+          setDisplayName(null);
+          setAccountEmail(null);
+          setThreads([]);
+          setOpenId(null);
+          setMessages([]);
+          setDraft("");
+          setThreadsLoaded(false);
+          setPending(false);
+          setView("signed-out");
+          return;
+        }
+        setNotice(listed.message);
+        setThreads([]);
+        setOpenId(null);
+        setMessages([]);
+        setThreadsLoaded(true);
+        return;
+      }
+      setThreads(listed.value);
+      const newest = threadsNewestFirst(listed.value)[0];
+      if (newest === undefined) {
+        setOpenId(null);
+        setMessages([]);
+        setThreadsLoaded(true);
+        return;
+      }
+      const opened = await getThread(newest.id);
+      if (!active || requestGeneration.current !== generation) return;
+      if (opened.kind === "down") {
+        setDown(true);
+        setThreadsLoaded(true);
+        return;
+      }
+      if (opened.kind === "message") {
+        if (opened.unauthorized) {
+          requestGeneration.current += 1;
+          setNotice(opened.message);
+          await signOutFirebase();
+          if (!active) return;
+          setDisplayName(null);
+          setAccountEmail(null);
+          setThreads([]);
+          setOpenId(null);
+          setMessages([]);
+          setDraft("");
+          setThreadsLoaded(false);
+          setPending(false);
+          setView("signed-out");
+          return;
+        }
+        setNotice(opened.message);
+        setOpenId(null);
+        setMessages([]);
+        setThreadsLoaded(true);
+        return;
+      }
+      const page = opened.value;
+      setThreads((current) =>
+        current.map((thread) => (thread.id === page.id ? threadSummary(page) : thread)),
+      );
+      setOpenId(page.id);
+      setMessages(page.messages);
+      setThreadsLoaded(true);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [view, displayName]);
+
+  useEffect(() => {
+    const pane = messagePane.current;
+    if (!pane) return;
+    pane.scrollTop = pane.scrollHeight;
+  }, [messages, openId]);
 
   async function onGoogle() {
     setPending(true);
@@ -284,9 +407,11 @@ export function FolioApp() {
       if (result.kind === "message") {
         setNotice(result.message);
         if (result.unauthorized) {
+          requestGeneration.current += 1;
           await signOutFirebase();
           setDisplayName(null);
           setAccountEmail(null);
+          clearChat();
           setView("signed-out");
         }
         return;
@@ -318,6 +443,7 @@ export function FolioApp() {
         setNotice(result.message);
         return;
       }
+      requestGeneration.current += 1;
       await signOutFirebase();
       setDisplayName(null);
       setAccountEmail(null);
@@ -325,10 +451,129 @@ export function FolioApp() {
       setStatus(null);
       setEmail("");
       linkHref.current = null;
+      clearChat();
       setView("signed-out");
     } finally {
       setPending(false);
     }
+  }
+
+  function clearChat() {
+    setThreads([]);
+    setOpenId(null);
+    setMessages([]);
+    setDraft("");
+    setThreadsLoaded(false);
+  }
+
+  async function showChatError(result: ApiDown | ApiMessage) {
+    if (result.kind === "down") {
+      setDown(true);
+      return;
+    }
+    if (result.unauthorized) {
+      requestGeneration.current += 1;
+      setNotice(result.message);
+      await signOutFirebase();
+      setDisplayName(null);
+      setAccountEmail(null);
+      clearChat();
+      setPending(false);
+      setView("signed-out");
+      return;
+    }
+    setNotice(result.message);
+  }
+
+  function remember(page: ThreadWithMessages) {
+    const summary = threadSummary(page);
+    setThreads((current) => {
+      const exists = current.some((thread) => thread.id === summary.id);
+      if (!exists) return [...current, summary];
+      return current.map((thread) => (thread.id === summary.id ? summary : thread));
+    });
+    setOpenId(page.id);
+    setMessages(page.messages);
+  }
+
+  async function onNewThread() {
+    if (acting.current || pending) return;
+    acting.current = true;
+    const generation = ++requestGeneration.current;
+    setPending(true);
+    setNotice(null);
+    try {
+      const result = await createThread();
+      if (requestGeneration.current !== generation) return;
+      if (result.kind !== "value") {
+        await showChatError(result);
+        return;
+      }
+      const created = threadSummary(result.value);
+      setThreads((current) =>
+        current.some((thread) => thread.id === created.id) ? current : [...current, created],
+      );
+      setOpenId(created.id);
+      setMessages([]);
+      setDraft("");
+      setThreadsLoaded(true);
+    } finally {
+      acting.current = false;
+      if (requestGeneration.current === generation) setPending(false);
+    }
+  }
+
+  async function onOpenThread(id: string) {
+    if (acting.current || pending || id === openId) return;
+    acting.current = true;
+    const generation = ++requestGeneration.current;
+    setPending(true);
+    setNotice(null);
+    try {
+      const result = await getThread(id);
+      if (requestGeneration.current !== generation) return;
+      if (result.kind !== "value") {
+        await showChatError(result);
+        return;
+      }
+      remember(result.value);
+      setDraft("");
+    } finally {
+      acting.current = false;
+      if (requestGeneration.current === generation) setPending(false);
+    }
+  }
+
+  async function sendDraft(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    const text = draft;
+    if (text.trim() === "" || openId === null || acting.current || pending) return;
+    const threadId = openId;
+    acting.current = true;
+    const generation = ++requestGeneration.current;
+    setPending(true);
+    setNotice(null);
+    try {
+      const result = await postThreadMessage(threadId, text);
+      if (requestGeneration.current !== generation) return;
+      if (result.kind !== "value") {
+        await showChatError(result);
+        return;
+      }
+      remember(result.value);
+      setDraft("");
+    } finally {
+      acting.current = false;
+      if (requestGeneration.current === generation) setPending(false);
+    }
+  }
+
+  function onComposerKey(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    // Safari reports the IME confirm as Enter.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    void sendDraft();
   }
 
   function leaveLink() {
@@ -345,6 +590,8 @@ export function FolioApp() {
   const signedIn = view === "ask-name" || view === "ready";
   const named = view === "ready" && displayName !== null && displayName !== "";
   const landing = view === "signed-out" || view === "link-email";
+  const visibleThreads = threadsNewestFirst(threads);
+  const openThread = visibleThreads.find((thread) => thread.id === openId) ?? null;
 
   return (
     <>
@@ -353,7 +600,7 @@ export function FolioApp() {
           <path fill="#3d5872" d="M0 320 720 40 1440 320V360H0Z" />
           <path fill="#ffffff" d="M468 138 720 40 972 138Z" />
         </svg>
-        <div className={landing ? "stage landing" : "stage"}>
+        <div className={landing ? "stage landing" : named ? "stage desk" : "stage"}>
           {landing ? (
             <section className="intro" aria-label="Folio">
               <h2>A private assistant that remembers your work.</h2>
@@ -371,6 +618,108 @@ export function FolioApp() {
               </ul>
             </section>
           ) : null}
+          {named && displayName !== null ? (
+            <div className="desk">
+              <header className="desk-head">
+                <div className="panel-head">
+                  <div className="mark" aria-hidden="true">
+                    <Mark />
+                  </div>
+                  <div>
+                    <p className="kicker">Folio</p>
+                    <h1>{displayName}</h1>
+                  </div>
+                </div>
+                <div className="desk-account">
+                  {accountEmail ? <p className="mail">{accountEmail}</p> : null}
+                  <button
+                    type="button"
+                    className="quiet"
+                    onClick={() => void onSignOut()}
+                    disabled={pending}
+                  >
+                    <ArrowRightStartOnRectangleIcon aria-hidden="true" />
+                    Sign out
+                  </button>
+                </div>
+              </header>
+              {notice ? (
+                <p role="alert" className="notice">
+                  {notice}
+                </p>
+              ) : null}
+              {!threadsLoaded ? <p className="hint">One moment.</p> : null}
+              {threadsLoaded ? (
+                <div className={openThread ? "desk-body" : "desk-body idle"}>
+                  <div className="threads">
+                    <button
+                      type="button"
+                      className="new-thread"
+                      onClick={() => void onNewThread()}
+                      disabled={pending}
+                    >
+                      <PlusIcon aria-hidden="true" />
+                      New thread
+                    </button>
+                    {visibleThreads.length > 0 ? (
+                      <ul aria-label="Threads">
+                        {visibleThreads.map((thread) => (
+                          <li key={thread.id}>
+                            <button
+                              type="button"
+                              aria-current={thread.id === openId ? "true" : "false"}
+                              onClick={() => void onOpenThread(thread.id)}
+                              disabled={pending}
+                            >
+                              {thread.name}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                  {openThread ? (
+                    <section className="thread" aria-label={openThread.name}>
+                      <h2 className="thread-name">{openThread.name}</h2>
+                      <div className="messages" ref={messagePane} tabIndex={0} aria-label="Messages">
+                        {messages.map((message) => (
+                          <p
+                            key={message.id}
+                            className={message.role === "person" ? "message person" : "message reply"}
+                          >
+                            <span className="speaker">
+                              {message.role === "person" ? "You" : "Folio"}
+                            </span>
+                            {message.body}
+                          </p>
+                        ))}
+                      </div>
+                      <form className="composer" onSubmit={(event) => void sendDraft(event)}>
+                        <textarea
+                          rows={2}
+                          value={draft}
+                          placeholder="Message"
+                          aria-label="Message"
+                          autoComplete="off"
+                          disabled={pending}
+                          onChange={(event) => setDraft(event.target.value)}
+                          onKeyDown={onComposerKey}
+                        />
+                        <button
+                          type="submit"
+                          className="primary send"
+                          disabled={pending || draft.trim() === ""}
+                        >
+                          <PaperAirplaneIcon aria-hidden="true" />
+                          Send
+                        </button>
+                      </form>
+                    </section>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : (
           <section className="panel">
           <div className="panel-head">
             <div className="mark" aria-hidden="true">
@@ -468,6 +817,7 @@ export function FolioApp() {
             </button>
           ) : null}
           </section>
+          )}
         </div>
       </div>
       {down ? (
