@@ -21,8 +21,9 @@
 - Comments only for a why that is not obvious. One module per table for SQL.
 - Frontend: `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`. Read the guide in `frontend/node_modules/next/dist/docs/` before writing Next.js code. English copy only.
 - Backend checks: from `backend/`, `uv run ruff check .` and `uv run pytest`. Frontend checks: from `frontend/`, `npm run lint`, `npm run typecheck`, `npm run build`. The frontend has no test runner. Do not add one.
-- `main` is protected. One pull request per unit, squash merge, CI must pass. Branches: `operation-layer` (Tasks 1 to 4), `account-routes` (Task 5), `thread-controls` (Task 6), `settings-screen` (Task 7).
-- Tasks 1 to 4 run in order in the main session. Tasks 5 and 6 start after Task 4 merges and run at the same time, each in its own worktree. Task 7 starts after Task 5 merges.
+- `main` is protected. One pull request per unit, squash merge, CI must pass. The person merges, from the bottom of the stack up.
+- The four units are one stack, managed with `gh-stack`: `main`, then `operation-layer` (Tasks 1 to 4), then `account-routes` (Task 5), then `thread-controls` (Task 6), then `settings-screen` (Task 7). No unit waits for a merge.
+- Tasks 1 to 4 run in order in the main session. Tasks 5 and 6 start when Task 4 passes its checks locally and run at the same time, each in its own worktree branched from `operation-layer`. When both pass, `thread-controls` is restacked onto `account-routes`. Task 7 then starts from `thread-controls`.
 
 ## Review Focus
 
@@ -323,7 +324,7 @@ def test_delete_while_the_reply_is_streaming():
 
 ### Task 5: Account routes
 
-Branch `account-routes`, from `main` after Task 4 merges.
+Branch `account-routes`, from `operation-layer` once Task 4 passes its checks.
 
 **Files:**
 - Modify: `backend/app/session.py`, `backend/app/usage.py`, `backend/app/account.py`, `backend/app/sign_in_proof.py`, `backend/app/main.py`
@@ -397,7 +398,7 @@ def test_account_actions_are_not_agent_tools():
 
 ### Task 6: Thread controls in the website
 
-Branch `thread-controls`, from `main` after Task 4 merges.
+Branch `thread-controls`, from `operation-layer` once Task 4 passes its checks. Restacked onto `account-routes` when both pass.
 
 **Files:**
 - Create: `frontend/app/thread-list.tsx`
@@ -434,7 +435,7 @@ Behavior:
 
 ### Task 7: Settings screen
 
-Branch `settings-screen`, from `main` after Task 5 merges.
+Branch `settings-screen`, from `thread-controls` once Tasks 5 and 6 pass their checks.
 
 **Files:**
 - Create: `frontend/app/settings.tsx`
