@@ -41,7 +41,7 @@ flowchart LR
 - A file prefix belongs to one account. The platform holds the model keys.
 - Vercel hosts the web app. Google Cloud holds data, jobs, keys, and the API. Terraform describes the Google Cloud resources. The website is the piece hosted outside Google Cloud.
 - Firebase Authentication holds the sign-in. Postgres holds the account. The database major is PostgreSQL 18. The API runs on Python 3.13.
-- GitHub Actions runs the checks. The deployment pipeline is stage 2.5, after one chat turn on this machine and before files. The website stays on Vercel. Terraform describes Google Cloud.
+- GitHub Actions runs the checks and deploys the API to Cloud Run after each merge to main. Vercel builds the website from its GitHub connection. The browser calls one origin, and the website forwards `/api/*` to the API. The API reaches Cloud SQL on a private IP over Direct VPC egress, and verifies Firebase sign-ins with its own Google identity. Terraform in `infra/` describes Google Cloud and is applied by a person.
 
 ## Harness
 

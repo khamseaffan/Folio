@@ -1,6 +1,6 @@
 # Hand-in report
 
-Draft version 1. The design is recorded. The site is not deployed, and there is no live URL. The URL, the test run on that site, and switching on monitoring are filled in when the app is running.
+Draft version 2. The site is deployed at https://folio.khamseaffan.com with sign-in and chat working. Research, memory, schedules, files, Drive, voice and monitoring are not built yet, and the test run on the finished site is filled in when they are.
 
 ## Service overview
 
@@ -153,7 +153,7 @@ Later, and not required by the assignment. One email stays one private account.
 
 ## Quality assurance
 
-A change reaches the main branch through a pull request. GitHub Actions runs Ruff, pytest, lint, and typecheck. The same checks run before a commit. The main branch is protected. The first build on this machine is an account and one chat turn. The deployment pipeline comes after that chat turn and before files. The website stays on Vercel. Terraform describes Google Cloud.
+A change reaches the main branch through a pull request. GitHub Actions runs Ruff, pytest, lint, and typecheck. The same checks run before a commit. The main branch is protected: a change needs the backend, frontend, Terraform and container checks to pass. A merge to main deploys by itself. Vercel builds the website, and a workflow builds the API image tagged with the commit, runs the database migration, deploys Cloud Run, and checks that the live site answers. Only the newest commit on main is deployed. The workflow signs in to Google with a short-lived identity tied to this repository, so no key is stored. Terraform describes Google Cloud and is applied by me after I read the plan, so the pipeline never holds infrastructure-admin power.
 
 **Checks I will not leave to the model**
 
