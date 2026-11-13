@@ -111,3 +111,19 @@ def open_session(session_id: uuid.UUID) -> uuid.UUID | None:
                 )
                 return None
             return row[0]
+
+
+def set_last_active_at(
+    connection: psycopg.Connection,
+    session_id: uuid.UUID,
+    account_id: uuid.UUID,
+) -> None:
+    connection.execute(
+        """
+        UPDATE session
+        SET last_active_at = now()
+        WHERE id = %s
+          AND account_id = %s
+        """,
+        (session_id, account_id),
+    )
