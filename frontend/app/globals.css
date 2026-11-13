@@ -1,26 +1,225 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #e4ebf0;
+  --ink: #17212b;
+  --stamp: #1e4d6b;
+  --card: #f7fbfc;
+  --muted: #3e5160;
+  --alert: #7a2e2e;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--paper);
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  margin: 0;
+  min-height: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-atkinson), "Atkinson Hyperlegible", sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.45;
+  border-left: 8px solid var(--stamp);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--stamp);
+  outline-offset: 3px;
+}
+
+.app {
+  min-height: 100%;
+  max-width: 100%;
+}
+
+.shell-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 1rem;
+  row-gap: 0.5rem;
+  max-width: 100%;
+  padding: 1.25rem 1rem 0.25rem;
+}
+
+.wordmark {
+  flex: 0 0 auto;
+  margin: 0;
+  font-family: var(--font-literata), "Iowan Old Style", Palatino, serif;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.person {
+  flex: 1 1 10rem;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.sign-out {
+  flex: 0 0 auto;
+  width: auto;
+  margin-left: auto;
+  min-height: 2.75rem;
+  padding: 0.4rem 0.15rem;
+  border: 0;
+  background: transparent;
+  color: var(--stamp);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sign-out:disabled,
+.text-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.text-button {
+  width: auto;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0.4rem 0;
+  border: 0;
+  background: transparent;
+  color: var(--stamp);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.main {
+  width: 100%;
+  max-width: 100%;
+  padding: 1.25rem 1rem 2.5rem;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: min(100%, 24rem);
+  max-width: 100%;
+}
+
+.lead,
+.notice,
+.status,
+.or {
+  margin: 0;
+  max-width: 36ch;
+  overflow-wrap: anywhere;
+}
+
+.lead {
+  color: var(--ink);
+}
+
+.or {
+  color: var(--muted);
+}
+
+.notice {
+  color: var(--alert);
+  margin-bottom: 0.85rem;
+}
+
+.status {
+  margin-bottom: 0.85rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+label {
+  font-weight: 700;
+}
+
+input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--stamp);
+  border-radius: 0;
+  background: var(--card);
+  color: var(--ink);
+}
+
+.primary,
+.secondary {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.primary {
+  border: 1px solid var(--stamp);
+  background: var(--stamp);
+  color: var(--card);
+  font-weight: 700;
+}
+
+.secondary {
+  border: 1px solid var(--stamp);
+  background: transparent;
+  color: var(--stamp);
+  font-weight: 700;
+}
+
+.primary:disabled,
+.secondary:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.down-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(23, 33, 43, 0.55);
+}
+
+.down-panel {
+  box-sizing: border-box;
+  width: min(100%, 22rem);
+  max-width: 100%;
+  padding: 1.5rem 1.25rem;
+  border-left: 8px solid var(--stamp);
+  background: var(--card);
+}
+
+.down-panel p {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
