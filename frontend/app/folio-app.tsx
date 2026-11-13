@@ -809,29 +809,6 @@ export function FolioApp() {
           ) : null}
           {named && displayName !== null ? (
             <div className="desk">
-              <header className="desk-head">
-                <div className="panel-head">
-                  <div className="mark" aria-hidden="true">
-                    <Mark />
-                  </div>
-                  <div>
-                    <p className="kicker">Folio</p>
-                    <h1>{displayName}</h1>
-                  </div>
-                </div>
-                <div className="desk-account">
-                  {accountEmail ? <p className="mail">{accountEmail}</p> : null}
-                  <button
-                    type="button"
-                    className="quiet"
-                    onClick={() => void onSignOut()}
-                    disabled={pending}
-                  >
-                    <ArrowRightStartOnRectangleIcon aria-hidden="true" />
-                    Sign out
-                  </button>
-                </div>
-              </header>
               {notice ? (
                 <p role="alert" className="notice">
                   {notice}
@@ -841,6 +818,12 @@ export function FolioApp() {
               {threadsLoaded ? (
                 <div className={openThread ? "desk-body" : "desk-body idle"}>
                   <div className="threads">
+                    <div className="rail-brand">
+                      <div className="mark" aria-hidden="true">
+                        <Mark />
+                      </div>
+                      <p className="kicker">Folio</p>
+                    </div>
                     <button
                       type="button"
                       className="new-thread"
@@ -866,10 +849,34 @@ export function FolioApp() {
                         ))}
                       </ul>
                     ) : null}
+                    <div className="desk-account">
+                      <p className="account-name">{displayName}</p>
+                      {accountEmail ? <p className="mail">{accountEmail}</p> : null}
+                      <button
+                        type="button"
+                        className="quiet"
+                        onClick={() => void onSignOut()}
+                        disabled={pending}
+                      >
+                        <ArrowRightStartOnRectangleIcon aria-hidden="true" />
+                        Sign out
+                      </button>
+                    </div>
                   </div>
                   {openThread ? (
-                    <section className="thread" aria-label={openThread.name}>
-                      <h2 className="thread-name">{openThread.name}</h2>
+                    <section
+                      className={messages.length === 0 ? "thread thread-empty" : "thread"}
+                      aria-label={openThread.name}
+                    >
+                      {messages.length === 0 ? (
+                        <div className="welcome">
+                          <p className="welcome-hello">Hello, {displayName}</p>
+                          <h1>How can I assist you today?</h1>
+                        </div>
+                      ) : (
+                        <h2 className="thread-name">{openThread.name}</h2>
+                      )}
+                      {messages.length === 0 ? null : (
                       <div className="messages" ref={messagePane} tabIndex={0} aria-label="Messages">
                         {messages.map((message) =>
                           message.kind === "failure" ? (
@@ -902,11 +909,12 @@ export function FolioApp() {
                           ),
                         )}
                       </div>
+                      )}
                       <form className="composer" onSubmit={(event) => void sendDraft(event)}>
                         <textarea
                           rows={2}
                           value={draft}
-                          placeholder="Message"
+                          placeholder="Ask me anything..."
                           aria-label="Message"
                           autoComplete="off"
                           disabled={pending}
