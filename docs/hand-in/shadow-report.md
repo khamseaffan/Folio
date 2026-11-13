@@ -19,8 +19,8 @@ Folio is a private assistant for one person.
 
 **Model**
 
-- One model, `gemini-4-argon`. Thinking level is medium. I pay for it.
-- You do not pick another model, and you do not paste in a key.
+- I select the provider and the model in settings. The starting model is `gemini-4-argon`. I pay for it.
+- You do not pick another model, and you do not paste in a key. The tools, the memory, and the loop stay the same when I change the model.
 
 **Who can join**
 
@@ -95,9 +95,9 @@ You use a website. Longer work runs in the background.
 
 - A short chat is answered on the API request.
 - Research and a scheduled run go on a queue. A worker picks them up.
-- The worker calls Gemini, reads public pages, and can drive Chrome.
+- The worker calls the selected model, reads public pages, and can drive Chrome.
 - Google Drive is the first integration. It is one file you pick. Folio keeps a private copy from that moment. A later integration is another row, with its own secret and tools.
-- If Gemini is down, the job tries again three times, then stops. You see one line in the thread. I can inspect the failed job.
+- If that provider is down, the job tries again three times, then stops. You see one line in the thread. I can inspect the failed job.
 
 **Why**
 

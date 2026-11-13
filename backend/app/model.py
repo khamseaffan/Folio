@@ -157,8 +157,6 @@ class FakeModel:
 
 
 def open_model() -> Model:
-    if _api_key() is None:
-        return FakeModel(reply="Noted.")
-    from app.gemini import build_gemini
+    from app.brain import open_brain
 
-    return build_gemini()
+    return open_brain()
