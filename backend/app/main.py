@@ -8,12 +8,13 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.account import ensure_account, load_account, set_display_name
 from app.db import connect, database_ready
+from app.live import stop_reply
 from app.message import MessageRow, list_messages
 from app.model import open_model
 from app.session import end_session, open_session, start_session
 from app.sign_in_proof import NOT_ALLOWED, NOT_PROVEN, SignInError, verify_allowed_sign_in
 from app.thread import ThreadRow, create_thread, get_thread, list_threads
-from app.turn import NO_FAILURE, start_reply, start_retry, stop_reply
+from app.turn import NO_FAILURE, start_reply, start_retry
 
 app = FastAPI()
 

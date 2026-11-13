@@ -18,19 +18,60 @@ def apply(connection: psycopg.Connection) -> None:
     connection.execute(_MIGRATION.read_text())
 
 
-def create_thread(connection: psycopg.Connection, account_id: uuid.UUID) -> ThreadRow:
+def create_thread(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    name: str | None = None,
+) -> ThreadRow:
     apply(connection)
     created = connection.execute(
         """
-        INSERT INTO thread (account_id)
-        VALUES (%s)
+        INSERT INTO thread (account_id, name)
+        VALUES (%s, COALESCE(%s, 'New thread'))
         RETURNING id, account_id, name, summary, created_at
         """,
-        (account_id,),
+        (account_id, name),
     ).fetchone()
     if created is None:
         raise RuntimeError("thread was not stored")
     return created
+
+
+def rename_thread(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    name: str,
+) -> ThreadRow | None:
+    apply(connection)
+    return connection.execute(
+        """
+        UPDATE thread
+        SET name = %s
+        WHERE id = %s
+          AND account_id = %s
+        RETURNING id, account_id, name, summary, created_at
+        """,
+        (name, thread_id, account_id),
+    ).fetchone()
+
+
+def delete_thread(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+) -> bool:
+    apply(connection)
+    deleted = connection.execute(
+        """
+        DELETE FROM thread
+        WHERE id = %s
+          AND account_id = %s
+        RETURNING id
+        """,
+        (thread_id, account_id),
+    ).fetchone()
+    return deleted is not None
 
 
 def list_threads(connection: psycopg.Connection, account_id: uuid.UUID) -> list[ThreadRow]:

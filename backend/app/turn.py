@@ -1,13 +1,12 @@
-import asyncio
-import json
 import threading
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import psycopg
 
 from app.db import connect
+from app.live import LiveReply, register, unregister
 from app.loop import ask, stream_turn
 from app.message import (
     MessageRow,
@@ -234,79 +233,6 @@ class _Retry:
     prepared: _Prepared
     failure_id: uuid.UUID
     partial_id: uuid.UUID | None
-
-
-class LiveReply:
-    def __init__(self) -> None:
-        self.stop = threading.Event()
-        self._loop = asyncio.get_running_loop()
-        self._queue: asyncio.Queue[str | None] = asyncio.Queue()
-        self._listening = True
-        self._lock = threading.Lock()
-
-    def publish(self, payload: dict[str, object]) -> None:
-        self._put("data: " + json.dumps(payload) + "\n\n")
-
-    def finish(self) -> None:
-        self._put(None)
-
-    def _put(self, item: str | None) -> None:
-        with self._lock:
-            if not self._listening:
-                return
-            loop = self._loop
-            queue = self._queue
-        if loop.is_closed():
-            return
-        try:
-            loop.call_soon_threadsafe(queue.put_nowait, item)
-        except RuntimeError:
-            return
-
-    def _detach(self) -> None:
-        # Closing the response is not a stop. end_session does not call this.
-        with self._lock:
-            self._listening = False
-
-    async def events(self) -> AsyncIterator[str]:
-        try:
-            while True:
-                try:
-                    item = await asyncio.wait_for(self._queue.get(), 0.25)
-                except TimeoutError:
-                    continue
-                if item is None:
-                    return
-                yield item
-        finally:
-            self._detach()
-
-
-_live_lock = threading.Lock()
-_live: dict[tuple[uuid.UUID, uuid.UUID], list[LiveReply]] = {}
-
-
-def _register(account_id: uuid.UUID, thread_id: uuid.UUID, live: LiveReply) -> None:
-    with _live_lock:
-        _live.setdefault((account_id, thread_id), []).append(live)
-
-
-def _unregister(account_id: uuid.UUID, thread_id: uuid.UUID, live: LiveReply) -> None:
-    with _live_lock:
-        rows = _live.get((account_id, thread_id))
-        if rows is None:
-            return
-        if live in rows:
-            rows.remove(live)
-        if not rows:
-            del _live[(account_id, thread_id)]
-
-
-def stop_reply(account_id: uuid.UUID, thread_id: uuid.UUID) -> None:
-    with _live_lock:
-        rows = list(_live.get((account_id, thread_id), ()))
-    for live in rows:
-        live.stop.set()
 
 
 def _open_turn(
@@ -714,7 +640,7 @@ def _write_reply(
     else:
         live.publish({"done": True})
     live.finish()
-    _unregister(prepared.account_id, prepared.thread_id, live)
+    unregister(prepared.account_id, prepared.thread_id, live)
 
 
 def _start(
@@ -726,7 +652,7 @@ def _start(
     # The reply thread can emit a chunk before this request transaction closes.
     connection.commit()
     live = LiveReply()
-    _register(prepared.account_id, prepared.thread_id, live)
+    register(prepared.account_id, prepared.thread_id, live)
     try:
         threading.Thread(
             target=_write_reply,
@@ -734,7 +660,7 @@ def _start(
             name="folio-reply",
         ).start()
     except Exception:
-        _unregister(prepared.account_id, prepared.thread_id, live)
+        unregister(prepared.account_id, prepared.thread_id, live)
         raise
     return live
 
