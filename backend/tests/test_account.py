@@ -146,6 +146,8 @@ def test_existing_email_limit_is_kept():
 def test_session_table_is_not_created():
     email = "No.Session@Example.com"
     _remove(email)
+    with connect() as connection:
+        connection.execute("DROP TABLE IF EXISTS public.session")
     try:
         ensure_account("uid-session", email)
         with connect() as connection:
