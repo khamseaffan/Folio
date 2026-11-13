@@ -1,19 +1,26 @@
 import os
 import uuid
 
+import psycopg
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.account import ensure_account, load_account, set_display_name
-from app.db import database_ready
+from app.db import connect, database_ready
+from app.message import MessageRow, list_messages
+from app.model import open_model
 from app.session import end_session, open_session, start_session
 from app.sign_in_proof import NOT_ALLOWED, NOT_PROVEN, SignInError, verify_allowed_sign_in
+from app.thread import ThreadRow, create_thread, get_thread, list_threads
+from app.turn import run_turn
 
 app = FastAPI()
 
 _CONTINUE = "Sign in to continue."
 _NAME = "Enter a name, up to 40 characters."
+_NOT_FOUND = "Not found"
+_MESSAGE = "Enter a message."
 _LOCAL_ORIGIN = "http://localhost:3000"
 
 
@@ -205,3 +212,163 @@ async def post_display_name(request: Request) -> Response:
         return _error(401, _CONTINUE)
     email, stored_name = saved
     return JSONResponse(content={"email": email, "display_name": stored_name})
+
+
+def _open_account(request: Request) -> tuple[uuid.UUID, uuid.UUID] | JSONResponse:
+    session_id = _session_id(request)
+    if session_id is None:
+        return _error(401, _CONTINUE)
+    try:
+        account_id = open_session(session_id)
+    except Exception:
+        return _down()
+    if account_id is None:
+        return _error(401, _CONTINUE)
+    return session_id, account_id
+
+
+def _parse_thread_id(raw: str) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(raw)
+    except ValueError:
+        return None
+
+
+async def _message_text(request: Request) -> str | None:
+    try:
+        body = await request.json()
+    except Exception:
+        return None
+    if not isinstance(body, dict):
+        return None
+    text = body.get("text")
+    if not isinstance(text, str):
+        return None
+    return text
+
+
+def _thread_item(row: ThreadRow) -> dict[str, str]:
+    return {
+        "id": str(row[0]),
+        "name": row[2],
+        "created_at": row[4].isoformat(),
+    }
+
+
+def _message_item(row: MessageRow) -> dict[str, str]:
+    return {
+        "id": str(row[0]),
+        "role": row[4],
+        "kind": row[5],
+        "body": row[6],
+        "created_at": row[7].isoformat(),
+    }
+
+
+def _thread_view(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+) -> dict[str, object] | None:
+    thread = get_thread(connection, account_id, thread_id)
+    if thread is None:
+        return None
+    messages = list_messages(connection, account_id, thread_id)
+    if messages is None:
+        return None
+    item = _thread_item(thread)
+    return {
+        "id": item["id"],
+        "name": item["name"],
+        "created_at": item["created_at"],
+        "messages": [_message_item(message) for message in messages],
+    }
+
+
+@app.get("/threads")
+def get_threads(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        with connect() as connection:
+            rows = list_threads(connection, account_id)
+    except Exception:
+        return _down()
+    return JSONResponse(content=[_thread_item(row) for row in rows])
+
+
+@app.post("/threads")
+def post_thread(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        with connect() as connection:
+            created = create_thread(connection, account_id)
+    except Exception:
+        return _down()
+    return JSONResponse(content=_thread_item(created))
+
+
+@app.get("/threads/{thread_id}")
+def read_thread(request: Request, thread_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    parsed = _parse_thread_id(thread_id)
+    if parsed is None:
+        return _error(404, _NOT_FOUND)
+    try:
+        with connect() as connection:
+            view = _thread_view(connection, account_id, parsed)
+    except Exception:
+        return _down()
+    if view is None:
+        return _error(404, _NOT_FOUND)
+    return JSONResponse(content=view)
+
+
+@app.post("/threads/{thread_id}/messages")
+async def post_message(request: Request, thread_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    session_id, account_id = opened
+    parsed = _parse_thread_id(thread_id)
+    if parsed is None:
+        return _error(404, _NOT_FOUND)
+    text = await _message_text(request)
+    if text is None:
+        return _error(400, _MESSAGE)
+    try:
+        with connect() as connection:
+            result = run_turn(
+                connection,
+                session_id,
+                account_id,
+                parsed,
+                text,
+                open_model(),
+            )
+            if isinstance(result, str):
+                refusal = result
+                view = None
+            elif result is None:
+                refusal = None
+                view = None
+            else:
+                refusal = None
+                view = _thread_view(connection, account_id, parsed)
+                if view is None:
+                    raise RuntimeError("thread is missing")
+    except Exception:
+        return _down()
+    if refusal is not None:
+        return _error(403, refusal)
+    if view is None:
+        return _error(404, _NOT_FOUND)
+    return JSONResponse(content=view)
