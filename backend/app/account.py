@@ -38,3 +38,18 @@ def ensure_account(firebase_uid: str, email: str) -> uuid.UUID:
                 raise RuntimeError("account was not stored")
             account_id = created[0]
     return account_id
+
+
+def load_account(account_id: uuid.UUID) -> tuple[str, str | None]:
+    with connect() as connection:
+        row = connection.execute(
+            """
+            SELECT email, display_name
+            FROM account
+            WHERE id = %s
+            """,
+            (account_id,),
+        ).fetchone()
+    if row is None:
+        raise RuntimeError("account is missing")
+    return row[0], row[1]
