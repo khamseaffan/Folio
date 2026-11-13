@@ -3,6 +3,7 @@
 import { PencilSquareIcon, PlusIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { Thread } from "../lib/api";
+import { ConfirmDialog } from "./confirm-dialog";
 
 type Props = {
   threads: Thread[];
@@ -32,8 +33,6 @@ export function ThreadList({
   const [deleting, setDeleting] = useState(false);
   const listRef = useRef<HTMLUListElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const deleteRef = useRef<HTMLButtonElement>(null);
   // Enter and Escape unmount the field, which fires a blur that must not save a second time.
   const finished = useRef(false);
   // Which row is being renamed right now, readable after an await.
@@ -44,10 +43,6 @@ export function ThreadList({
     inputRef.current?.focus();
     inputRef.current?.select();
   }, [renamingId]);
-
-  useEffect(() => {
-    if (confirmId !== null) cancelRef.current?.focus();
-  }, [confirmId]);
 
   function focusAction(id: string, action: "rename" | "delete") {
     requestAnimationFrame(() => {
@@ -134,25 +129,6 @@ export function ThreadList({
     setDeleteError(refused);
   }
 
-  function onDialogKey(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      if (!deleting) closeConfirm();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const first = cancelRef.current;
-    const last = deleteRef.current;
-    if (first === null || last === null) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
-
   return (
     <>
       <button type="button" className="new-thread" onClick={onCreate} disabled={disabled}>
@@ -223,44 +199,15 @@ export function ThreadList({
         </ul>
       ) : null}
       {confirmId !== null ? (
-        <div className="down-layer">
-          <div
-            className="confirm-panel"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-title"
-            aria-describedby="delete-body"
-            onKeyDown={onDialogKey}
-          >
-            <h2 id="delete-title">Delete this thread?</h2>
-            <p id="delete-body">Its messages and schedules are deleted. This cannot be undone.</p>
-            {deleteError ? (
-              <p role="alert" className="rename-error">
-                {deleteError}
-              </p>
-            ) : null}
-            <div className="confirm-actions">
-              <button
-                ref={cancelRef}
-                type="button"
-                className="confirm-cancel"
-                onClick={closeConfirm}
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button
-                ref={deleteRef}
-                type="button"
-                className="confirm-delete"
-                onClick={() => void confirmDelete()}
-                disabled={deleting}
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Delete this thread?"
+          body="Its messages and schedules are deleted. This cannot be undone."
+          confirmLabel="Delete"
+          error={deleteError}
+          busy={deleting}
+          onCancel={closeConfirm}
+          onConfirm={() => void confirmDelete()}
+        />
       ) : null}
     </>
   );

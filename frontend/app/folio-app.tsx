@@ -5,6 +5,7 @@ import {
   ArrowRightStartOnRectangleIcon,
   BookOpenIcon,
   ClockIcon,
+  Cog6ToothIcon,
   DocumentTextIcon,
   EnvelopeIcon,
   MagnifyingGlassIcon,
@@ -43,6 +44,7 @@ import {
   signInWithGoogle,
   signOutFirebase,
 } from "../lib/firebase-auth";
+import { Settings } from "./settings";
 import { ThreadList } from "./thread-list";
 
 function GoogleMark() {
@@ -267,6 +269,7 @@ export function FolioApp() {
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [working, setWorking] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const linkHref = useRef<string | null>(null);
   const streamAbort = useRef<AbortController | null>(null);
   const stopping = useRef(false);
@@ -301,8 +304,16 @@ export function FolioApp() {
     setDraft("");
     setThreadsLoaded(false);
     setPending(false);
+    setSettingsOpen(false);
     setView("signed-out");
   }, []);
+
+  const settingsSignedOut = useCallback(
+    (message: string | null) => void endSession(message, () => true),
+    [endSession],
+  );
+  const settingsDown = useCallback(() => setDown(true), []);
+  const named = view === "ready" && displayName !== null && displayName !== "";
 
   useEffect(() => {
     let cancelled = false;
@@ -320,7 +331,8 @@ export function FolioApp() {
   }, [down]);
 
   useEffect(() => {
-    if (view !== "ready" || displayName === null || displayName === "") return;
+    // Keyed on whether a name exists, so saving a new name in settings does not reload the threads.
+    if (!named) return;
     const generation = ++requestGeneration.current;
     let active = true;
     void (async () => {
@@ -380,7 +392,7 @@ export function FolioApp() {
     return () => {
       active = false;
     };
-  }, [view, displayName, endSession]);
+  }, [named, endSession]);
 
   useEffect(() => {
     const pane = messagePane.current;
@@ -796,7 +808,6 @@ export function FolioApp() {
   }
 
   const signedIn = view === "ask-name" || view === "ready";
-  const named = view === "ready" && displayName !== null && displayName !== "";
   const landing = view === "signed-out" || view === "link-email";
   const visibleThreads = threadsNewestFirst(threads);
   const openThread = visibleThreads.find((thread) => thread.id === openId) ?? null;
@@ -835,7 +846,7 @@ export function FolioApp() {
               ) : null}
               {!threadsLoaded ? <p className="hint">One moment.</p> : null}
               {threadsLoaded ? (
-                <div className={openThread ? "desk-body" : "desk-body idle"}>
+                <div className={openThread || settingsOpen ? "desk-body" : "desk-body idle"}>
                   <div className="threads">
                     <div className="rail-brand">
                       <div className="mark" aria-hidden="true">
@@ -847,14 +858,24 @@ export function FolioApp() {
                       threads={visibleThreads}
                       openId={openId}
                       disabled={pending}
-                      onOpen={(id) => void onOpenThread(id)}
-                      onCreate={() => void onNewThread()}
+                      onOpen={(id) => {
+                        setSettingsOpen(false);
+                        void onOpenThread(id);
+                      }}
+                      onCreate={() => {
+                        setSettingsOpen(false);
+                        void onNewThread();
+                      }}
                       onRename={onRenameThread}
                       onDelete={onDeleteThread}
                     />
                     <div className="desk-account">
                       <p className="account-name">{displayName}</p>
                       {accountEmail ? <p className="mail">{accountEmail}</p> : null}
+                      <button type="button" className="quiet" onClick={() => setSettingsOpen(true)}>
+                        <Cog6ToothIcon aria-hidden="true" />
+                        Settings
+                      </button>
                       <button
                         type="button"
                         className="quiet"
@@ -866,7 +887,18 @@ export function FolioApp() {
                       </button>
                     </div>
                   </div>
-                  {openThread ? (
+                  {settingsOpen ? (
+                    <Settings
+                      account={{ email: accountEmail ?? "", display_name: displayName }}
+                      onClose={() => setSettingsOpen(false)}
+                      onAccountChange={(account) => {
+                        setDisplayName(account.display_name);
+                        setAccountEmail(account.email);
+                      }}
+                      onSignedOut={settingsSignedOut}
+                      onDown={settingsDown}
+                    />
+                  ) : openThread ? (
                     <section
                       className={messages.length === 0 ? "thread thread-empty" : "thread"}
                       aria-label={openThread.name}

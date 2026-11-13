@@ -420,6 +420,82 @@ export async function postStop(id: string): Promise<ApiResult<true>> {
   return threadCall(result, () => true);
 }
 
+export type SessionItem = {
+  id: string;
+  created_at: string;
+  last_active_at: string;
+  current: boolean;
+};
+
+export type TokenTotals = {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+};
+
+function sessionFrom(body: unknown): SessionItem | null {
+  if (!isRecord(body)) return null;
+  const id = textField(body, "id");
+  const createdAt = textField(body, "created_at");
+  const lastActiveAt = textField(body, "last_active_at");
+  const current = body.current;
+  if (id === null || id === "" || createdAt === null || lastActiveAt === null) return null;
+  if (typeof current !== "boolean") return null;
+  return { id, created_at: createdAt, last_active_at: lastActiveAt, current };
+}
+
+function sessionListFrom(body: unknown): SessionItem[] | null {
+  if (!Array.isArray(body)) return null;
+  const sessions: SessionItem[] = [];
+  for (const item of body) {
+    const session = sessionFrom(item);
+    if (session === null) return null;
+    sessions.push(session);
+  }
+  return sessions;
+}
+
+function countField(body: Record<string, unknown>, key: string): number | null {
+  const value = body[key];
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return value;
+}
+
+function usageFrom(body: unknown): TokenTotals | null {
+  if (!isRecord(body)) return null;
+  const input = countField(body, "input_tokens");
+  const output = countField(body, "output_tokens");
+  const total = countField(body, "total_tokens");
+  if (input === null || output === null || total === null) return null;
+  return { input_tokens: input, output_tokens: output, total_tokens: total };
+}
+
+export async function listSessions(): Promise<ApiResult<SessionItem[]>> {
+  const result = await call("/sessions", "GET");
+  if ("kind" in result) return result;
+  return classify(result, sessionListFrom);
+}
+
+export async function endSession(id: string): Promise<ApiResult<true>> {
+  const result = await call(`/sessions/${encodeURIComponent(id)}/end`, "POST");
+  if ("kind" in result) return result;
+  if (result.status === 204) return { kind: "value", value: true };
+  return classify(result, () => true);
+}
+
+export async function getUsage(): Promise<ApiResult<TokenTotals>> {
+  const result = await call("/usage", "GET");
+  if ("kind" in result) return result;
+  return classify(result, usageFrom);
+}
+
+export async function deleteAccount(): Promise<ApiResult<true>> {
+  const result = await call("/account", "DELETE");
+  if ("kind" in result) return result;
+  if (result.status === 204) return { kind: "value", value: true };
+  return classify(result, () => true);
+}
+
 export async function postSignOut(): Promise<ApiResult<true>> {
   const result = await call("/sign-out", "POST");
   if ("kind" in result) return result;
