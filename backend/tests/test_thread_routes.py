@@ -4,12 +4,15 @@ import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import psycopg
 import pytest
 from app.account import ensure_account
 from app.db import connect
+from app.loop import ROUNDS_REACHED
 from app.main import app
 from app.message import insert_message
-from app.model import CONTEXT_TOKENS, Block, Reply
+from app.model import CONTEXT_TOKENS, Block, Reply, ToolCall
+from app.model import FakeModel as ScriptedModel
 from app.session import apply as apply_session
 from app.session import end_session
 from app.sign_in_proof import VerifiedSignIn
@@ -1647,5 +1650,195 @@ def test_retry_on_a_long_thread_writes_the_summary_before_the_reply(
         assert summary_row == ("chat", "openai", "gpt-6.1-sol", 7, 8, 15, None, None)
         assert reply_row == ("chat", "openai", "gpt-6.1-sol", 5, 6, 11, reply_id, None)
         assert all(row[1] != "failure" for row in _stored_messages(thread_id))
+    finally:
+        _remove(email)
+
+
+def _tool(name: str, arguments: dict[str, object], call_id: str = "c1") -> Reply:
+    return Reply("", 5, 1, 6, (ToolCall(call_id, name, arguments),))
+
+
+def _thread_name(client: TestClient, thread_id: str) -> str:
+    loaded = client.get(f"/threads/{thread_id}")
+    assert loaded.status_code == 200
+    return str(loaded.json()["name"])
+
+
+def test_agent_renames_the_thread_it_is_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Rename")
+    _remove(email)
+    model = ScriptedModel(
+        script=(_tool("rename_thread", {"name": "Taxes"}), Reply("Renamed.", 7, 2, 9))
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "call it Taxes"})
+        assert _events(posted.text) == [
+            {"tool": "rename_thread"},
+            {"text": "Renamed."},
+            {"done": True},
+        ]
+        assert _thread_name(client, thread_id) == "Taxes"
+        assert _stored_messages(thread_id) == [
+            ("person", "chat", "call it Taxes"),
+            ("assistant", "chat", "Renamed."),
+        ]
+        assistant = _assistant_id(thread_id)
+        usage = sorted(_usage_rows(email), key=lambda row: row[5])
+        assert [row[3:] for row in usage] == [(5, 1, 6, assistant), (7, 2, 9, assistant)]
+        assert {spec.name for spec in model.seen[0][1]} >= {"rename_thread", "delete_thread"}
+        second = model.seen[1][0]
+        assert second[-2].role == "assistant"
+        assert second[-2].tool_calls[0].name == "rename_thread"
+        assert second[-1].role == "tool"
+        assert second[-1].call_id == "c1"
+        assert json.loads(second[-1].text)["ok"] is True
+    finally:
+        _remove(email)
+
+
+def test_unknown_tool_and_bad_arguments_continue_the_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("BadTool")
+    _remove(email)
+    model = ScriptedModel(
+        script=(
+            _tool("drop_tables", {}, "c1"),
+            _tool("rename_thread", {"name": ""}, "c2"),
+            Reply("Sorry.", 1, 1, 2),
+        )
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert _events(posted.text)[-1] == {"done": True}
+        assert json.loads(model.seen[1][0][-1].text)["code"] == "unknown"
+        assert json.loads(model.seen[2][0][-1].text)["code"] == "invalid"
+        assert _thread_name(client, thread_id) == "New thread"
+        assert _stored_messages(thread_id)[-1] == ("assistant", "chat", "Sorry.")
+    finally:
+        _remove(email)
+
+
+def test_turn_stops_after_eight_tool_rounds(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Rounds")
+    _remove(email)
+    model = ScriptedModel(
+        reply="never",
+        script=tuple(_tool("list_threads", {}, f"c{index}") for index in range(9)),
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "loop"})
+        events = _events(posted.text)
+        assert events.count({"tool": "list_threads"}) == 8
+        assert events[-2:] == [{"text": ROUNDS_REACHED}, {"done": True}]
+        assert ROUNDS_REACHED == "I stopped after 8 tool steps."
+        assert _stored_messages(thread_id)[-1] == ("assistant", "chat", ROUNDS_REACHED)
+        assert len(model.seen) == 9
+        assert _usage_count(email) == 9
+    finally:
+        _remove(email)
+
+
+def test_agent_deletes_its_own_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("SelfDelete")
+    _remove(email)
+    model = ScriptedModel(script=(_tool("delete_thread", {}), Reply("Deleted.", 1, 1, 2)))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "delete this"})
+        assert _events(posted.text)[-1] == {"done": True}
+        assert client.get(f"/threads/{thread_id}").status_code == 404
+        assert _message_count(thread_id) == 0
+        usage = _usage_rows(email)
+        assert len(usage) >= 1
+        assert all(row[6] is None for row in usage)
+        assert (5, 1, 6) in [row[3:6] for row in usage]
+    finally:
+        _remove(email)
+
+
+class _HeldToolModel:
+    def __init__(self, hold: threading.Event, arrived: threading.Event) -> None:
+        self._hold = hold
+        self._arrived = arrived
+        self.calls = 0
+
+    def count_tokens(self, prompt: str, blocks: list[Block]) -> int:
+        return 1
+
+    def complete(self, prompt: str, blocks: list[Block], tools=()) -> Reply:
+        return Reply("", None, None, None)
+
+    def stream(self, prompt: str, blocks: list[Block], tools=()):
+        self.calls += 1
+        outer = self
+
+        class _Held:
+            def __iter__(self):
+                outer._arrived.set()
+                outer._hold.wait()
+                return iter(())
+
+            def reply(self) -> Reply:
+                return _tool("rename_thread", {"name": "Too late"})
+
+        return _Held()
+
+
+def test_no_tool_runs_after_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("StopTool")
+    _remove(email)
+    release = threading.Event()
+    arrived = threading.Event()
+    model = _HeldToolModel(release, arrived)
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        with client.stream(
+            "POST",
+            f"/threads/{thread_id}/messages",
+            json={"text": "rename"},
+        ) as response:
+            assert arrived.wait(2)
+            assert client.post(f"/threads/{thread_id}/stop").status_code == 204
+            release.set()
+            assert _next_event(response.iter_lines()) == {"done": True}
+        assert _thread_name(client, thread_id) == "New thread"
+        assert model.calls == 1
+    finally:
+        release.set()
+        _remove(email)
+
+
+def test_database_failure_inside_a_tool_fails_the_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("ToolDown")
+    _remove(email)
+    model = ScriptedModel(script=(_tool("list_threads", {}), Reply("unreached", 1, 1, 2)))
+
+    def broken(*args: object, **kwargs: object) -> dict[str, object]:
+        raise psycopg.OperationalError(CAUSE)
+
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        monkeypatch.setattr("app.operations.call", broken)
+        started = time.monotonic()
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert time.monotonic() - started < 5
+        assert _events(posted.text)[-1] == {"failed": True}
+        assert CAUSE not in posted.text
+        assert _stored_messages(thread_id) == [
+            ("person", "chat", "hello"),
+            ("assistant", "failure", FAILED),
+        ]
+        assert [row[3:] for row in _usage_rows(email)] == [(5, 1, 6, None)]
+        assert len(model.seen) == 1
     finally:
         _remove(email)
