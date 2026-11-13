@@ -8,7 +8,7 @@ from app.account import ensure_account
 from app.db import connect
 from app.message import insert_message
 from app.thread import create_thread
-from app.usage import apply, record_usage, tokens_for_email
+from app.usage import apply, record_usage, token_totals_for_email, tokens_for_email
 
 PROVIDER = "openai"
 MODEL = "gpt-6.1-sol"
@@ -334,6 +334,17 @@ def test_tokens_for_email_sums_only_complete_totals(account) -> None:
         )
         assert tokens_for_email(connection, email.upper()) == 15
         assert tokens_for_email(connection, f"none-{uuid.uuid4()}@example.com") == 0
+
+
+def test_token_totals_for_email_sums_each_count_and_skips_missing(account) -> None:
+    account_id, email = account
+    with connect() as connection:
+        record_usage(connection, account_id, email, "chat", PROVIDER, MODEL, 3, 4, 7)
+        record_usage(connection, account_id, email, "chat", PROVIDER, MODEL, 1, 1, 2)
+        record_usage(connection, account_id, email, "chat", PROVIDER, MODEL, None, 9, 99)
+        assert token_totals_for_email(connection, email.upper()) == (4, 5, 9)
+        none = f"none-{uuid.uuid4()}@example.com"
+        assert token_totals_for_email(connection, none) == (0, 0, 0)
 
 
 def test_apply_is_idempotent() -> None:

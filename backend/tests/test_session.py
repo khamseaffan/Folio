@@ -3,7 +3,13 @@ import uuid
 import pytest
 from app.account import ensure_account
 from app.db import connect
-from app.session import end_session, open_session, start_session
+from app.session import (
+    end_account_session,
+    end_session,
+    list_open_sessions,
+    open_session,
+    start_session,
+)
 
 
 @pytest.fixture
@@ -140,3 +146,40 @@ def test_end_session_sets_ended_at_once(stored_account) -> None:
     assert second is not None
     assert first[0] is not None
     assert second[0] == first[0]
+
+
+def test_list_open_sessions_skips_ended_and_idle_oldest_first(stored_account) -> None:
+    account_id, _email = stored_account
+    first = start_session(account_id)
+    second = start_session(account_id)
+    listed = list_open_sessions(account_id)
+    assert [row[0] for row in listed] == [first, second]
+    assert listed[0][1] <= listed[1][1]
+    with connect() as connection:
+        connection.execute(
+            "UPDATE session SET last_active_at = now() - interval '31 minutes' WHERE id = %s",
+            (first,),
+        )
+    assert [row[0] for row in list_open_sessions(account_id)] == [second]
+    end_session(second)
+    assert list_open_sessions(account_id) == []
+
+
+def test_end_account_session_only_ends_an_open_session_of_that_account(
+    stored_account,
+) -> None:
+    account_id, _email = stored_account
+    other_email = f"session-other-{uuid.uuid4()}@example.com"
+    other_id = ensure_account(str(uuid.uuid4()), other_email)
+    try:
+        mine = start_session(account_id)
+        theirs = start_session(other_id)
+        assert end_account_session(account_id, theirs) is False
+        assert open_session(theirs) == other_id
+        assert end_account_session(account_id, mine) is True
+        assert end_account_session(account_id, mine) is False
+        assert open_session(mine) is None
+    finally:
+        with connect() as connection:
+            connection.execute("DELETE FROM account WHERE id = %s", (other_id,))
+            connection.execute("DELETE FROM email_limit WHERE email = %s", (other_email,))

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 import psycopg
@@ -127,3 +128,36 @@ def set_last_active_at(
         """,
         (session_id, account_id),
     )
+
+
+def list_open_sessions(account_id: uuid.UUID) -> list[tuple[uuid.UUID, datetime, datetime]]:
+    with connect() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, created_at, last_active_at
+            FROM session
+            WHERE account_id = %s
+              AND ended_at IS NULL
+              AND last_active_at > now() - interval '30 minutes'
+            ORDER BY created_at ASC
+            """,
+            (account_id,),
+        ).fetchall()
+    return [(row[0], row[1], row[2]) for row in rows]
+
+
+def end_account_session(account_id: uuid.UUID, session_id: uuid.UUID) -> bool:
+    with connect() as connection:
+        ended = connection.execute(
+            """
+            UPDATE session
+            SET ended_at = now()
+            WHERE id = %s
+              AND account_id = %s
+              AND ended_at IS NULL
+              AND last_active_at > now() - interval '30 minutes'
+            RETURNING id
+            """,
+            (session_id, account_id),
+        ).fetchone()
+    return ended is not None
