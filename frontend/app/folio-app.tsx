@@ -479,6 +479,7 @@ export function FolioApp() {
         }
         clearLink();
         linkHref.current = null;
+        setProfileOpen(false);
         setView("signed-out");
         if (finished.kind === "cancel") return;
         setNotice(finished.kind === "unavailable" ? UNAVAILABLE : finished.message);
@@ -868,6 +869,7 @@ export function FolioApp() {
     clearLink();
     linkHref.current = null;
     setNotice(null);
+    setProfileOpen(false);
     setView("signed-out");
   }
 

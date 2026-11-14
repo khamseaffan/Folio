@@ -1293,8 +1293,12 @@ h1 {
   }
 
   .profile {
-    flex: 0 0 22rem;
-    width: 22rem;
+    box-sizing: border-box;
+    flex: 0 0 23rem;
+    width: 23rem;
+    margin-left: 0.5rem;
+    padding-left: 1rem;
+    border-left: 1px solid rgba(61, 88, 114, 0.12);
   }
 
   .profile .profile-back {

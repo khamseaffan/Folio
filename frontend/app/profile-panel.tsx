@@ -80,7 +80,7 @@ export function ProfilePanel({ onClose, onSignedOut, onDown, reloadKey }: Props)
     reportedSignedOut.current = false;
     const current = () => generation.current === mine;
     void (async () => {
-      const [listed, abilityList] = await Promise.all([listKnowledge(), listAbilities()]);
+      const abilityList = await listAbilities();
       if (!current()) return;
       if (abilityList.kind === "value") {
         setAbilities(abilityList.value);
@@ -89,44 +89,55 @@ export function ProfilePanel({ onClose, onSignedOut, onDown, reloadKey }: Props)
         setAbilities((previous) => previous ?? []);
         setAbilitiesError(section(abilityList));
       }
-      if (listed.kind !== "value") {
-        setItems((previous) => previous ?? []);
-        setItemsError(section(listed));
-        return;
-      }
-      const ordered = profileFirst(listed.value);
-      setItems(ordered);
-      setItemsError(null);
-      const first = ordered[0];
-      // The shown file stays when it still exists. Otherwise the first one is shown.
-      const keep = ordered.find((item) => item.id === selectedRef.current);
-      const target = keep ?? first;
-      const chosen = choice.current;
-      if (target === undefined) {
-        selectedRef.current = null;
-        setSelectedId(null);
-        setFile(null);
-        setFileError(null);
-        return;
-      }
-      let opened = await getKnowledge(target.id);
-      // A click while this load ran decides what is shown.
-      if (!current() || choice.current !== chosen) return;
-      let shown = target;
-      if (opened.kind === "message" && !opened.unauthorized && first !== undefined && first !== target) {
-        // The file went away between the two calls.
-        shown = first;
-        opened = await getKnowledge(first.id);
+      // The second pass runs only when the file to show was gone, so there is at most one extra list request.
+      for (let pass = 0; pass < 2; pass += 1) {
+        const listed = await listKnowledge();
+        if (!current()) return;
+        if (listed.kind !== "value") {
+          setItems((previous) => previous ?? []);
+          setItemsError(section(listed));
+          return;
+        }
+        const ordered = profileFirst(listed.value);
+        setItems(ordered);
+        setItemsError(null);
+        const first = ordered[0];
+        // The shown file stays when it still exists. Otherwise the first one is shown.
+        const keep = ordered.find((item) => item.id === selectedRef.current);
+        const target = keep ?? first;
+        const chosen = choice.current;
+        if (target === undefined) {
+          selectedRef.current = null;
+          setSelectedId(null);
+          setFile(null);
+          setFileError(null);
+          return;
+        }
+        let opened = await getKnowledge(target.id);
+        // A click while this load ran decides what is shown.
         if (!current() || choice.current !== chosen) return;
-      }
-      selectedRef.current = shown.id;
-      setSelectedId(shown.id);
-      if (opened.kind === "value") {
-        setFile(opened.value);
-        setFileError(null);
-      } else {
-        setFile(null);
-        setFileError(section(opened));
+        let shown = target;
+        const gone = (result: typeof opened) => result.kind === "message" && !result.unauthorized;
+        if (gone(opened) && first !== undefined && first !== target) {
+          shown = first;
+          opened = await getKnowledge(first.id);
+          if (!current() || choice.current !== chosen) return;
+        }
+        if (gone(opened) && pass === 0) {
+          // The first file is gone too, so the list is stale. Read it again once.
+          selectedRef.current = null;
+          continue;
+        }
+        selectedRef.current = shown.id;
+        setSelectedId(shown.id);
+        if (opened.kind === "value") {
+          setFile(opened.value);
+          setFileError(null);
+        } else {
+          setFile(null);
+          setFileError(section(opened));
+        }
+        return;
       }
     })();
     return () => {
