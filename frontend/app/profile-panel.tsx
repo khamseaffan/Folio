@@ -6,11 +6,13 @@ import {
   getKnowledge,
   listAbilities,
   listKnowledge,
+  listSchedules,
   type AbilityItem,
   type ApiDown,
   type ApiMessage,
   type KnowledgeFile,
   type KnowledgeItem,
+  type ScheduleItem,
 } from "../lib/api";
 
 type Props = {
@@ -25,6 +27,7 @@ type Props = {
 const PROFILE_FILE = "profile.md";
 const NO_KNOWLEDGE = "Nothing is stored yet. Tell Folio something about you, and it appears here.";
 const NO_ABILITIES = "No abilities yet.";
+const NO_SCHEDULES = "No schedules yet. Tell Folio when something should happen.";
 
 function whenText(value: string): string {
   const date = new Date(value);
@@ -42,6 +45,8 @@ export function ProfilePanel({ onClose, onSignedOut, onDown, reloadKey }: Props)
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [abilities, setAbilities] = useState<AbilityItem[] | null>(null);
   const [abilitiesError, setAbilitiesError] = useState<string | null>(null);
+  const [schedules, setSchedules] = useState<ScheduleItem[] | null>(null);
+  const [schedulesError, setSchedulesError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [file, setFile] = useState<KnowledgeFile | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
@@ -88,6 +93,15 @@ export function ProfilePanel({ onClose, onSignedOut, onDown, reloadKey }: Props)
       } else {
         setAbilities((previous) => previous ?? []);
         setAbilitiesError(section(abilityList));
+      }
+      const scheduleList = await listSchedules();
+      if (!current()) return;
+      if (scheduleList.kind === "value") {
+        setSchedules(scheduleList.value);
+        setSchedulesError(null);
+      } else {
+        setSchedules((previous) => previous ?? []);
+        setSchedulesError(section(scheduleList));
       }
       // The second pass runs only when the file to show was gone, so there is at most one extra list request.
       for (let pass = 0; pass < 2; pass += 1) {
@@ -232,6 +246,33 @@ export function ProfilePanel({ onClose, onSignedOut, onDown, reloadKey }: Props)
         {abilitiesError ? (
           <p role="alert" className="rename-error">
             {abilitiesError}
+          </p>
+        ) : null}
+      </section>
+
+      <section className="settings-section" aria-labelledby="profile-schedules">
+        <h3 id="profile-schedules">Schedules</h3>
+        {schedules === null ? <p className="settings-note">One moment.</p> : null}
+        {schedules !== null && schedules.length === 0 && schedulesError === null ? (
+          <p className="settings-note">{NO_SCHEDULES}</p>
+        ) : null}
+        {schedules !== null && schedules.length > 0 ? (
+          <ul aria-label="Schedules" className="profile-schedules">
+            {schedules.map((schedule) => (
+              <li key={schedule.id}>
+                <strong>{schedule.task}</strong>
+                <span className="settings-note">{schedule.when_text}</span>
+                <span className="settings-note">
+                  Next: {schedule.next_run_at === null ? "No next time" : whenText(schedule.next_run_at)}
+                </span>
+                <span className="settings-note">In: {schedule.thread_name}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {schedulesError ? (
+          <p role="alert" className="rename-error">
+            {schedulesError}
           </p>
         ) : null}
       </section>

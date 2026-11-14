@@ -7,6 +7,8 @@ export type Thread = {
   id: string;
   name: string;
   created_at: string;
+  // True while a scheduled run is queued or working in this thread.
+  working: boolean;
 };
 
 export type ThreadMessage = {
@@ -195,7 +197,7 @@ function threadFrom(body: unknown): Thread | null {
   const name = textField(body, "name");
   const createdAt = textField(body, "created_at");
   if (id === null || id === "" || name === null || createdAt === null) return null;
-  return { id, name, created_at: createdAt };
+  return { id, name, created_at: createdAt, working: body.working === true };
 }
 
 function messageFrom(body: unknown): ThreadMessage | null {
@@ -387,6 +389,20 @@ async function streamPost(
   return { kind: "closed" };
 }
 
+function browserTimeZone(): string | null {
+  try {
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone as unknown;
+    return typeof zone === "string" && zone !== "" ? zone : null;
+  } catch {
+    return null;
+  }
+}
+
+function timeZoneBody(extra: Record<string, string>): string {
+  const zone = browserTimeZone();
+  return JSON.stringify(zone === null ? extra : { ...extra, time_zone: zone });
+}
+
 export async function streamThreadMessage(
   id: string,
   text: string,
@@ -397,7 +413,7 @@ export async function streamThreadMessage(
 ): Promise<StreamResult> {
   return streamPost(
     `/threads/${encodeURIComponent(id)}/messages`,
-    JSON.stringify({ text }),
+    timeZoneBody({ text }),
     signal,
     onOpen,
     onText,
@@ -414,7 +430,7 @@ export async function streamThreadRetry(
 ): Promise<StreamResult> {
   return streamPost(
     `/threads/${encodeURIComponent(id)}/retry`,
-    null,
+    timeZoneBody({}),
     signal,
     onOpen,
     onText,
@@ -568,6 +584,53 @@ export async function listAbilities(): Promise<ApiResult<AbilityItem[]>> {
   const result = await call("/abilities", "GET");
   if ("kind" in result) return result;
   return classify(result, abilityListFrom);
+}
+
+export type ScheduleItem = {
+  id: string;
+  task: string;
+  when_text: string;
+  next_run_at: string | null;
+  thread_id: string;
+  thread_name: string;
+};
+
+function scheduleFrom(body: unknown): ScheduleItem | null {
+  if (!isRecord(body)) return null;
+  const id = textField(body, "id");
+  const task = textField(body, "task");
+  const whenText = textField(body, "when_text");
+  const nextRunAt = body.next_run_at;
+  const threadId = textField(body, "thread_id");
+  const threadName = textField(body, "thread_name");
+  if (id === null || id === "" || task === null || whenText === null) return null;
+  if (nextRunAt !== null && typeof nextRunAt !== "string") return null;
+  if (threadId === null || threadName === null) return null;
+  return {
+    id,
+    task,
+    when_text: whenText,
+    next_run_at: nextRunAt,
+    thread_id: threadId,
+    thread_name: threadName,
+  };
+}
+
+function scheduleListFrom(body: unknown): ScheduleItem[] | null {
+  if (!Array.isArray(body)) return null;
+  const items: ScheduleItem[] = [];
+  for (const entry of body) {
+    const item = scheduleFrom(entry);
+    if (item === null) return null;
+    items.push(item);
+  }
+  return items;
+}
+
+export async function listSchedules(): Promise<ApiResult<ScheduleItem[]>> {
+  const result = await call("/schedules", "GET");
+  if ("kind" in result) return result;
+  return classify(result, scheduleListFrom);
 }
 
 export async function deleteAccount(): Promise<ApiResult<true>> {
