@@ -270,7 +270,7 @@ def test_a_next_time_that_cannot_be_used_is_told_once(
 
     moved = get_schedule(connection, account_id, schedule_id)
     assert moved is not None and moved[5] is None
-    assert _lines(connection, account_id, thread_id, "failure") == [NO_NEXT_LINE]
+    assert _lines(connection, account_id, thread_id, "result") == [NO_NEXT_LINE]
     errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert len(errors) == 1 and str(schedule_id) in errors[0].getMessage()
     assert TASK not in caplog.text
@@ -280,7 +280,7 @@ def test_a_next_time_that_cannot_be_used_is_told_once(
     assert len(enqueued) == 1
     # The schedule is no longer due, so a second tick adds no second line.
     tick(_model())
-    assert _lines(connection, account_id, thread_id, "failure") == [NO_NEXT_LINE]
+    assert _lines(connection, account_id, thread_id, "result") == [NO_NEXT_LINE]
 
 
 @pytest.mark.parametrize("answer", ["none", "None.", " NONE "])
@@ -293,7 +293,7 @@ def test_none_ends_a_schedule_without_a_line(connection, account, enqueued, capl
 
     moved = get_schedule(connection, account_id, schedule_id)
     assert moved is not None and moved[5] is None
-    assert _lines(connection, account_id, thread_id, "failure") == []
+    assert _lines(connection, account_id, thread_id, "result") == []
     assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
     assert counts["started"] == 1
     assert len(enqueued) == 1
@@ -397,8 +397,10 @@ def test_a_failing_model_is_tried_four_times_then_dead(connection, account, capl
     assert counts == [1, 2, 3, 4]
     stored = get_run(connection, run[0])
     assert stored is not None and stored[5] == "dead" and stored[9] is None
-    assert _lines(connection, account_id, thread_id, "failure") == [FAILED_LINE]
-    assert _lines(connection, account_id, thread_id, "result") == []
+    assert _lines(connection, account_id, thread_id, "result") == [FAILED_LINE]
+    assert _lines(connection, account_id, thread_id, "failure") == []
+    line = [m for m in list_messages(connection, account_id, thread_id) or []]
+    assert [(m[3], m[4], m[5]) for m in line] == [(run[0], "assistant", "result")]
     errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
     dead = [r for r in errors if "dead" in r.getMessage()]
     assert len(dead) == 1 and str(run[0]) in dead[0].getMessage()
@@ -523,7 +525,7 @@ def test_a_stuck_run_is_marked_dead_and_frees_the_schedule(
     assert counts["stuck"] == 1
     stored = get_run(connection, run[0])
     assert stored is not None and stored[5] == "dead"
-    assert _lines(connection, account_id, thread[0], "failure") == [FAILED_LINE]
+    assert _lines(connection, account_id, thread[0], "result") == [FAILED_LINE]
     errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
     assert len(errors) == 1 and str(run[0]) in errors[0].getMessage()
     connection.execute(
@@ -535,3 +537,78 @@ def test_a_stuck_run_is_marked_dead_and_frees_the_schedule(
     assert again["started"] == 1
     assert len(enqueued) == 1
     assert len(_runs(connection, account_id)) == 2
+
+
+def test_a_late_result_after_the_run_was_marked_dead_is_dropped(connection, account, caplog):
+    account_id, email = account
+    thread = create_thread(connection, account_id)
+    made = create_schedule(
+        connection, account_id, thread[0], TASK, "daily", datetime.now(UTC) + timedelta(hours=1)
+    )
+    assert made is not None
+    run = _make_run(connection, account_id, thread[0], made[0])
+    started = threading.Event()
+    release = threading.Event()
+
+    class _Held(FakeModel):
+        def stream(self, prompt, blocks, tools=()):
+            started.set()
+            release.wait(timeout=30)
+            return super().stream(prompt, blocks, tools)
+
+    outcome: list[str] = []
+    errors: list[BaseException] = []
+
+    def work() -> None:
+        try:
+            outcome.append(
+                execute(
+                    run[0],
+                    _Held(reply=RESULT, input_tokens=1, output_tokens=1, total_tokens=2),
+                )
+            )
+        except BaseException as error:
+            errors.append(error)
+
+    worker_thread = threading.Thread(target=work)
+    worker_thread.start()
+    try:
+        assert started.wait(timeout=30)
+        connection.execute(
+            "UPDATE run SET created_at = now() - interval '31 minutes' WHERE id = %s", (run[0],)
+        )
+        with caplog.at_level(logging.INFO, logger=LOGGER):
+            assert tick(_model())["stuck"] == 1
+    finally:
+        release.set()
+        worker_thread.join(timeout=30)
+
+    assert not worker_thread.is_alive()
+    assert errors == []
+    assert outcome == ["dead"]
+    stored = get_run(connection, run[0])
+    assert stored is not None and stored[5] == "dead" and stored[9] is None
+    messages = list_messages(connection, account_id, thread[0]) or []
+    assert [m[6] for m in messages] == [FAILED_LINE]
+    assert RESULT not in [m[6] for m in messages]
+    assert _usage(connection, email) == [("schedule", run[0], None, False)]
+
+
+def test_a_tick_does_not_overwrite_a_run_that_just_finished(connection, account):
+    account_id, _ = account
+    thread = create_thread(connection, account_id)
+    made = create_schedule(
+        connection, account_id, thread[0], TASK, "daily", datetime.now(UTC) + timedelta(hours=1)
+    )
+    assert made is not None
+    run = _make_run(connection, account_id, thread[0], made[0])
+    assert execute(run[0], _model(RESULT)) == "ready"
+    connection.execute(
+        "UPDATE run SET created_at = now() - interval '31 minutes' WHERE id = %s", (run[0],)
+    )
+
+    assert tick(_model())["stuck"] == 0
+
+    stored = get_run(connection, run[0])
+    assert stored is not None and stored[5] == "ready"
+    assert _lines(connection, account_id, thread[0], "result") == [RESULT]

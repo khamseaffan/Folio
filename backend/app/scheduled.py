@@ -18,6 +18,8 @@ from app.run import (
     RunRow,
     create_run,
     finish_run,
+    finish_working,
+    hold_working,
     start_attempt,
     stuck_runs,
 )
@@ -81,10 +83,12 @@ def _write_line(
     account_id: uuid.UUID,
     thread_id: uuid.UUID | None,
     line: str,
+    run_id: uuid.UUID | None = None,
 ) -> None:
     if thread_id is not None:
-        # None back means the thread is gone, which is nothing to tell.
-        insert_message(connection, account_id, thread_id, "assistant", "failure", line)
+        # Kind result, not failure: a failure line offers Try again for a chat reply, and
+        # nothing here can be tried again by the person. None back means the thread is gone.
+        insert_message(connection, account_id, thread_id, "assistant", "result", line, run_id)
 
 
 def _record(
@@ -161,8 +165,10 @@ def _free_stuck(counts: dict[str, int]) -> None:
     for run in stuck:
         run_id, account_id, thread_id = run[0], run[1], run[2]
         with connect() as connection:
-            finish_run(connection, run_id, "dead", run[7], False)
-            _write_line(connection, account_id, thread_id, FAILED_LINE)
+            if not finish_working(connection, run_id, "dead", run[7]):
+                # It finished while the list was being read.
+                continue
+            _write_line(connection, account_id, thread_id, FAILED_LINE, run_id)
         counts["stuck"] += 1
         _log.error("run %s was working for too long and is marked dead", run_id)
 
@@ -264,6 +270,10 @@ def execute(run_id: uuid.UUID, model: Model | None = None) -> str:
     work_ms = int((time.monotonic() - started) * 1000)
     if not failed:
         with connect() as connection:
+            if not hold_working(connection, run_id):
+                # The tick marked this run dead while it worked. The late result is dropped.
+                _record(connection, account_id, email, chosen, replies, run_id, None)
+                return "dead"
             message = None
             if thread_id is not None:
                 message = insert_message(
@@ -283,8 +293,9 @@ def execute(run_id: uuid.UUID, model: Model | None = None) -> str:
     with connect() as connection:
         _record(connection, account_id, email, chosen, replies, run_id, None)
         if run[8] < MAX_ATTEMPTS:
-            return "retry"
-        finish_run(connection, run_id, "dead", work_ms, False)
-        _write_line(connection, account_id, thread_id, FAILED_LINE)
+            return "retry" if hold_working(connection, run_id) else "dead"
+        if not finish_working(connection, run_id, "dead", work_ms):
+            return "dead"
+        _write_line(connection, account_id, thread_id, FAILED_LINE, run_id)
     _log.error("run %s is dead after %s attempts", run_id, run[8])
     return "dead"

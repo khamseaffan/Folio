@@ -16,4 +16,6 @@ A run that fails because the account is stopped or at its limit is marked `cance
 
 A run that has been `working` for more than 30 minutes is marked `dead` by the next tick and told in the thread. This frees its schedule to fire again.
 
+The lines "A scheduled run failed." and the no-next-time line are plain assistant messages of kind `result`. They do not offer Try again, which belongs to a failed chat reply only.
+
 A schedule never stops without a line in the thread. When the next time cannot be worked out, the thread shows "This schedule has no next time now. Tell Folio when it should run again."

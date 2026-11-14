@@ -2574,3 +2574,99 @@ def test_the_agent_creates_a_schedule_in_this_thread(monkeypatch: pytest.MonkeyP
         assert rows == [(thread_id, "Three things to focus on", "every weekday at 09:00, UTC")]
     finally:
         _remove(email)
+
+
+def _make_dead_run(email: str, thread_id: str) -> None:
+    from app import scheduled
+    from app.run import create_run
+    from app.schedule import create_schedule
+
+    account_id = _account_id(email)
+    with connect() as connection:
+        made = create_schedule(
+            connection,
+            account_id,
+            uuid.UUID(thread_id),
+            "task",
+            "daily",
+            datetime.now(UTC) + timedelta(hours=1),
+        )
+        assert made is not None
+        run = create_run(connection, account_id, uuid.UUID(thread_id), made[0], "schedule", "task")
+    assert run is not None
+    outcomes = [
+        scheduled.execute(run[0], FakeModel(error=RuntimeError(CAUSE)))
+        for _ in range(scheduled.MAX_ATTEMPTS)
+    ]
+    assert outcomes[-1] == "dead"
+
+
+def _make_no_next_time_line(email: str, thread_id: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app import scheduled
+    from app.schedule import create_schedule
+
+    monkeypatch.setattr("app.scheduled.enqueue", lambda run_id: None)
+    account_id = _account_id(email)
+    with connect() as connection:
+        made = create_schedule(
+            connection,
+            account_id,
+            uuid.UUID(thread_id),
+            "task",
+            "daily",
+            datetime.now(UTC) + timedelta(hours=1),
+        )
+        assert made is not None
+        connection.execute(
+            "UPDATE schedule SET next_run_at = now() - interval '1 minute' WHERE id = %s",
+            (made[0],),
+        )
+    scheduled.tick(FakeModel(complete_error=RuntimeError(CAUSE)))
+
+
+@pytest.mark.parametrize("line", ["dead", "no_next_time"])
+def test_a_schedule_line_does_not_offer_a_retry(
+    monkeypatch: pytest.MonkeyPatch, line: str
+) -> None:
+    from app.scheduled import FAILED_LINE, NO_NEXT_LINE
+
+    email = _email("LineRetry")
+    _remove(email)
+    after = FakeModel(reply=Reply("never", 1, 1, 2))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        if line == "dead":
+            _make_dead_run(email, thread_id)
+        else:
+            _make_no_next_time_line(email, thread_id, monkeypatch)
+        loaded = client.get(f"/threads/{thread_id}").json()["messages"]
+        assert [m["body"] for m in loaded] == [FAILED_LINE if line == "dead" else NO_NEXT_LINE]
+        assert loaded[0]["kind"] == "result"
+        _use_model(monkeypatch, after)
+        again = client.post(f"/threads/{thread_id}/retry")
+        assert again.status_code == 400
+        assert again.json() == {"error": NO_FAILURE}
+        assert after.calls == 0 and after.completed == 0
+    finally:
+        _remove(email)
+
+
+def test_a_real_failed_reply_still_retries_after_a_schedule_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("LineThenRetry")
+    _remove(email)
+    failing = FakeModel(error=RuntimeError(CAUSE))
+    retrying = FakeModel(reply=Reply("Fine.", 1, 1, 2))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, failing)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        _make_dead_run(email, thread_id)
+        _use_model(monkeypatch, retrying)
+        retried = client.post(f"/threads/{thread_id}/retry")
+        assert retried.status_code == 200
+        assert _events(retried.text)[-1] == {"done": True}
+        assert retrying.calls == 1
+    finally:
+        _remove(email)

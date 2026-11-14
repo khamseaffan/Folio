@@ -108,6 +108,34 @@ def finish_run(
     )
 
 
+def finish_working(
+    connection: psycopg.Connection, run_id: uuid.UUID, status: str, work_ms: int
+) -> bool:
+    # Only a run still working can be finished. A run the tick marked dead stays dead.
+    apply(connection)
+    changed = connection.execute(
+        """
+        UPDATE run
+        SET status = %s, work_ms = %s
+        WHERE id = %s
+          AND status = 'working'
+        RETURNING id
+        """,
+        (status, work_ms, run_id),
+    ).fetchone()
+    return changed is not None
+
+
+def hold_working(connection: psycopg.Connection, run_id: uuid.UUID) -> bool:
+    # Locks the row for this transaction, so the tick cannot mark it dead before the save ends.
+    apply(connection)
+    held = connection.execute(
+        "SELECT id FROM run WHERE id = %s AND status = 'working' FOR UPDATE",
+        (run_id,),
+    ).fetchone()
+    return held is not None
+
+
 def in_flight_threads(connection: psycopg.Connection, account_id: uuid.UUID) -> set[uuid.UUID]:
     apply(connection)
     rows = connection.execute(
