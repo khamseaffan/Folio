@@ -78,6 +78,8 @@ class Reply:
     output_tokens: int | None
     total_tokens: int | None
     tool_calls: tuple[ToolCall, ...] = ()
+    # The provider sent no counts, so these were counted here.
+    estimated: bool = False
 
 
 class TextStream(Protocol):

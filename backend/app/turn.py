@@ -403,6 +403,7 @@ def _record(
             reply.total_tokens,
             message_id,
             None,
+            reply.estimated,
         )
 
 

@@ -58,6 +58,7 @@ def record_usage(
     total_tokens: int | None,
     message_id: uuid.UUID | None = None,
     run_id: uuid.UUID | None = None,
+    estimated: bool = False,
 ) -> UsageRow:
     apply(connection)
     usage_missing = (
@@ -87,9 +88,10 @@ def record_usage(
             usage_missing,
             message_id,
             run_id,
-            operation
+            operation,
+            estimated
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING
             id,
             account_id,
@@ -119,6 +121,7 @@ def record_usage(
             message_id,
             run_id,
             operation,
+            estimated and not usage_missing,
         ),
     ).fetchone()
     if stored is None:

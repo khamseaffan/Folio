@@ -174,6 +174,8 @@ A change reaches the main branch through a pull request. GitHub Actions runs Ruf
 - Deleting a thread deletes its schedules.
 - Deleting an account deletes that person's threads, files, and reports, and leaves the usage rows and the platform model keys.
 - A call with no usage figure is stored as missing, not as zero.
+- A stopped reply is the one case where Folio counts the tokens itself. The provider sends its counts only at the end of a reply, so a stopped reply has none. Folio counts what it sent and what arrived, and marks the row as estimated. Otherwise a person could stop every reply and never reach the cap.
+- Letting the reply finish unseen would give exact counts, but it spends tokens on text nobody reads, so it was not chosen.
 
 **Known trade-offs of this deployment**
 

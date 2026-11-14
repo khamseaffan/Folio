@@ -304,6 +304,15 @@ def _usage_rows(email: str) -> list[tuple]:
     return list(rows)
 
 
+def _usage_flags(email: str) -> list[tuple[bool, bool]]:
+    with connect() as connection:
+        rows = connection.execute(
+            "SELECT usage_missing, estimated FROM usage WHERE email = %s",
+            (email.lower(),),
+        ).fetchall()
+    return [(bool(row[0]), bool(row[1])) for row in rows]
+
+
 def _usage_count(email: str) -> int:
     with connect() as connection:
         present = connection.execute("SELECT to_regclass('public.usage')").fetchone()
@@ -795,8 +804,10 @@ def test_stop_after_the_first_chunk_stores_that_text_and_one_usage_row(
         assert _last_active(session_id) > after_person
         rows = _usage_rows(email)
         assert len(rows) == 1
-        assert rows[0][0:6] == ("chat", "openai", "gpt-6.1-sol", None, None, None)
+        # The provider sent no counts for the stopped call, so they are counted here.
+        assert rows[0][0:6] == ("chat", "openai", "gpt-6.1-sol", 1, 1, 2)
         assert rows[0][6] == _assistant_id(thread_id)
+        assert _usage_flags(email) == [(False, True)]
         assert FAILED not in "".join(body for _, _, body in _stored_messages(thread_id))
     finally:
         release.set()
@@ -832,7 +843,9 @@ def test_stop_before_any_word_stores_usage_and_no_reply(
             release.set()
             assert _next_event(response.iter_lines()) == {"done": True}
         assert _stored_messages(thread_id) == [("person", "chat", "hello")]
-        assert _usage_rows(email) == [("chat", "openai", "gpt-6.1-sol", None, None, None, None)]
+        # The chunk reached Folio before the stop, so it is counted, though the person never saw it.
+        assert _usage_rows(email) == [("chat", "openai", "gpt-6.1-sol", 1, 1, 2, None)]
+        assert _usage_flags(email) == [(False, True)]
     finally:
         release.set()
         _remove(email)
@@ -1971,7 +1984,8 @@ def test_delete_while_the_reply_is_streaming(monkeypatch: pytest.MonkeyPatch) ->
             assert _next_event(lines) == {"done": True}
         assert _message_count(thread_id) == 0
         assert client.get(f"/threads/{thread_id}").status_code == 404
-        assert _usage_rows(email) == [("chat", "openai", "gpt-6.1-sol", None, None, None, None)]
+        assert _usage_rows(email) == [("chat", "openai", "gpt-6.1-sol", 1, 1, 2, None)]
+        assert _usage_flags(email) == [(False, True)]
     finally:
         release.set()
         _remove(email)
@@ -2168,4 +2182,68 @@ def test_reading_is_not_refused_by_origin(monkeypatch: pytest.MonkeyPatch) -> No
         assert read.status_code == 200
         assert "access-control-allow-origin" not in read.headers
     finally:
+        _remove(email)
+
+
+def test_a_model_error_is_stored_as_missing_not_estimated(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("ErrorMissing")
+    _remove(email)
+    model = FakeModel(error=RuntimeError(CAUSE))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert _usage_flags(email) == [(True, False)]
+    finally:
+        _remove(email)
+
+
+def test_a_measured_reply_is_not_estimated(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Measured")
+    _remove(email)
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, FakeModel(reply=Reply("ok", 3, 4, 7)))
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert _usage_flags(email) == [(False, False)]
+    finally:
+        _remove(email)
+
+
+def test_a_stopped_reply_counts_toward_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("StopCap")
+    _remove(email)
+    release = threading.Event()
+    arrived = threading.Event()
+    model = FakeModel(
+        reply=Reply("keptlater", 9, 9, 18),
+        chunks=("kept", "later"),
+        holds=(None, release),
+        arrived=arrived,
+        token_count=40,
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        with connect() as connection:
+            connection.execute(
+                "UPDATE email_limit SET token_cap = 80 WHERE email = %s", (email.lower(),)
+            )
+        _use_model(monkeypatch, model)
+        with client.stream(
+            "POST",
+            f"/threads/{thread_id}/messages",
+            json={"text": "hello"},
+        ) as response:
+            lines = response.iter_lines()
+            assert _next_event(lines) == {"text": "kept"}
+            assert arrived.wait(2)
+            assert client.post(f"/threads/{thread_id}/stop").status_code == 204
+            release.set()
+            assert _next_event(lines) == {"done": True}
+        # 40 counted in and 40 counted out reach the cap of 80.
+        refused = client.post(f"/threads/{thread_id}/messages", json={"text": "again"})
+        assert refused.status_code == 403
+        assert refused.json() == {"error": CAPPED}
+    finally:
+        release.set()
         _remove(email)
