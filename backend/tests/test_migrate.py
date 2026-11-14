@@ -10,6 +10,8 @@ TABLES = {
     "usage",
     "knowledge_file",
     "ability",
+    "schedule",
+    "run",
 }
 
 
@@ -62,10 +64,12 @@ def test_setup_is_skipped_when_the_table_exists():
         email_limit,
         knowledge_file,
         message,
+        schedule,
         session,
         thread,
         usage,
     )
+    from app import run as run_table
 
     run()
 
@@ -89,6 +93,8 @@ def test_setup_is_skipped_when_the_table_exists():
             usage,
             knowledge_file,
             ability,
+            schedule,
+            run_table,
         ):
             module.apply(spy)
     assert not [text for text in spy.statements if "CREATE" in text.upper()]

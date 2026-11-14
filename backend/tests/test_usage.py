@@ -177,10 +177,15 @@ def test_bad_operation_is_rejected(account) -> None:
     assert count == (0,)
 
 
-def test_run_id_stays_null_and_no_run_table_exists(account) -> None:
+def test_run_id_stays_null_or_names_a_real_run(account) -> None:
+    from app.run import create_run
+    from app.thread import create_thread
+
     account_id, email = account
-    run_id = uuid.uuid4()
     with connect() as connection:
+        thread = create_thread(connection, account_id)
+        run = create_run(connection, account_id, thread[0], None, "research", "look")
+        assert run is not None
         omitted = record_usage(
             connection,
             account_id,
@@ -203,12 +208,24 @@ def test_run_id_stays_null_and_no_run_table_exists(account) -> None:
             1,
             2,
             None,
-            run_id,
+            run[0],
         )
-        run_table = connection.execute("SELECT to_regclass('public.run')").fetchone()
-    assert run_table == (None,)
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            record_usage(
+                connection,
+                account_id,
+                email,
+                "browser",
+                PROVIDER,
+                MODEL,
+                1,
+                1,
+                2,
+                None,
+                uuid.uuid4(),
+            )
     assert omitted[12] is None
-    assert supplied[12] == run_id
+    assert supplied[12] == run[0]
 
 
 def test_delete_message_keeps_usage_account_and_email(account) -> None:
@@ -441,7 +458,11 @@ def test_apply_is_idempotent() -> None:
     assert "REFERENCES message" in message_fk[0]
     assert "ON DELETE SET NULL (message_id)" in message_fk[0]
     assert "SET NULL (account_id" not in message_fk[0]
-    assert all("run_id" not in definition[0] for definition in foreign_keys)
+    run_fk = [definition[0] for definition in foreign_keys if "run_id" in definition[0]]
+    assert len(run_fk) == 1
+    assert "FOREIGN KEY (run_id, account_id)" in run_fk[0]
+    assert "REFERENCES run" in run_fk[0]
+    assert "ON DELETE SET NULL (run_id)" in run_fk[0]
     index_by_name = {row[0]: row[1] for row in indexes}
     assert "usage_email" in index_by_name
     assert "usage_account_id_at" in index_by_name
