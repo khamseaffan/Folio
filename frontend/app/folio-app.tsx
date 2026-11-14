@@ -11,6 +11,7 @@ import {
   MagnifyingGlassIcon,
   PaperAirplaneIcon,
   StopIcon,
+  UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import type { ComponentType, SVGProps } from "react";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -44,6 +45,7 @@ import {
   signInWithGoogle,
   signOutFirebase,
 } from "../lib/firebase-auth";
+import { ProfilePanel } from "./profile-panel";
 import { Settings } from "./settings";
 import { ThreadList } from "./thread-list";
 
@@ -115,6 +117,26 @@ function toolStatus(name: string): string {
       return "Renaming the thread";
     case "delete_thread":
       return "Deleting the thread";
+    case "list_knowledge":
+      return "Looking at your notes";
+    case "search_knowledge":
+      return "Searching your notes";
+    case "read_knowledge":
+      return "Reading your notes";
+    case "write_knowledge":
+    case "append_knowledge":
+    case "edit_knowledge":
+      return "Updating your notes";
+    case "delete_knowledge":
+      return "Deleting a note";
+    case "delete_profile":
+      return "Deleting your profile";
+    case "list_abilities":
+      return "Looking at abilities";
+    case "write_ability":
+      return "Saving an ability";
+    case "delete_ability":
+      return "Deleting an ability";
     default:
       return "Working on it";
   }
@@ -287,6 +309,8 @@ export function FolioApp() {
   const [working, setWorking] = useState(false);
   const [toolLine, setToolLine] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const linkHref = useRef<string | null>(null);
   const streamAbort = useRef<AbortController | null>(null);
   const stopping = useRef(false);
@@ -323,6 +347,7 @@ export function FolioApp() {
     setThreadsLoaded(false);
     setPending(false);
     setSettingsOpen(false);
+    setProfileOpen(false);
     setView("signed-out");
   }, []);
 
@@ -746,6 +771,7 @@ export function FolioApp() {
         setToolLine(null);
       }
       void refreshThreads(threadId, generation);
+      setReloadKey((key) => key + 1);
     }
   }
 
@@ -812,6 +838,7 @@ export function FolioApp() {
         setToolLine(null);
       }
       void refreshThreads(threadId, generation);
+      setReloadKey((key) => key + 1);
     }
   }
 
@@ -844,6 +871,11 @@ export function FolioApp() {
     setView("signed-out");
   }
 
+  // Side by side only from 900 px, so below that the thread must take the panel's place.
+  function closeProfileIfNarrow() {
+    if (!window.matchMedia("(min-width: 900px)").matches) setProfileOpen(false);
+  }
+
   function holdFocus(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Tab") event.preventDefault();
   }
@@ -851,6 +883,17 @@ export function FolioApp() {
   const signedIn = view === "ask-name" || view === "ready";
   const landing = view === "signed-out" || view === "link-email";
   const visibleThreads = threadsNewestFirst(threads);
+  const profileButton = (
+    <button
+      type="button"
+      className="quiet profile-toggle"
+      aria-expanded={profileOpen}
+      onClick={() => setProfileOpen((open) => !open)}
+    >
+      <UserCircleIcon aria-hidden="true" />
+      Profile
+    </button>
+  );
   const openThread = visibleThreads.find((thread) => thread.id === openId) ?? null;
 
   return (
@@ -887,7 +930,15 @@ export function FolioApp() {
               ) : null}
               {!threadsLoaded ? <p className="hint">One moment.</p> : null}
               {threadsLoaded ? (
-                <div className={openThread || settingsOpen ? "desk-body" : "desk-body idle"}>
+                <div
+                  className={
+                    !(openThread || settingsOpen || profileOpen)
+                      ? "desk-body idle"
+                      : profileOpen && !settingsOpen
+                        ? "desk-body profile-open"
+                        : "desk-body"
+                  }
+                >
                   <div className="threads">
                     <div className="rail-brand">
                       <div className="mark" aria-hidden="true">
@@ -901,10 +952,12 @@ export function FolioApp() {
                       disabled={pending}
                       onOpen={(id) => {
                         setSettingsOpen(false);
+                        closeProfileIfNarrow();
                         void onOpenThread(id);
                       }}
                       onCreate={() => {
                         setSettingsOpen(false);
+                        closeProfileIfNarrow();
                         void onNewThread();
                       }}
                       onRename={onRenameThread}
@@ -914,7 +967,11 @@ export function FolioApp() {
                       <p className="account-name">{displayName}</p>
                       {accountEmail ? <p className="mail">{accountEmail}</p> : null}
                       <div className="account-actions">
-                        <button type="button" className="quiet" onClick={() => setSettingsOpen(true)}>
+                        <button type="button" className="quiet" onClick={() => {
+                            setProfileOpen(false);
+                            setSettingsOpen(true);
+                          }}
+                        >
                           <Cog6ToothIcon aria-hidden="true" />
                           Settings
                         </button>
@@ -941,19 +998,25 @@ export function FolioApp() {
                       onSignedOut={settingsSignedOut}
                       onDown={settingsDown}
                     />
-                  ) : openThread ? (
+                  ) : (
+                    <>
+                  {openThread ? (
                     <section
                       className={messages.length === 0 ? "thread thread-empty" : "thread"}
                       aria-label={openThread.name}
                     >
+                      <div className="thread-head">
+                        {messages.length === 0 ? null : (
+                          <h2 className="thread-name">{openThread.name}</h2>
+                        )}
+                        {profileButton}
+                      </div>
                       {messages.length === 0 ? (
                         <div className="welcome">
                           <p className="welcome-hello">Hello, {displayName}</p>
                           <h1>How can I assist you today?</h1>
                         </div>
-                      ) : (
-                        <h2 className="thread-name">{openThread.name}</h2>
-                      )}
+                      ) : null}
                       {messages.length === 0 ? null : (
                       <div className="messages" ref={messagePane} tabIndex={0} aria-label="Messages">
                         {messages.map((message) =>
@@ -1029,6 +1092,21 @@ export function FolioApp() {
                       </form>
                     </section>
                   ) : null}
+                  {openThread ? null : (
+                    <div className="thread-idle">
+                      <div className="thread-head">{profileButton}</div>
+                    </div>
+                  )}
+                  {profileOpen ? (
+                    <ProfilePanel
+                      reloadKey={reloadKey}
+                      onClose={() => setProfileOpen(false)}
+                      onSignedOut={settingsSignedOut}
+                      onDown={settingsDown}
+                    />
+                  ) : null}
+                    </>
+                  )}
                 </div>
               ) : null}
             </div>
