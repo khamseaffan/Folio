@@ -9,6 +9,8 @@ export type Thread = {
   created_at: string;
   // True while a scheduled run is queued or working in this thread.
   working: boolean;
+  // When the newest message was written, so the page can tell that one arrived without it.
+  latest_message_at: string | null;
 };
 
 export type ThreadMessage = {
@@ -197,7 +199,10 @@ function threadFrom(body: unknown): Thread | null {
   const name = textField(body, "name");
   const createdAt = textField(body, "created_at");
   if (id === null || id === "" || name === null || createdAt === null) return null;
-  return { id, name, created_at: createdAt, working: body.working === true };
+  return { id, name, created_at: createdAt, working: body.working === true,
+    latest_message_at:
+      typeof body.latest_message_at === "string" ? body.latest_message_at : null,
+  };
 }
 
 function messageFrom(body: unknown): ThreadMessage | null {
