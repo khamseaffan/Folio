@@ -1,13 +1,14 @@
-import asyncio
 import json
 import threading
 import uuid
-from collections.abc import AsyncIterator, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import psycopg
 
+from app import operations
 from app.db import connect
+from app.live import LiveReply, register, unregister
 from app.loop import ask, stream_turn
 from app.message import (
     MessageRow,
@@ -16,7 +17,7 @@ from app.message import (
     list_messages,
     update_message_body,
 )
-from app.model import CONTEXT_TOKENS, MODEL_ID, Block, Model, Reply
+from app.model import CONTEXT_TOKENS, MODEL_ID, Block, Model, Reply, ToolCall
 from app.session import set_last_active_at
 from app.thread import ThreadRow, get_thread, set_summary
 from app.usage import record_usage, tokens_for_email
@@ -236,79 +237,6 @@ class _Retry:
     partial_id: uuid.UUID | None
 
 
-class LiveReply:
-    def __init__(self) -> None:
-        self.stop = threading.Event()
-        self._loop = asyncio.get_running_loop()
-        self._queue: asyncio.Queue[str | None] = asyncio.Queue()
-        self._listening = True
-        self._lock = threading.Lock()
-
-    def publish(self, payload: dict[str, object]) -> None:
-        self._put("data: " + json.dumps(payload) + "\n\n")
-
-    def finish(self) -> None:
-        self._put(None)
-
-    def _put(self, item: str | None) -> None:
-        with self._lock:
-            if not self._listening:
-                return
-            loop = self._loop
-            queue = self._queue
-        if loop.is_closed():
-            return
-        try:
-            loop.call_soon_threadsafe(queue.put_nowait, item)
-        except RuntimeError:
-            return
-
-    def _detach(self) -> None:
-        # Closing the response is not a stop. end_session does not call this.
-        with self._lock:
-            self._listening = False
-
-    async def events(self) -> AsyncIterator[str]:
-        try:
-            while True:
-                try:
-                    item = await asyncio.wait_for(self._queue.get(), 0.25)
-                except TimeoutError:
-                    continue
-                if item is None:
-                    return
-                yield item
-        finally:
-            self._detach()
-
-
-_live_lock = threading.Lock()
-_live: dict[tuple[uuid.UUID, uuid.UUID], list[LiveReply]] = {}
-
-
-def _register(account_id: uuid.UUID, thread_id: uuid.UUID, live: LiveReply) -> None:
-    with _live_lock:
-        _live.setdefault((account_id, thread_id), []).append(live)
-
-
-def _unregister(account_id: uuid.UUID, thread_id: uuid.UUID, live: LiveReply) -> None:
-    with _live_lock:
-        rows = _live.get((account_id, thread_id))
-        if rows is None:
-            return
-        if live in rows:
-            rows.remove(live)
-        if not rows:
-            del _live[(account_id, thread_id)]
-
-
-def stop_reply(account_id: uuid.UUID, thread_id: uuid.UUID) -> None:
-    with _live_lock:
-        rows = list(_live.get((account_id, thread_id), ()))
-    for live in rows:
-        live.stop.set()
-
-
 def _open_turn(
     connection: psycopg.Connection,
     account_id: uuid.UUID,
@@ -448,24 +376,56 @@ def run_turn(
     return TurnResult(body=reply.text, kind="chat", omitted=tuple(prepared.omitted))
 
 
-def _counts(reply: Reply | None) -> tuple[int | None, int | None, int | None]:
-    if reply is None:
-        return None, None, None
-    return reply.input_tokens, reply.output_tokens, reply.total_tokens
+def _record(
+    connection: psycopg.Connection,
+    prepared: _Prepared,
+    replies: list[Reply],
+    message_id: uuid.UUID | None,
+) -> None:
+    # A turn that never reached the model still leaves one row, with its counts missing.
+    for reply in replies or [Reply("", None, None, None)]:
+        record_usage(
+            connection,
+            prepared.account_id,
+            prepared.email,
+            "chat",
+            *_who(prepared.model),
+            reply.input_tokens,
+            reply.output_tokens,
+            reply.total_tokens,
+            message_id,
+            None,
+        )
 
 
-def _save(prepared: _Prepared, text: str, reply: Reply | None, failed: bool, stopped: bool) -> None:
-    input_tokens, output_tokens, total_tokens = _counts(reply)
+def _thread_gone(connection: psycopg.Connection, prepared: _Prepared) -> bool:
+    return get_thread(connection, prepared.account_id, prepared.thread_id) is None
+
+
+def _save(
+    prepared: _Prepared,
+    text: str,
+    replies: list[Reply],
+    failed: bool,
+    stopped: bool,
+) -> None:
     with connect() as connection:
+        if _thread_gone(connection, prepared):
+            # The agent or the person deleted the thread during the turn.
+            _record(connection, prepared, replies, None)
+            return
         if failed and text == "":
-            _fail(
+            stored = insert_message(
                 connection,
                 prepared.account_id,
                 prepared.thread_id,
-                prepared.email,
-                [],
-                prepared.model,
+                "assistant",
+                "failure",
+                _FAILED,
             )
+            if stored is None:
+                raise RuntimeError("failure message was not stored")
+            _record(connection, prepared, replies, None)
             return
         message_id: uuid.UUID | None = None
         assistant: MessageRow | None = None
@@ -503,18 +463,7 @@ def _save(prepared: _Prepared, text: str, reply: Reply | None, failed: bool, sto
                     """,
                     (assistant[7], failure[0], prepared.account_id),
                 )
-        record_usage(
-            connection,
-            prepared.account_id,
-            prepared.email,
-            "chat",
-            *_who(prepared.model),
-            input_tokens,
-            output_tokens,
-            total_tokens,
-            message_id,
-            None,
-        )
+        _record(connection, prepared, replies, message_id)
 
 
 def _failed_turn(
@@ -610,27 +559,18 @@ def _place_failure_after(
 def _save_retry(
     retry: _Retry,
     text: str,
-    reply: Reply | None,
+    replies: list[Reply],
     failed: bool,
     stopped: bool,
 ) -> None:
-    input_tokens, output_tokens, total_tokens = _counts(reply)
     prepared = retry.prepared
     with connect() as connection:
         message_id: uuid.UUID | None = None
+        if _thread_gone(connection, prepared):
+            _record(connection, prepared, replies, None)
+            return
         if text == "" and (failed or stopped):
-            record_usage(
-                connection,
-                prepared.account_id,
-                prepared.email,
-                "chat",
-                *_who(prepared.model),
-                input_tokens,
-                output_tokens,
-                total_tokens,
-                None,
-                None,
-            )
+            _record(connection, prepared, replies, None)
             return
         if retry.partial_id is None:
             stored = insert_message(
@@ -668,65 +608,82 @@ def _save_retry(
                 retry.failure_id,
             )
             set_last_active_at(connection, prepared.session_id, prepared.account_id)
-        record_usage(
-            connection,
-            prepared.account_id,
-            prepared.email,
-            "chat",
-            *_who(prepared.model),
-            input_tokens,
-            output_tokens,
-            total_tokens,
-            message_id,
-            None,
-        )
+        _record(connection, prepared, replies, message_id)
 
 
 def _write_reply(
     live: LiveReply,
     model: Model,
     prepared: _Prepared,
-    persist: Callable[[str, Reply | None, bool, bool], None],
+    persist: Callable[[str, list[Reply], bool, bool], None],
 ) -> None:
     parts: list[str] = []
     failed = False
-    reply: Reply | None = None
+    replies: list[Reply] = []
+
+    def call_tool(call: ToolCall) -> str:
+        with connect() as connection:
+            result = operations.call(
+                connection,
+                prepared.account_id,
+                operations.Context(prepared.thread_id),
+                call.name,
+                call.arguments,
+            )
+        return json.dumps(result)
+
     try:
-        for event in stream_turn(model, prepared.prompt, prepared.blocks, live.stop):
+        for event in stream_turn(
+            model,
+            prepared.prompt,
+            prepared.blocks,
+            live.stop,
+            operations.agent_tools(),
+            call_tool,
+        ):
             if not isinstance(event, dict):
                 continue
             text = event.get("text")
             if isinstance(text, str) and text != "":
                 parts.append(text)
                 live.publish({"text": text})
+            tool = event.get("tool")
+            if isinstance(tool, str):
+                live.publish({"tool": tool})
             usage = event.get("usage")
             if isinstance(usage, Reply):
-                reply = usage
+                replies.append(usage)
     except Exception:
         failed = True
     stopped = live.stop.is_set()
     try:
-        persist("".join(parts), reply, failed, stopped)
+        persist("".join(parts), replies, failed, stopped)
     except Exception:
         failed = True
+        # The save rolled back as a whole. The calls were still made, so their rows are written.
+        try:
+            with connect() as connection:
+                _record(connection, prepared, replies, None)
+        except Exception:
+            pass
     if failed:
         live.publish({"failed": True})
     else:
         live.publish({"done": True})
     live.finish()
-    _unregister(prepared.account_id, prepared.thread_id, live)
+    unregister(prepared.account_id, prepared.thread_id, live)
 
 
 def _start(
     connection: psycopg.Connection,
     prepared: _Prepared,
     model: Model,
-    persist: Callable[[str, Reply | None, bool, bool], None],
+    persist: Callable[[str, list[Reply], bool, bool], None],
 ) -> LiveReply:
     # The reply thread can emit a chunk before this request transaction closes.
     connection.commit()
     live = LiveReply()
-    _register(prepared.account_id, prepared.thread_id, live)
+    register(prepared.account_id, prepared.thread_id, live)
     try:
         threading.Thread(
             target=_write_reply,
@@ -734,7 +691,7 @@ def _start(
             name="folio-reply",
         ).start()
     except Exception:
-        _unregister(prepared.account_id, prepared.thread_id, live)
+        unregister(prepared.account_id, prepared.thread_id, live)
         raise
     return live
 
@@ -751,8 +708,8 @@ def start_reply(
     if not isinstance(prepared, _Prepared):
         return prepared
 
-    def persist(text: str, reply: Reply | None, failed: bool, stopped: bool) -> None:
-        _save(prepared, text, reply, failed, stopped)
+    def persist(text: str, replies: list[Reply], failed: bool, stopped: bool) -> None:
+        _save(prepared, text, replies, failed, stopped)
 
     return _start(connection, prepared, model, persist)
 
@@ -768,7 +725,7 @@ def start_retry(
     if not isinstance(prepared, _Retry):
         return prepared
 
-    def persist(text: str, reply: Reply | None, failed: bool, stopped: bool) -> None:
-        _save_retry(prepared, text, reply, failed, stopped)
+    def persist(text: str, replies: list[Reply], failed: bool, stopped: bool) -> None:
+        _save_retry(prepared, text, replies, failed, stopped)
 
     return _start(connection, prepared.prepared, model, persist)

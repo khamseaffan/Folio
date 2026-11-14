@@ -1,6 +1,6 @@
 # Conversations
 
-An account has many threads. A new thread is named "New thread". The person tells the agent to rename a thread or to delete it, and the agent does so.
+An account has many threads. A new thread is named "New thread". The person creates, renames, and deletes a thread with a control in the thread list, or tells the agent to do it. Both run the same operation. A thread name is 1 to 80 characters.
 
 A message block is one Enter from the person, or one reply from the assistant. Several Enters before a reply are several person blocks. A message has no length limit.
 
