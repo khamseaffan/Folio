@@ -97,3 +97,14 @@ def _read_verified_token(id_token: str) -> Mapping[str, object]:
     if not isinstance(claims, Mapping):
         raise SignInError(NOT_PROVEN)
     return claims
+
+
+def delete_firebase_user(firebase_uid: str) -> None:
+    try:
+        auth.delete_user(firebase_uid, app=_firebase_app())
+    except auth.UserNotFoundError:
+        return
+    except SignInError:
+        raise
+    except Exception:
+        raise SignInError(NOT_PROVEN) from None

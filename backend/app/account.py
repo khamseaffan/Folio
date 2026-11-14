@@ -96,3 +96,23 @@ def load_account(account_id: uuid.UUID) -> tuple[str, str | None]:
     if row is None:
         raise RuntimeError("account is missing")
     return row[0], row[1]
+
+
+def load_firebase_uid(account_id: uuid.UUID) -> str | None:
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT firebase_uid FROM account WHERE id = %s",
+            (account_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return row[0]
+
+
+def delete_account(account_id: uuid.UUID) -> bool:
+    with connect() as connection:
+        deleted = connection.execute(
+            "DELETE FROM account WHERE id = %s RETURNING id",
+            (account_id,),
+        ).fetchone()
+    return deleted is not None

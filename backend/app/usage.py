@@ -43,7 +43,7 @@ def apply(connection: psycopg.Connection) -> None:
 
 def record_usage(
     connection: psycopg.Connection,
-    account_id: uuid.UUID,
+    account_id: uuid.UUID | None,
     email: str,
     operation: str,
     provider: str,
@@ -135,3 +135,21 @@ def tokens_for_email(connection: psycopg.Connection, email: str) -> int:
     if total is None or total[0] is None:
         return 0
     return int(total[0])
+
+
+def token_totals_for_email(connection: psycopg.Connection, email: str) -> tuple[int, int, int]:
+    apply(connection)
+    row = connection.execute(
+        """
+        SELECT COALESCE(SUM(input_tokens), 0),
+               COALESCE(SUM(output_tokens), 0),
+               COALESCE(SUM(total_tokens), 0)
+        FROM usage
+        WHERE email = %s
+          AND usage_missing = false
+        """,
+        (email.lower(),),
+    ).fetchone()
+    if row is None:
+        return 0, 0, 0
+    return int(row[0]), int(row[1]), int(row[2])

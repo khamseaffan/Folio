@@ -19,6 +19,7 @@ from app.operations import (
     call,
 )
 from app.thread import create_thread, get_thread
+from app.usage import apply as apply_usage
 from app.usage import record_usage
 
 
@@ -29,6 +30,8 @@ def _new_account() -> tuple[uuid.UUID, str]:
 
 def _remove(account_id: uuid.UUID, email: str) -> None:
     with connect() as connection:
+        # On a new database nothing has created the tables yet.
+        apply_usage(connection)
         connection.execute("DELETE FROM account WHERE id = %s", (account_id,))
         connection.execute("DELETE FROM usage WHERE email = %s", (email,))
         connection.execute("DELETE FROM email_limit WHERE email = %s", (email,))

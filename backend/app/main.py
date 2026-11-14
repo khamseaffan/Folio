@@ -7,15 +7,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app import operations
-from app.account import ensure_account, load_account, set_display_name
+from app.account import (
+    delete_account,
+    ensure_account,
+    load_account,
+    load_firebase_uid,
+    set_display_name,
+)
 from app.db import connect, database_ready
-from app.live import stop_reply
+from app.live import stop_account, stop_reply
 from app.message import MessageRow, list_messages
 from app.model import open_model
-from app.session import end_session, open_session, start_session
-from app.sign_in_proof import NOT_ALLOWED, NOT_PROVEN, SignInError, verify_allowed_sign_in
+from app.session import (
+    end_account_session,
+    end_session,
+    list_open_sessions,
+    open_session,
+    session_handle,
+    start_session,
+)
+from app.sign_in_proof import (
+    NOT_ALLOWED,
+    NOT_PROVEN,
+    SignInError,
+    delete_firebase_user,
+    verify_allowed_sign_in,
+)
 from app.thread import ThreadRow, get_thread
 from app.turn import NO_FAILURE, start_reply, start_retry
+from app.usage import token_totals_for_email
 
 app = FastAPI()
 
@@ -23,6 +43,7 @@ _CONTINUE = "Sign in to continue."
 _NAME = "Enter a name, up to 40 characters."
 _NOT_FOUND = "Not found"
 _MESSAGE = "Enter a message."
+_NOT_DELETED = "The account could not be deleted. Try again."
 _LOCAL_ORIGIN = "http://localhost:3000"
 
 
@@ -231,6 +252,95 @@ def _open_account(request: Request) -> tuple[uuid.UUID, uuid.UUID] | JSONRespons
     if account_id is None:
         return _error(401, _CONTINUE)
     return session_id, account_id
+
+
+@app.get("/sessions")
+def get_sessions(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    session_id, account_id = opened
+    try:
+        rows = list_open_sessions(account_id)
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content=[
+            {
+                "id": row[0],
+                "created_at": row[1].isoformat(),
+                "last_active_at": row[2].isoformat(),
+                "current": row[0] == session_handle(session_id),
+            }
+            for row in rows
+        ]
+    )
+
+
+@app.post("/sessions/{target_id}/end")
+def end_account_session_route(request: Request, target_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    session_id, account_id = opened
+    if len(target_id) != 64 or set(target_id) - set("0123456789abcdef"):
+        return _error(404, _NOT_FOUND)
+    try:
+        ended = end_account_session(account_id, target_id)
+    except Exception:
+        return _down()
+    if not ended:
+        return _error(404, _NOT_FOUND)
+    response = Response(status_code=204)
+    if target_id == session_handle(session_id):
+        _clear_session(response, request)
+    return response
+
+
+@app.get("/usage")
+def get_usage(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        email, _ = load_account(account_id)
+        with connect() as connection:
+            totals = token_totals_for_email(connection, email)
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content={
+            "input_tokens": totals[0],
+            "output_tokens": totals[1],
+            "total_tokens": totals[2],
+        }
+    )
+
+
+@app.delete("/account", status_code=204)
+def remove_account(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    stop_account(account_id)
+    try:
+        firebase_uid = load_firebase_uid(account_id)
+    except Exception:
+        return _down()
+    if firebase_uid is not None:
+        try:
+            delete_firebase_user(firebase_uid)
+        except SignInError:
+            return _error(502, _NOT_DELETED)
+    try:
+        delete_account(account_id)
+    except Exception:
+        return _down()
+    response = Response(status_code=204)
+    _clear_session(response, request)
+    return response
 
 
 def _parse_thread_id(raw: str) -> uuid.UUID | None:
