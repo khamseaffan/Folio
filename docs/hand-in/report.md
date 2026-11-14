@@ -107,6 +107,8 @@ The assignment asks for two features of my own.
 
 - Notes in English, kept as Markdown.
 - Your profile, how you like to work, is read on every call.
+- The profile holds at most 20,000 characters, about 5,000 tokens. The assistant is told when it is full and shortens it or moves facts to another note.
+- The cap exists because the profile is paid for on every message. Without it, a very long profile could stop every reply.
 - Other notes are found by their words. One call opens at most five.
 - The assistant writes a short fact into the note where it belongs.
 - You read them in a panel beside the chat, and you change them by saying so.
