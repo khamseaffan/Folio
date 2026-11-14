@@ -492,6 +492,7 @@ def test_create_and_list_only_the_callers_threads(monkeypatch: pytest.MonkeyPatc
         rows = listed.json()
         assert [item["id"] for item in rows] == [first_id, second_id]
         for item in rows:
+            assert item.pop("working") is False
             _assert_item(item)
             assert item["name"] == "New thread"
         assert their_id not in {item["id"] for item in rows}

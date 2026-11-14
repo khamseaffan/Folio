@@ -307,7 +307,8 @@
           attr("question", "text", "no", "", "Set while the run is waiting."),
           attr("work_ms", "integer", "yes", "", "Default 0. Time spent waiting is not included."),
           attr("attempt_count", "integer", "yes", "", "Default 0. A dead provider is tried once, then three more times."),
-          attr("delivered_at", "timestamptz", "no", "", "Set with the one report or the one result message.")
+          attr("delivered_at", "timestamptz", "no", "", "Set with the one report or the one result message."),
+          attr("created_at", "timestamptz", "yes", "", "Default now. A run still working 30 minutes after this is marked dead.")
         ]
       },
       {

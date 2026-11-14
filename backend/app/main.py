@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import ability, knowledge_file, operations
+from app import ability, knowledge_file, operations, run, schedule
 from app.account import (
     delete_account,
     ensure_account,
@@ -36,7 +36,7 @@ from app.sign_in_proof import (
     delete_firebase_user,
     verify_allowed_sign_in,
 )
-from app.thread import ThreadRow, get_thread
+from app.thread import ThreadRow, get_thread, list_threads
 from app.turn import NO_FAILURE, start_reply, start_retry
 from app.usage import token_totals_for_email
 
@@ -574,7 +574,43 @@ def get_threads(request: Request) -> Response:
     result = _operate(account_id, "list_threads", {})
     if isinstance(result, JSONResponse):
         return result
-    return JSONResponse(content=result["threads"])
+    try:
+        with connect() as connection:
+            working = run.in_flight_threads(connection, account_id)
+    except Exception:
+        return _down()
+    threads = result["threads"]
+    assert isinstance(threads, list)
+    return JSONResponse(
+        content=[{**item, "working": uuid.UUID(item["id"]) in working} for item in threads]
+    )
+
+
+@app.get("/schedules")
+def get_schedules(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        with connect() as connection:
+            rows = schedule.list_schedules(connection, account_id)
+            names = {row[0]: row[2] for row in list_threads(connection, account_id)}
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content=[
+            {
+                "id": str(row[0]),
+                "task": row[3],
+                "when_text": row[4],
+                "next_run_at": row[5].isoformat() if row[5] is not None else None,
+                "thread_id": str(row[2]),
+                "thread_name": names.get(row[2], ""),
+            }
+            for row in rows
+        ]
+    )
 
 
 @app.post("/threads")
