@@ -260,7 +260,8 @@ def test_delete_account_stops_live_replies(monkeypatch, email) -> None:
     client = _sign_in(monkeypatch, email)
     account_id = _account_id(email)
     assert client.delete("/account").status_code == 204
-    assert stopped == [account_id]
+    # Once before the slow Firebase call, and once after, for a turn started between.
+    assert stopped == [account_id, account_id]
 
 
 def test_delete_account_mid_reply_keeps_the_usage_row(monkeypatch, email) -> None:

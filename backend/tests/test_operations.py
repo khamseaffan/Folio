@@ -221,3 +221,19 @@ def test_stop_account_stops_every_reply_of_that_account() -> None:
         return first.stop.is_set(), second.stop.is_set(), theirs.stop.is_set()
 
     assert asyncio.run(scenario()) == (True, True, False)
+
+
+def test_a_name_with_a_null_character_is_refused(connection, account) -> None:
+    account_id, _ = account
+    thread = create_thread(connection, account_id)
+    renamed = call(
+        connection,
+        account_id,
+        Context(None),
+        "rename_thread",
+        {"thread_id": str(thread[0]), "name": "Tax\x00es"},
+    )
+    created = call(connection, account_id, Context(None), "create_thread", {"name": "a\x00"})
+    assert renamed == {"ok": False, "code": "invalid", "error": BAD_NAME}
+    assert created == {"ok": False, "code": "invalid", "error": BAD_NAME}
+    assert get_thread(connection, account_id, thread[0])[2] == "New thread"

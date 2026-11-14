@@ -12,7 +12,7 @@ The person signs in through Firebase Authentication with Google or a magic link.
 
 The person sets a display name when the account is created. The name is required and is 1 to 40 characters. The agent uses that name. Settings can change it.
 
-A session ends after 30 minutes in which the person sends nothing and the assistant does nothing. An account may have two sessions. A third sign-in locks the account row and ends the oldest session in that same save. The person can see the sessions and end one. Ending a session is logging out.
+A session ends after 24 hours in which the person sends nothing and the assistant does nothing. An account may have two sessions. A third sign-in locks the account row and ends the oldest session in that same save. The person can see the sessions and end one. Ending a session is logging out.
 
 Ending a session does not stop a running reply. The reply continues on the server. Another browser, or a refresh, shows the stream still running or the finished reply.
 

@@ -37,7 +37,7 @@ def start_session(account_id: uuid.UUID) -> uuid.UUID:
                 SET ended_at = now()
                 WHERE account_id = %s
                   AND ended_at IS NULL
-                  AND last_active_at <= now() - interval '30 minutes'
+                  AND last_active_at <= now() - interval '24 hours'
                 """,
                 (account_id,),
             )
@@ -96,7 +96,7 @@ def open_session(session_id: uuid.UUID) -> uuid.UUID | None:
                 """
                 SELECT account_id,
                        ended_at IS NOT NULL,
-                       last_active_at <= now() - interval '30 minutes'
+                       last_active_at <= now() - interval '24 hours'
                 FROM session
                 WHERE id = %s
                 FOR UPDATE
@@ -148,7 +148,7 @@ def list_open_sessions(account_id: uuid.UUID) -> list[tuple[str, datetime, datet
             FROM session
             WHERE account_id = %s
               AND ended_at IS NULL
-              AND last_active_at > now() - interval '30 minutes'
+              AND last_active_at > now() - interval '24 hours'
             ORDER BY created_at ASC
             """,
             (account_id,),
@@ -165,7 +165,7 @@ def end_account_session(account_id: uuid.UUID, handle: str) -> bool:
             WHERE encode(sha256(convert_to(id::text, 'UTF8')), 'hex') = %s
               AND account_id = %s
               AND ended_at IS NULL
-              AND last_active_at > now() - interval '30 minutes'
+              AND last_active_at > now() - interval '24 hours'
             RETURNING id
             """,
             (handle, account_id),

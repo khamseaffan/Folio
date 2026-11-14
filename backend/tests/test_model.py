@@ -470,3 +470,27 @@ def test_brain_stream_joins_a_tool_call_that_arrives_in_pieces() -> None:
     reply = stream.reply()
     assert reply.tool_calls == (ToolCall("c1", "rename_thread", {"name": "Tax"}),)
     assert reply.total_tokens == 5
+
+
+def test_brain_keeps_a_tool_call_whose_arguments_cannot_be_read() -> None:
+    chat = _ToolChat(
+        AIMessage(
+            content="",
+            invalid_tool_calls=[
+                {"id": "c9", "name": "rename_thread", "args": '{"name": ', "error": "bad json"}
+            ],
+        )
+    )
+    reply = LangChainBrain(chat).complete("p", _blocks(), (_RENAME,))
+    assert len(reply.tool_calls) == 1
+    call = reply.tool_calls[0]
+    assert (call.id, call.name, call.arguments) == ("c9", "rename_thread", {})
+    assert call.unreadable is True
+
+
+def test_brain_gives_a_tool_call_an_id_when_the_provider_sent_none() -> None:
+    chat = _ToolChat(
+        AIMessage(content="", tool_calls=[{"id": None, "name": "list_threads", "args": {}}])
+    )
+    reply = LangChainBrain(chat).complete("p", _blocks(), (_RENAME,))
+    assert reply.tool_calls[0].id != ""

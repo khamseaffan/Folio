@@ -192,6 +192,7 @@ Design for the running service. Not switched on yet.
 
 - API and worker logs go to Cloud Logging.
 - A line names the account, the run, and the operation.
+- Built: a failed chat turn, a failed save, a refused tool call, and a request refused by origin each write a line. The person sees a fixed sentence and never the cause.
 - It leaves out the conversation, the transcript, file contents, the prompt, keys, integration secrets, cookies, and magic links.
 
 **Alerts**
@@ -212,8 +213,11 @@ Design for the running service. Not switched on yet.
 
 - The email has to be allowed. Sign-in from the public page creates the account.
 - No password. Google, or a one-time link, proves the address.
-- A session ends after 30 minutes if you and the assistant are both quiet.
+- A session ends after 24 hours if you and the assistant are both quiet.
 - At most two sessions.
+- A change is refused when it comes from a page that is not Folio. The API checks the origin before any route runs, on top of the SameSite cookie.
+- The page never receives a session id. Settings names a session by a hash of it, so a script on the page cannot read a sign-in.
+- Deleting the account asks for the account email first.
 
 **What I can see**
 

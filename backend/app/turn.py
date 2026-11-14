@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 import uuid
 from collections.abc import Callable
@@ -23,6 +24,7 @@ from app.thread import ThreadRow, get_thread, set_summary
 from app.usage import record_usage, tokens_for_email
 
 _PROVIDER = "openai"
+_log = logging.getLogger("folio.turn")
 
 
 def _window(model: Model) -> int:
@@ -628,13 +630,24 @@ def _write_reply(
     replies: list[Reply] = []
 
     def call_tool(call: ToolCall) -> str:
-        with connect() as connection:
-            result = operations.call(
-                connection,
-                prepared.account_id,
-                operations.Context(prepared.thread_id),
+        if call.unreadable:
+            result = {"ok": False, "code": "invalid", "error": operations.BAD_INPUT}
+        else:
+            with connect() as connection:
+                result = operations.call(
+                    connection,
+                    prepared.account_id,
+                    operations.Context(prepared.thread_id),
+                    call.name,
+                    call.arguments,
+                )
+        if result.get("ok") is not True:
+            _log.warning(
+                "tool call refused: %s (%s%s) in thread %s",
                 call.name,
-                call.arguments,
+                result.get("code"),
+                ", arguments unreadable" if call.unreadable else "",
+                prepared.thread_id,
             )
         return json.dumps(result)
 
@@ -661,17 +674,23 @@ def _write_reply(
                 replies.append(usage)
     except Exception:
         failed = True
+        _log.exception("chat turn failed in thread %s", prepared.thread_id)
     stopped = live.stop.is_set()
     try:
         persist("".join(parts), replies, failed, stopped)
     except Exception:
         failed = True
+        _log.exception("saving the chat turn failed in thread %s", prepared.thread_id)
         # The save rolled back as a whole. The calls were still made, so their rows are written.
         try:
             with connect() as connection:
                 _record(connection, prepared, replies, None)
         except Exception:
-            pass
+            _log.exception(
+                "usage rows were not written for %d model calls in thread %s",
+                len(replies),
+                prepared.thread_id,
+            )
     if failed:
         live.publish({"failed": True})
     else:

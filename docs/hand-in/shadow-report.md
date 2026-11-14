@@ -203,7 +203,7 @@ Design for the running service. Not switched on yet.
 
 - The email has to be allowed. Sign-in from the public page creates the account.
 - No password. Google, or a one-time link, proves the address.
-- A session ends after 30 minutes if you and the assistant are both quiet.
+- A session ends after 24 hours if you and the assistant are both quiet.
 - At most two sessions.
 
 **What I can see**

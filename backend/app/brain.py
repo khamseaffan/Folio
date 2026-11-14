@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Sequence
 
 from langchain.chat_models import init_chat_model
@@ -181,24 +182,27 @@ class _ChatStream:
 
 
 def _tool_calls(message: object) -> tuple[ToolCall, ...]:
-    raw = getattr(message, "tool_calls", None)
-    if not isinstance(raw, list):
-        return ()
     calls: list[ToolCall] = []
-    for item in raw:
-        if not isinstance(item, dict):
+    for attribute, unreadable in (("tool_calls", False), ("invalid_tool_calls", True)):
+        raw = getattr(message, attribute, None)
+        if not isinstance(raw, list):
             continue
-        name = item.get("name")
-        if not isinstance(name, str) or name == "":
-            continue
-        arguments = item.get("args")
-        calls.append(
-            ToolCall(
-                id=str(item.get("id") or ""),
-                name=name,
-                arguments=dict(arguments) if isinstance(arguments, dict) else {},
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or name == "":
+                continue
+            arguments = item.get("args")
+            calls.append(
+                ToolCall(
+                    # The tool result must name its call, so a call without an id is given one.
+                    id=str(item.get("id") or f"call_{uuid.uuid4().hex}"),
+                    name=name,
+                    arguments=dict(arguments) if isinstance(arguments, dict) else {},
+                    unreadable=unreadable,
+                )
             )
-        )
     return tuple(calls)
 
 
