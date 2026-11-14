@@ -2,7 +2,7 @@
 
 The product language is English.
 
-Knowledge for one account is a set of Markdown files. `profile.md` holds manner and working preferences and is included in every model call. Other files are created when their name is the right place for the knowledge. The name states what the file holds. Examples are `answer-bank.md` and `tracker.md`. When no existing file fits, a new file is created with a name that states the knowledge.
+Knowledge for one account is a set of Markdown files. `profile.md` holds manner and working preferences and is included in every model call. `profile.md` holds at most 20,000 characters, because it is sent on every call. A change that would make it longer is refused and the agent is told, so it can shorten the file or move facts into another file. Other files are created when their name is the right place for the knowledge. The name states what the file holds. Examples are `answer-bank.md` and `tracker.md`. When no existing file fits, a new file is created with a name that states the knowledge.
 
 There is no cap on how many files an account may have. A file has no tags. It is a title and the text.
 

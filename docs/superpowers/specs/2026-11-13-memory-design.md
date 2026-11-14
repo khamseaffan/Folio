@@ -86,6 +86,7 @@ Rules in the operations:
 
 - A file name is trimmed and is 1 to 80 characters. A null character is refused in a name or in text.
 - `read_knowledge` opens at most five different files in one chat turn, not counting `profile.md`. A sixth is refused with a sentence the model can read. Reading the same file twice counts once.
+- `profile.md` holds at most 20,000 characters. A write, an append, or an edit that would leave it longer is refused, the file stays as it was, and the answer is a sentence the model can read. Other files have no limit.
 - `edit_knowledge` is refused when `find` is missing from the file or appears more than once. The answer says how many times it appeared.
 - A refused call returns an error sentence, as the thread operations do. It is logged.
 
@@ -110,6 +111,9 @@ A file is something a person can read from top to bottom and trust. A table of s
 
 **Why is `profile.md` sent on every call, and the other files are not?**
 `profile.md` holds how the person likes to be answered. That applies to every reply, so it must always be there. The other files hold facts that matter only sometimes. Sending all of them every time would cost tokens on every message and would grow without limit.
+
+**Why is `profile.md` limited to 20,000 characters, when other files have no limit?**
+`profile.md` is the only file sent on every model call, so its size is paid for on every message. Without a limit it could grow until it no longer fits in the model's context. Then every turn would fail, and the person could not even ask the agent to fix it, because the agent would never run. 20,000 characters is about 5,000 tokens. That is far more than a description of how someone likes to be answered needs, and it is small beside the model's context. Other files are opened only when needed, and at most five in a turn, so they do not carry the same risk. When the limit is reached the agent is told, and it can shorten the file or move facts into another file.
 
 **Why at most five files in one turn?**
 It is a cost limit that the person can understand. Without it, a broad question could make the agent open every file. Five is the number written in the product docs. Code enforces it, because a limit that only the model is asked to keep is not a limit.

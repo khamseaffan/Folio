@@ -40,6 +40,7 @@ None of these is chosen yet.
 - D24. A knowledge file name and an ability name are trimmed and are 1 to 80 characters. The check is in the operation. The table has no check.
 - D25. An ability is addressed by its id, because its name is not unique.
 - D26. `knowledge_file` has no `storage_key`. The row holds the text, and no Cloud Storage copy exists.
+- D27. `profile.md` holds at most 20,000 characters. A write, append, or edit that would pass it is refused and the agent is told. It is sent on every call, so an unlimited file could outgrow the model's context and stop every turn.
 
 ## Open questions
 

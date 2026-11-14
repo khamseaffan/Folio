@@ -18,7 +18,11 @@ NO_ABILITY = "Ability not found."
 BAD_FILE_NAME = "A file name is 1 to 80 characters."
 BAD_TEXT = "That text cannot be stored."
 TOO_MANY = "This turn has already opened five files."
+PROFILE_TOO_LONG = (
+    "profile.md can hold at most 20,000 characters. Shorten it, or move facts into another file."
+)
 READ_LIMIT = 5
+PROFILE_LIMIT = 20_000
 
 _NAME_LIMIT = 80
 
@@ -119,6 +123,10 @@ def _clean(raw: str) -> bool:
     except UnicodeEncodeError:
         return False
     return True
+
+
+def _too_long(name: str, body: str) -> bool:
+    return name == knowledge_file.PROFILE and len(body) > PROFILE_LIMIT
 
 
 def _name(raw: str) -> str | None:
@@ -252,6 +260,8 @@ def _write_knowledge(
         return _refused("invalid", BAD_FILE_NAME)
     if not _clean(given.body):
         return _refused("invalid", BAD_TEXT)
+    if _too_long(name, given.body):
+        return _refused("limit", PROFILE_TOO_LONG)
     return _file_result(knowledge_file.put_file(connection, account_id, name, given.body))
 
 
@@ -271,6 +281,8 @@ def _append_knowledge(
     if existing is not None and existing[3] != "":
         joiner = "" if existing[3].endswith("\n") else "\n"
         body = existing[3] + joiner + given.text
+    if _too_long(name, body):
+        return _refused("limit", PROFILE_TOO_LONG)
     return _file_result(knowledge_file.put_file(connection, account_id, name, body))
 
 
@@ -295,6 +307,8 @@ def _edit_knowledge(
             f"The text to find appears {count} times in the file. It must appear exactly once.",
         )
     body = row[3].replace(given.find, given.replace)
+    if _too_long(name, body):
+        return _refused("limit", PROFILE_TOO_LONG)
     return _file_result(knowledge_file.put_file(connection, account_id, name, body))
 
 
@@ -426,7 +440,7 @@ OPERATIONS: dict[str, Operation] = {
         Operation(
             "write_knowledge",
             "Create a knowledge file, or replace all of its text. Use it for a new file or to "
-            "reorganise one.",
+            "reorganise one. profile.md can hold at most 20,000 characters.",
             _WriteKnowledge,
             _write_knowledge,
             True,

@@ -13,6 +13,8 @@ from app.operations import (
     BAD_TEXT,
     NO_ABILITY,
     NO_FILE,
+    PROFILE_LIMIT,
+    PROFILE_TOO_LONG,
     TOO_MANY,
     Context,
     Turn,
@@ -350,3 +352,66 @@ def test_two_appends_at_once_keep_both_lines(connection, account, existing) -> N
     body = get_file(connection, account_id, "n.md")[3]
     lines = body.split("\n")
     assert sorted(lines) == sorted((["start"] if existing else []) + ["one", "two"])
+
+
+def test_profile_write_allows_the_limit_and_refuses_one_more(connection, account) -> None:
+    account_id, _ = account
+    refused = {"ok": False, "code": "limit", "error": PROFILE_TOO_LONG}
+    none = _call(
+        connection,
+        account_id,
+        "write_knowledge",
+        {"name": "profile.md", "body": "a" * (PROFILE_LIMIT + 1)},
+    )
+    assert none == refused
+    assert get_file(connection, account_id, "profile.md") is None
+    full = "a" * PROFILE_LIMIT
+    ok = _call(connection, account_id, "write_knowledge", {"name": "profile.md", "body": full})
+    assert ok["ok"] is True
+    again = _call(
+        connection,
+        account_id,
+        "write_knowledge",
+        {"name": "profile.md", "body": "b" * (PROFILE_LIMIT + 1)},
+    )
+    assert again == refused
+    assert get_file(connection, account_id, "profile.md")[3] == full
+
+
+def test_profile_append_over_the_limit_is_refused(connection, account) -> None:
+    account_id, _ = account
+    put_file(connection, account_id, "profile.md", "a" * (PROFILE_LIMIT - 2))
+    refused = _call(
+        connection, account_id, "append_knowledge", {"name": "profile.md", "text": "bb"}
+    )
+    assert refused == {"ok": False, "code": "limit", "error": PROFILE_TOO_LONG}
+    assert get_file(connection, account_id, "profile.md")[3] == "a" * (PROFILE_LIMIT - 2)
+    fits = _call(connection, account_id, "append_knowledge", {"name": "profile.md", "text": "b"})
+    assert fits["ok"] is True
+
+
+def test_profile_edit_over_the_limit_is_refused_and_shortening_works(connection, account) -> None:
+    account_id, _ = account
+    body = "x" + "a" * (PROFILE_LIMIT - 1)
+    put_file(connection, account_id, "profile.md", body)
+    refused = _call(
+        connection,
+        account_id,
+        "edit_knowledge",
+        {"name": "profile.md", "find": "x", "replace": "yy"},
+    )
+    assert refused == {"ok": False, "code": "limit", "error": PROFILE_TOO_LONG}
+    assert get_file(connection, account_id, "profile.md")[3] == body
+    shorter = _call(
+        connection, account_id, "edit_knowledge", {"name": "profile.md", "find": "x", "replace": ""}
+    )
+    assert shorter["ok"] is True
+    assert len(get_file(connection, account_id, "profile.md")[3]) == PROFILE_LIMIT - 1
+
+
+def test_other_files_have_no_length_limit(connection, account) -> None:
+    account_id, _ = account
+    done = _call(
+        connection, account_id, "write_knowledge", {"name": "notes.md", "body": "a" * 30_000}
+    )
+    assert done["ok"] is True
