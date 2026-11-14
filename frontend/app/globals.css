@@ -690,7 +690,7 @@ h1 {
   cursor: pointer;
 }
 
-.confirm-actions button:disabled {
+.confirm-actions button[aria-disabled="true"] {
   cursor: default;
   opacity: 0.5;
 }

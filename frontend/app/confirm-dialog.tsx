@@ -16,15 +16,32 @@ export function ConfirmDialog({ title, body, confirmLabel, error, busy, onCancel
   const id = useId();
   const cancelRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const wasBusy = useRef(false);
 
   useEffect(() => {
     cancelRef.current?.focus();
   }, []);
 
+  // The buttons are never disabled, so focus stays in the dialog. After a refusal it goes to the safe choice.
+  useEffect(() => {
+    if (wasBusy.current && !busy && error !== null) cancelRef.current?.focus();
+    wasBusy.current = busy;
+  }, [busy, error]);
+
+  function cancel() {
+    if (busy) return;
+    onCancel();
+  }
+
+  function confirm() {
+    if (busy) return;
+    onConfirm();
+  }
+
   function onKey(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
-      if (!busy) onCancel();
+      cancel();
       return;
     }
     if (event.key !== "Tab") return;
@@ -62,8 +79,8 @@ export function ConfirmDialog({ title, body, confirmLabel, error, busy, onCancel
             ref={cancelRef}
             type="button"
             className="confirm-cancel"
-            onClick={onCancel}
-            disabled={busy}
+            onClick={cancel}
+            aria-disabled={busy}
           >
             Cancel
           </button>
@@ -71,8 +88,8 @@ export function ConfirmDialog({ title, body, confirmLabel, error, busy, onCancel
             ref={confirmRef}
             type="button"
             className="confirm-delete"
-            onClick={onConfirm}
-            disabled={busy}
+            onClick={confirm}
+            aria-disabled={busy}
           >
             {confirmLabel}
           </button>
