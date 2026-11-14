@@ -9,6 +9,7 @@ from app.model import FakeModel
 from app.operations import OPERATIONS
 from app.sign_in_proof import SignInError, VerifiedSignIn
 from app.thread import create_thread
+from app.usage import apply as apply_usage
 from app.usage import record_usage
 from fastapi.testclient import TestClient
 
@@ -22,6 +23,8 @@ def _email(label: str) -> str:
 def _remove(email: str) -> None:
     stored = email.lower()
     with connect() as connection:
+        # On a new database nothing has created the tables yet.
+        apply_usage(connection)
         connection.execute("DELETE FROM usage WHERE email = %s", (stored,))
         connection.execute("DELETE FROM account WHERE email = %s", (stored,))
         connection.execute("DELETE FROM email_limit WHERE email = %s", (stored,))
