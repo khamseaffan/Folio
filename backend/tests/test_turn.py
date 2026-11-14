@@ -608,9 +608,9 @@ def test_a_second_omission_is_summarized_before_the_reply(accounts) -> None:
     thread_id = accounts["thread_id"]
     prior = "prior-fold-mantle"
     model = FakeModel(
-        reply=Reply("done", 1, 1, 2),
+        reply=Reply("reply-lantern", 1, 1, 2),
         overflow_text="p0",
-        later_mark="done",
+        later_mark="reply-lantern",
         later_text="p1",
     )
     base = datetime(2020, 1, 1, tzinfo=UTC)
@@ -658,10 +658,10 @@ def test_a_second_omission_is_summarized_before_the_reply(accounts) -> None:
     assert model.prompts[0] == f"{fold}\n{prior}"
     assert HARM not in model.prompts[0]
     assert [block.text for block in model.completed[0]] == ["p0"]
-    assert model.prompts[1] == f"{fold}\ndone"
+    assert model.prompts[1] == f"{fold}\nreply-lantern"
     assert [block.text for block in model.completed[1]] == ["p1"]
     assert HARM in model.prompts[2]
-    assert "done" in model.prompts[2]
+    assert "reply-lantern" in model.prompts[2]
     assert fold not in model.prompts[2]
     sent = [block.text for block in model.completed[2]]
     assert "p0" not in sent
@@ -671,9 +671,9 @@ def test_a_second_omission_is_summarized_before_the_reply(accounts) -> None:
     ]
     assert [f"a{index}" for index in range(10)] == [text for text in sent if text.startswith("a")]
     assert [message[6] for message in result.omitted] == ["p0", "p1"]
-    assert stored == ("done",)
+    assert stored == ("reply-lantern",)
     assert listed is not None
-    reply_id = next(row[0] for row in listed if row[6] == "done")
+    reply_id = next(row[0] for row in listed if row[6] == "reply-lantern")
     assert len(usage) == 3
     assert all(row[0] == "chat" and row[2] is None for row in usage)
     assert sum(row[1] is None for row in usage) == 2
