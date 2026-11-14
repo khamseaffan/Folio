@@ -271,8 +271,9 @@ export function Settings({ account, onClose, onAccountChange, onSignedOut, onDow
       {confirming ? (
         <ConfirmDialog
           title="Delete your account?"
-          body="Your threads and messages are deleted now. This cannot be undone."
+          body={`Your threads and messages are deleted now. This cannot be undone. Type ${account.email} to confirm.`}
           confirmLabel="Delete account"
+          requireText={{ label: "Type your email to confirm", expected: account.email }}
           error={deleteError}
           busy={deleting}
           onCancel={cancelDelete}

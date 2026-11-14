@@ -673,6 +673,23 @@ h1 {
   margin: 0.6rem 0 0;
 }
 
+.confirm-field {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.6rem;
+  margin-top: 0.8rem;
+  padding: 0.45rem 0.8rem;
+  border: 2px solid transparent;
+  border-radius: 0.85rem;
+  background: var(--field);
+}
+
+.confirm-field:focus,
+.confirm-field:focus-visible {
+  outline: none;
+  border-color: var(--fuji);
+}
+
 .confirm-actions {
   display: flex;
   justify-content: flex-end;
