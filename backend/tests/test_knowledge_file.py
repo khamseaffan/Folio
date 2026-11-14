@@ -158,3 +158,44 @@ def test_deleting_the_account_removes_its_files(connection) -> None:
 def test_apply_is_repeatable(connection) -> None:
     apply(connection)
     apply(connection, force=True)
+
+
+def test_search_finds_a_file_when_only_some_words_match(connection, account) -> None:
+    account_id, _ = account
+    put_file(connection, account_id, "travel.md", "Passport expires in May 2027.")
+    found = search_files(connection, account_id, "passport expiration date")
+    assert [name for name, _ in found] == ["travel.md"]
+
+
+def test_search_ranks_more_matching_words_first(connection, account) -> None:
+    account_id, _ = account
+    put_file(connection, account_id, "one.md", "The passport is blue.")
+    put_file(connection, account_id, "two.md", "The passport expires in May.")
+    found = search_files(connection, account_id, "passport expires")
+    assert [name for name, _ in found] == ["two.md", "one.md"]
+
+
+def test_search_matches_the_file_name(connection, account) -> None:
+    account_id, _ = account
+    put_file(connection, account_id, "travel.md", "Nothing about trips in here.")
+    put_file(connection, account_id, "other.md", "Nothing.")
+    assert [name for name, _ in search_files(connection, account_id, "travel")] == ["travel.md"]
+
+
+def test_a_query_with_no_usable_words_returns_nothing(connection, account) -> None:
+    account_id, _ = account
+    put_file(connection, account_id, "a.md", "the and of")
+    for query in ("the", "of and", "", "???"):
+        assert search_files(connection, account_id, query) == []
+
+
+def test_get_file_can_lock_the_row(account) -> None:
+    account_id, _ = account
+    with connect() as setup:
+        setup.autocommit = True
+        put_file(setup, account_id, "a.md", "x")
+    with connect() as first, connect() as second:
+        assert get_file(first, account_id, "a.md", lock=True) is not None
+        second.execute("SET lock_timeout = '300ms'")
+        with pytest.raises(psycopg.errors.LockNotAvailable):
+            get_file(second, account_id, "a.md", lock=True)

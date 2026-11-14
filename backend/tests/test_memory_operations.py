@@ -1,4 +1,5 @@
 import json
+import threading
 import uuid
 from collections.abc import Iterator
 
@@ -294,3 +295,58 @@ def test_memory_tools_are_agent_tools_without_an_account_id() -> None:
     for name in MEMORY_TOOLS:
         assert "account_id" not in json.dumps(specs[name].schema)
         assert specs[name].description != ""
+
+
+def test_text_that_cannot_be_encoded_is_refused(connection, account) -> None:
+    account_id, _ = account
+    bad = "a\ud800"
+    put_file(connection, account_id, "a.md", "text")
+    for operation, arguments, error in (
+        ("write_knowledge", {"name": bad, "body": "b"}, BAD_FILE_NAME),
+        ("read_knowledge", {"name": bad}, BAD_FILE_NAME),
+        ("write_ability", {"name": bad, "body": "b"}, BAD_FILE_NAME),
+        ("write_knowledge", {"name": "a.md", "body": bad}, BAD_TEXT),
+        ("append_knowledge", {"name": "a.md", "text": bad}, BAD_TEXT),
+        ("edit_knowledge", {"name": "a.md", "find": bad, "replace": "x"}, BAD_TEXT),
+        ("edit_knowledge", {"name": "a.md", "find": "text", "replace": bad}, BAD_TEXT),
+        ("search_knowledge", {"query": bad}, BAD_TEXT),
+        ("write_ability", {"name": "a", "body": bad}, BAD_TEXT),
+    ):
+        result = _call(connection, account_id, operation, arguments)
+        assert result == {"ok": False, "code": "invalid", "error": error}
+    assert get_file(connection, account_id, "a.md")[3] == "text"
+
+
+def _append_in(account_id: uuid.UUID, text: str, hold: threading.Event | None = None) -> None:
+    with connect() as opened:
+        opened.execute("SET lock_timeout = '2s'")
+        result = call(
+            opened, account_id, Context(None), "append_knowledge", {"name": "n.md", "text": text}
+        )
+        assert result["ok"] is True
+        if hold is not None:
+            hold.wait(timeout=5)
+        opened.commit()
+
+
+@pytest.mark.parametrize("existing", [True, False])
+def test_two_appends_at_once_keep_both_lines(connection, account, existing) -> None:
+    account_id, _ = account
+    if existing:
+        put_file(connection, account_id, "n.md", "start")
+    release = threading.Event()
+    first = threading.Thread(target=_append_in, args=(account_id, "one", release))
+    second = threading.Thread(target=_append_in, args=(account_id, "two"))
+    first.start()
+    try:
+        # The first append is inside an open transaction when the second one starts.
+        threading.Timer(0.5, release.set).start()
+        second.start()
+        second.join(timeout=10)
+        first.join(timeout=10)
+        assert not first.is_alive() and not second.is_alive()
+    finally:
+        release.set()
+    body = get_file(connection, account_id, "n.md")[3]
+    lines = body.split("\n")
+    assert sorted(lines) == sorted((["start"] if existing else []) + ["one", "two"])

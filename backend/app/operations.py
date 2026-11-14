@@ -110,10 +110,20 @@ def _item(row: thread.ThreadRow) -> dict[str, str]:
     return {"id": str(row[0]), "name": row[2], "created_at": row[4].isoformat()}
 
 
+def _clean(raw: str) -> bool:
+    # Postgres text cannot hold a null character, and a lone surrogate cannot be encoded.
+    if "\x00" in raw:
+        return False
+    try:
+        raw.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def _name(raw: str) -> str | None:
     name = raw.strip()
-    # Postgres text cannot hold a null character.
-    if len(name) < 1 or len(name) > _NAME_LIMIT or "\x00" in name:
+    if len(name) < 1 or len(name) > _NAME_LIMIT or not _clean(name):
         return None
     return name
 
@@ -175,11 +185,6 @@ def _delete_thread(
     if not thread.delete_thread(connection, account_id, thread_id):
         return _refused("not_found", NOT_FOUND)
     return {"ok": True, "thread_id": str(thread_id)}
-
-
-def _clean(raw: str) -> bool:
-    # Postgres text cannot hold a null character.
-    return "\x00" not in raw
 
 
 def _file_result(row: knowledge_file.KnowledgeRow) -> Result:
@@ -261,7 +266,7 @@ def _append_knowledge(
         return _refused("invalid", BAD_FILE_NAME)
     if not _clean(given.text):
         return _refused("invalid", BAD_TEXT)
-    existing = knowledge_file.get_file(connection, account_id, name)
+    existing = knowledge_file.get_file(connection, account_id, name, lock=True)
     body = given.text
     if existing is not None and existing[3] != "":
         joiner = "" if existing[3].endswith("\n") else "\n"
@@ -280,7 +285,7 @@ def _edit_knowledge(
         return _refused("invalid", BAD_FILE_NAME)
     if not (_clean(given.find) and _clean(given.replace)):
         return _refused("invalid", BAD_TEXT)
-    row = knowledge_file.get_file(connection, account_id, name)
+    row = knowledge_file.get_file(connection, account_id, name, lock=True)
     if row is None:
         return _refused("not_found", NO_FILE)
     count = row[3].count(given.find) if given.find != "" else 0
@@ -402,8 +407,10 @@ OPERATIONS: dict[str, Operation] = {
         ),
         Operation(
             "search_knowledge",
-            "Search the person's knowledge files by words. Returns up to five files, best match "
-            "first, each with a short piece of the matching text.",
+            "Search the person's knowledge files. A file matches when it contains any of the words "
+            "or its name does. Returns up to five files, best match first, each with a short "
+            "piece of the matching text. If nothing is found, try other words before saying "
+            "something is not stored.",
             _SearchKnowledge,
             _search_knowledge,
             True,

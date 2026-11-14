@@ -38,11 +38,21 @@ def list_files(connection: psycopg.Connection, account_id: uuid.UUID) -> list[Kn
 
 
 def get_file(
-    connection: psycopg.Connection, account_id: uuid.UUID, name: str
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    name: str,
+    lock: bool = False,
 ) -> KnowledgeRow | None:
     apply(connection)
+    if lock:
+        # A first write has no row to lock, so the name is locked for the transaction instead.
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            (f"{account_id}:{name}",),
+        )
+    suffix = " FOR UPDATE" if lock else ""
     return connection.execute(
-        f"SELECT {_COLUMNS} FROM knowledge_file WHERE account_id = %s AND name = %s",
+        f"SELECT {_COLUMNS} FROM knowledge_file WHERE account_id = %s AND name = %s{suffix}",
         (account_id, name),
     ).fetchone()
 
@@ -98,14 +108,29 @@ def search_files(
     limit: int = 5,
 ) -> list[tuple[str, str]]:
     apply(connection)
+    # Any word may match, and a file that matches more words ranks higher. The text is only
+    # ever a parameter. The name counts too, with punctuation turned to spaces so that
+    # "travel.md" is not read as one host name.
     rows = connection.execute(
         """
+        WITH q AS (
+            SELECT replace(plainto_tsquery('english', %s)::text, '&', '|')::tsquery AS query
+        )
         SELECT name,
                ts_headline('english', body, q.query, 'MaxWords=30, MinWords=10')
-        FROM knowledge_file, websearch_to_tsquery('english', %s) AS q (query)
+        FROM knowledge_file, q
         WHERE account_id = %s
-          AND to_tsvector('english', body) @@ q.query
-        ORDER BY ts_rank(to_tsvector('english', body), q.query) DESC, name ASC
+          AND (
+              to_tsvector('english', body) @@ q.query
+              OR to_tsvector('english', regexp_replace(name, '[^[:alnum:]]+', ' ', 'g'))
+                 @@ q.query
+          )
+        ORDER BY ts_rank(to_tsvector('english', body), q.query)
+                 + ts_rank(
+                     to_tsvector('english', regexp_replace(name, '[^[:alnum:]]+', ' ', 'g')),
+                     q.query
+                 ) DESC,
+                 name ASC
         LIMIT %s
         """,
         (query, account_id, limit),
