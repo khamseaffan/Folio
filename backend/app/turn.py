@@ -660,6 +660,12 @@ def _write_reply(
         persist("".join(parts), replies, failed, stopped)
     except Exception:
         failed = True
+        # The save rolled back as a whole. The calls were still made, so their rows are written.
+        try:
+            with connect() as connection:
+                _record(connection, prepared, replies, None)
+        except Exception:
+            pass
     if failed:
         live.publish({"failed": True})
     else:

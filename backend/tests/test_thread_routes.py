@@ -1986,3 +1986,58 @@ def test_the_browser_may_send_patch_and_delete() -> None:
         )
         assert allowed.status_code == 200
         assert method in allowed.headers["access-control-allow-methods"]
+
+
+def test_a_failed_save_still_writes_the_usage_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.turn as turn
+
+    email = _email("SaveDown")
+    _remove(email)
+    model = ScriptedModel(script=(Reply("hello there", 5, 1, 6),))
+    real = turn.insert_message
+
+    def broken(connection, account_id, thread_id, role, kind, body, run_id=None):
+        if role == "assistant":
+            raise psycopg.OperationalError(CAUSE)
+        return real(connection, account_id, thread_id, role, kind, body, run_id)
+
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        monkeypatch.setattr("app.turn.insert_message", broken)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert _events(posted.text)[-1] == {"failed": True}
+        assert CAUSE not in posted.text
+        assert [row[3:] for row in _usage_rows(email)] == [(5, 1, 6, None)]
+    finally:
+        _remove(email)
+
+
+def test_text_from_two_model_calls_is_separated(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("TwoTexts")
+    _remove(email)
+    model = ScriptedModel(
+        script=(
+            Reply(
+                "I will rename it.",
+                5,
+                1,
+                6,
+                (ToolCall("c1", "rename_thread", {"name": "Tax"}),),
+            ),
+            Reply("Done.", 7, 2, 9),
+        )
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "rename"})
+        text = "".join(str(event["text"]) for event in _events(posted.text) if "text" in event)
+        assert text == "I will rename it.\n\nDone."
+        assert _stored_messages(thread_id)[-1] == (
+            "assistant",
+            "chat",
+            "I will rename it.\n\nDone.",
+        )
+    finally:
+        _remove(email)

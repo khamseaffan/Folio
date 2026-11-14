@@ -53,11 +53,17 @@ def _model_node(state: _State, config: RunnableConfig) -> dict[str, object]:
     tools: Sequence[ToolSpec] = configurable.get("tools") or ()
     stream = model.stream(prompt, blocks, tools) if tools else model.stream(prompt, blocks)
     said = state.get("text", "")
+    # Words from before a tool round and words after it are separate paragraphs.
+    gap = "\n\n" if said != "" else ""
     try:
         for chunk in stream:
             if stop is not None and stop.is_set():
                 break
             if isinstance(chunk, str) and chunk != "":
+                if gap != "":
+                    said += gap
+                    writer({"text": gap})
+                    gap = ""
                 said += chunk
                 writer({"text": chunk})
     except Exception:
