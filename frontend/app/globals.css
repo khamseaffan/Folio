@@ -957,6 +957,15 @@ h1 {
   padding-left: 1.3rem;
 }
 
+/* The base reset removes list markers, and a list in a reply needs them. */
+.markdown ul {
+  list-style: disc;
+}
+
+.markdown ol {
+  list-style: decimal;
+}
+
 .markdown li + li {
   margin-top: 0.15rem;
 }
