@@ -32,6 +32,21 @@ def _stop(config: RunnableConfig) -> threading.Event | None:
     return None
 
 
+def _counted(model: Model, prompt: str, blocks: list[Block], reply: Reply) -> Reply:
+    # A stopped call ends before the provider sends its counts. It was still paid for, so the
+    # text that went out and the text that came back are counted here and marked as an estimate.
+    if None not in (reply.input_tokens, reply.output_tokens, reply.total_tokens):
+        return reply
+    try:
+        sent = model.count_tokens(prompt, blocks)
+        received = 0
+        if reply.text != "":
+            received = model.count_tokens("", [Block(role="assistant", text=reply.text)])
+    except Exception:
+        return reply
+    return Reply(reply.text, sent, received, sent + received, estimated=True)
+
+
 def _model_node(state: _State, config: RunnableConfig) -> dict[str, object]:
     configurable = config.get("configurable") or {}
     model: Model = configurable["model"]
@@ -71,9 +86,12 @@ def _model_node(state: _State, config: RunnableConfig) -> dict[str, object]:
         writer({"usage": Reply(stream.reply().text, None, None, None)})
         raise
     reply = stream.reply()
+    stopped = stop is not None and stop.is_set()
+    if stopped:
+        reply = _counted(model, prompt, blocks, reply)
     writer({"usage": reply})
     calls = list(reply.tool_calls)
-    if stop is not None and stop.is_set():
+    if stopped:
         calls = []
     if calls and state.get("rounds", 0) >= MAX_TOOL_ROUNDS:
         calls = []

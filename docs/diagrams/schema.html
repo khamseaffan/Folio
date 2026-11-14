@@ -326,6 +326,7 @@
           attr("total_tokens", "bigint", "no"),
           attr("expected_cost", "numeric", "no", "", "Not shown to the person. Null when usage is missing, never zero by assumption."),
           attr("usage_missing", "boolean", "yes"),
+          attr("estimated", "boolean", "yes", "", "True when a reply was stopped and Folio counted the tokens itself. Never true together with usage_missing."),
           attr("message_id", "uuid", "no", "FK", "The assistant message, when the call is a chat turn."),
           attr("run_id", "uuid", "no", "FK"),
           attr("operation", "text", "yes", "", "chat, research, schedule, transcription, or browser.")

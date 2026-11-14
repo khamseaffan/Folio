@@ -36,6 +36,7 @@ None of these is chosen yet.
 - D20. A POST, PUT, PATCH, or DELETE that names an origin is refused with 403 unless the origin is the configured website, the local website, or the host the request was sent to. This is checked before any route runs. It adds to D11.
 - D21. A failed chat turn, a failed save, a refused tool call, and a request refused by origin are written to the log. The person sees only the fixed sentence.
 - D22. A thread name with a null character is refused with the name sentence.
+- D23. A stopped model call is stored with token counts that Folio counted itself, marked `estimated`. It counts toward the cap. A failed call stays missing. Before, a stopped call was missing and added nothing to the cap.
 
 ## Open questions
 

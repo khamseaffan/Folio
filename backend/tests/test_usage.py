@@ -417,6 +417,7 @@ def test_apply_is_idempotent() -> None:
         "message_id",
         "run_id",
         "operation",
+        "estimated",
     ]
     assert by_name["account_id"][1] == "YES"
     assert by_name["input_tokens"] == ("input_tokens", "YES", None)

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS usage (
     message_id uuid,
     run_id uuid,
     operation text NOT NULL,
+    estimated boolean NOT NULL DEFAULT false,
     CONSTRAINT usage_email_lowercase CHECK (email = lower(email)),
     CONSTRAINT usage_operation_allowed CHECK (
         operation IN ('chat', 'research', 'schedule', 'transcription', 'browser')
@@ -20,6 +21,9 @@ CREATE TABLE IF NOT EXISTS usage (
     CONSTRAINT usage_message_account_fkey FOREIGN KEY (message_id, account_id)
         REFERENCES message (id, account_id) ON DELETE SET NULL (message_id)
 );
+
+-- A table made before this column existed gets it here.
+ALTER TABLE usage ADD COLUMN IF NOT EXISTS estimated boolean NOT NULL DEFAULT false;
 
 CREATE INDEX IF NOT EXISTS usage_email
     ON usage (email);

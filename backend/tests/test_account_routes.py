@@ -289,10 +289,11 @@ def test_delete_account_mid_reply_keeps_the_usage_row(monkeypatch, email) -> Non
         release.set()
     with connect() as connection:
         rows = connection.execute(
-            "SELECT account_id, usage_missing FROM usage WHERE email = %s",
+            "SELECT account_id, usage_missing, estimated FROM usage WHERE email = %s",
             (email.lower(),),
         ).fetchall()
-    assert rows == [(None, True)]
+    # The call was stopped by the deletion, so its tokens are counted here and kept for the email.
+    assert rows == [(None, False, True)]
 
 
 def test_firebase_refusal_keeps_the_account(monkeypatch, email) -> None:
