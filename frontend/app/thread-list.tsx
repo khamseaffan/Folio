@@ -36,6 +36,8 @@ export function ThreadList({
   const deleteRef = useRef<HTMLButtonElement>(null);
   // Enter and Escape unmount the field, which fires a blur that must not save a second time.
   const finished = useRef(false);
+  // Which row is being renamed right now, readable after an await.
+  const renamingNow = useRef<string | null>(null);
 
   useEffect(() => {
     if (renamingId === null) return;
@@ -55,6 +57,7 @@ export function ThreadList({
 
   function startRename(thread: Thread) {
     finished.current = false;
+    renamingNow.current = thread.id;
     setRenameDraft(thread.name);
     setRenameError(null);
     setRenamingId(thread.id);
@@ -62,6 +65,7 @@ export function ThreadList({
 
   function stopRename(id: string, restoreFocus: boolean) {
     finished.current = true;
+    renamingNow.current = null;
     setRenamingId(null);
     setRenameError(null);
     if (restoreFocus) focusAction(id, "rename");
@@ -76,7 +80,10 @@ export function ThreadList({
     }
     finished.current = true;
     const refused = await onRename(thread.id, name);
+    // The person may have opened another row's field while this save was on its way.
+    if (renamingNow.current !== thread.id) return;
     if (refused === null) {
+      renamingNow.current = null;
       setRenamingId(null);
       setRenameError(null);
       if (restoreFocus) focusAction(thread.id, "rename");
