@@ -816,6 +816,17 @@ h1 {
   white-space: normal;
 }
 
+.message.working .dots {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.message.working .working-line {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .message.working .dot {
   width: 0.45rem;
   height: 0.45rem;
