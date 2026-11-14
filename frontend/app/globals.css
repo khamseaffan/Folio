@@ -930,6 +930,136 @@ h1 {
   color: var(--ink);
 }
 
+.markdown {
+  white-space: normal;
+  min-width: 0;
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown pre,
+.markdown blockquote,
+.markdown .md-table {
+  margin: 0.55rem 0;
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.3rem;
+}
+
+/* The base reset removes list markers, and a list in a reply needs them. */
+.markdown ul {
+  list-style: disc;
+}
+
+.markdown ol {
+  list-style: decimal;
+}
+
+.markdown li + li {
+  margin-top: 0.15rem;
+}
+
+.markdown li > p {
+  margin: 0.2rem 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  margin: 0.8rem 0 0.35rem;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.markdown h1 {
+  font-size: 1.15rem;
+}
+
+.markdown h2 {
+  font-size: 1.08rem;
+}
+
+.markdown h3 {
+  font-size: 1rem;
+}
+
+.markdown h4 {
+  font-size: 0.95rem;
+}
+
+.markdown code {
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.3rem;
+  background: var(--field);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.88em;
+}
+
+.markdown pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.6rem;
+  background: var(--field);
+  line-height: 1.4;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: none;
+  font-size: 0.85rem;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.markdown blockquote {
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--muted);
+  color: var(--fuji);
+}
+
+.markdown hr {
+  margin: 0.8rem 0;
+  border: 0;
+  border-top: 1px solid var(--muted);
+}
+
+.markdown .md-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.markdown th,
+.markdown td {
+  padding: 0.25rem 0.55rem;
+  border: 1px solid var(--muted);
+  text-align: left;
+  overflow-wrap: normal;
+}
+
+.markdown a {
+  color: var(--fuji);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
 .message.working {
   display: flex;
   align-items: center;
