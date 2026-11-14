@@ -1037,7 +1037,16 @@ def test_mid_stream_model_error_keeps_the_arrived_text_and_hides_the_cause(
         _remove(email)
 
 
-HARM = f"A task that would cause physical harm stops and asks.\n{MEMORY}"
+NOW = datetime(2026, 11, 14, 9, 30, 41, tzinfo=UTC)
+TIME_LINE = "The time now is 2026-11-14T09:30+00:00. The person's time zone is UTC."
+HARM = f"A task that would cause physical harm stops and asks.\n{MEMORY}\n{TIME_LINE}"
+
+
+@pytest.fixture(autouse=True)
+def _fixed_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The prompt carries the time, so the exact-prompt checks need a clock that does not move.
+    monkeypatch.setattr("app.turn._now", lambda: NOW)
+
 NO_FAILURE = "There is no failed reply."
 
 
@@ -2427,5 +2436,140 @@ def test_a_refused_memory_call_is_logged(
             "read_knowledge" in record.getMessage() and "not_found" in record.getMessage()
             for record in caplog.records
         )
+    finally:
+        _remove(email)
+
+
+def _prompt_time_line(prompt: str) -> str:
+    lines = [line for line in prompt.split("\n") if line.startswith("The time now is ")]
+    assert len(lines) == 1
+    return lines[0]
+
+
+def test_the_prompt_carries_the_time_in_the_zone_the_browser_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Tokyo")
+    _remove(email)
+    model = _PromptModel(reply="Fine.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(
+            f"/threads/{thread_id}/messages",
+            json={"text": "hello", "time_zone": "Asia/Tokyo"},
+        )
+        assert _events(posted.text)[-1] == {"done": True}
+        assert _prompt_time_line(model.prompts[0]) == (
+            "The time now is 2026-11-14T18:30+09:00. The person's time zone is Asia/Tokyo."
+        )
+        # The line sits after the memory instruction.
+        assert model.prompts[0].index(MEMORY) < model.prompts[0].index("The time now is ")
+    finally:
+        _remove(email)
+
+
+@pytest.mark.parametrize("sent", ["Not/AZone", "", "../etc/passwd", 7, None, ["UTC"]])
+def test_a_bad_zone_gives_utc_and_no_error(monkeypatch: pytest.MonkeyPatch, sent: object) -> None:
+    email = _email("BadZone")
+    _remove(email)
+    model = _PromptModel(reply="Fine.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(
+            f"/threads/{thread_id}/messages", json={"text": "hello", "time_zone": sent}
+        )
+        assert posted.status_code == 200
+        assert _events(posted.text)[-1] == {"done": True}
+        assert _prompt_time_line(model.prompts[0]) == TIME_LINE
+    finally:
+        _remove(email)
+
+
+def test_a_message_without_a_zone_uses_utc(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("NoZone")
+    _remove(email)
+    model = _PromptModel(reply="Fine.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert _prompt_time_line(model.prompts[0]) == TIME_LINE
+    finally:
+        _remove(email)
+
+
+def test_a_retry_takes_the_zone_and_the_zone_is_not_stored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("RetryZone")
+    _remove(email)
+    failing = FakeModel(error=RuntimeError(CAUSE))
+    retrying = _PromptModel(reply="Fine.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, failing)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        _use_model(monkeypatch, retrying)
+        retried = client.post(f"/threads/{thread_id}/retry", json={"time_zone": "Asia/Tokyo"})
+        assert _events(retried.text)[-1] == {"done": True}
+        assert "2026-11-14T18:30+09:00" in _prompt_time_line(retrying.prompts[0])
+        with connect() as connection:
+            stored = connection.execute(
+                "SELECT count(*) FROM message WHERE thread_id = %s AND body LIKE %s",
+                (thread_id, "%Asia/Tokyo%"),
+            ).fetchone()
+        assert stored == (0,)
+    finally:
+        _remove(email)
+
+
+def test_the_prompt_time_moves_with_the_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Clock")
+    _remove(email)
+    first = _PromptModel(reply="One.")
+    second = _PromptModel(reply="Two.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, first)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "one"})
+        monkeypatch.setattr("app.turn._now", lambda: NOW + timedelta(days=1, minutes=5))
+        _use_model(monkeypatch, second)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "two"})
+        assert "2026-11-14T09:30+00:00" in _prompt_time_line(first.prompts[0])
+        assert "2026-11-15T09:35+00:00" in _prompt_time_line(second.prompts[0])
+    finally:
+        _remove(email)
+
+
+def test_the_agent_creates_a_schedule_in_this_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Schedule")
+    _remove(email)
+    when = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    model = ScriptedModel(
+        script=(
+            _tool(
+                "write_schedule",
+                {
+                    "task": "Three things to focus on",
+                    "when_text": "every weekday at 09:00, UTC",
+                    "next_run_at": when,
+                },
+            ),
+            Reply("Done.", 7, 2, 9),
+        )
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "every weekday"})
+        assert _events(posted.text)[-1] == {"done": True}
+        with connect() as connection:
+            rows = connection.execute(
+                "SELECT thread_id::text, task, when_text FROM schedule WHERE account_id = %s",
+                (_account_id(email),),
+            ).fetchall()
+        assert rows == [(thread_id, "Three things to focus on", "every weekday at 09:00, UTC")]
     finally:
         _remove(email)

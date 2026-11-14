@@ -408,6 +408,17 @@ async def _message_text(request: Request) -> str | None:
     return text
 
 
+async def _time_zone(request: Request) -> str | None:
+    try:
+        body = await request.json()
+    except Exception:
+        return None
+    if not isinstance(body, dict):
+        return None
+    zone = body.get("time_zone")
+    return zone if isinstance(zone, str) else None
+
+
 def _thread_item(row: ThreadRow) -> dict[str, str]:
     return {
         "id": str(row[0]),
@@ -643,6 +654,7 @@ async def post_message(request: Request, thread_id: str) -> Response:
     text = await _message_text(request)
     if text is None:
         return _error(400, _MESSAGE)
+    time_zone = await _time_zone(request)
     try:
         with connect() as connection:
             started = start_reply(
@@ -652,6 +664,7 @@ async def post_message(request: Request, thread_id: str) -> Response:
                 parsed,
                 text,
                 open_model(),
+                time_zone,
             )
     except Exception:
         return _down()
@@ -675,6 +688,7 @@ async def retry_message(request: Request, thread_id: str) -> Response:
     parsed = _parse_thread_id(thread_id)
     if parsed is None:
         return _error(404, _NOT_FOUND)
+    time_zone = await _time_zone(request)
     try:
         with connect() as connection:
             started = start_retry(
@@ -683,6 +697,7 @@ async def retry_message(request: Request, thread_id: str) -> Response:
                 account_id,
                 parsed,
                 open_model(),
+                time_zone,
             )
     except Exception:
         return _down()

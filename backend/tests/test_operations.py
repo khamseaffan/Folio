@@ -215,6 +215,9 @@ def test_agent_tools_never_expose_an_account_id() -> None:
         "list_abilities",
         "write_ability",
         "delete_ability",
+        "list_schedules",
+        "write_schedule",
+        "delete_schedule",
     }
     assert set(OPERATIONS) == {spec.name for spec in specs}
 
