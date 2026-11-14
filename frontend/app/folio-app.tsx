@@ -104,6 +104,22 @@ const abilities: { title: string; text: string; icon: ComponentType<SVGProps<SVG
   },
 ];
 
+// What the agent is doing while it runs a tool. A new tool is one more line here.
+function toolStatus(name: string): string {
+  switch (name) {
+    case "list_threads":
+      return "Looking at your threads";
+    case "create_thread":
+      return "Creating a thread";
+    case "rename_thread":
+      return "Renaming the thread";
+    case "delete_thread":
+      return "Deleting the thread";
+    default:
+      return "Working on it";
+  }
+}
+
 const SYSTEM_DOWN = "The system is down and repair is underway.";
 const FAILED_REPLY = "That didn't go through.";
 const UNAVAILABLE = "Sign-in is unavailable.";
@@ -269,6 +285,7 @@ export function FolioApp() {
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [working, setWorking] = useState(false);
+  const [toolLine, setToolLine] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const linkHref = useRef<string | null>(null);
   const streamAbort = useRef<AbortController | null>(null);
@@ -293,6 +310,7 @@ export function FolioApp() {
     streamAbort.current?.abort();
     setStreaming(false);
     setWorking(false);
+    setToolLine(null);
     setNotice(message);
     await signOutFirebase();
     if (!stillActive()) return;
@@ -547,6 +565,7 @@ export function FolioApp() {
       setOpenId(created.id);
       setMessages([]);
       setDraft("");
+      setToolLine(null);
       setThreadsLoaded(true);
     } finally {
       acting.current = false;
@@ -569,6 +588,7 @@ export function FolioApp() {
       }
       remember(result.value);
       setDraft("");
+      setToolLine(null);
     } finally {
       acting.current = false;
       if (requestGeneration.current === generation) setPending(false);
@@ -618,6 +638,7 @@ export function FolioApp() {
       setDraft("");
       setStreaming(false);
       setWorking(false);
+      setToolLine(null);
     }
     return null;
   }
@@ -661,6 +682,7 @@ export function FolioApp() {
         (chunk) => {
           if (requestGeneration.current !== generation) return;
           setWorking(false);
+          setToolLine(null);
           setMessages((current) => {
             if (requestGeneration.current !== generation) return current;
             if (!current.some((message) => message.id === assistantId)) {
@@ -680,12 +702,18 @@ export function FolioApp() {
             );
           });
         },
+        (name) => {
+          if (requestGeneration.current !== generation) return;
+          setToolLine(toolStatus(name));
+          setWorking(true);
+        },
       );
       if (requestGeneration.current !== generation) return;
       if (result.kind === "done" || result.kind === "closed") return;
       if (opened && result.kind === "message") return;
       if (result.kind === "failed") {
         setWorking(false);
+        setToolLine(null);
         setMessages((current) => {
           if (requestGeneration.current !== generation) return current;
           return [
@@ -707,6 +735,7 @@ export function FolioApp() {
         setDraft((current) => (current === "" ? text : current));
       }
       setWorking(false);
+      setToolLine(null);
       await showChatError(result);
     } finally {
       if (streamAbort.current === controller) streamAbort.current = null;
@@ -714,6 +743,7 @@ export function FolioApp() {
       if (requestGeneration.current === generation) {
         setStreaming(false);
         setWorking(false);
+        setToolLine(null);
       }
       void refreshThreads(threadId, generation);
     }
@@ -744,10 +774,17 @@ export function FolioApp() {
           if (requestGeneration.current !== generation) return;
           const replace = first;
           first = false;
+          setWorking(false);
+          setToolLine(null);
           setMessages((current) => {
             if (requestGeneration.current !== generation) return current;
             return applyRetryChunk(current, assistantId, chunk, replace);
           });
+        },
+        (name) => {
+          if (requestGeneration.current !== generation) return;
+          setToolLine(toolStatus(name));
+          setWorking(true);
         },
       );
       if (requestGeneration.current !== generation) return;
@@ -769,7 +806,11 @@ export function FolioApp() {
     } finally {
       if (streamAbort.current === controller) streamAbort.current = null;
       acting.current = false;
-      if (requestGeneration.current === generation) setStreaming(false);
+      if (requestGeneration.current === generation) {
+        setStreaming(false);
+        setWorking(false);
+        setToolLine(null);
+      }
       void refreshThreads(threadId, generation);
     }
   }
@@ -946,14 +987,15 @@ export function FolioApp() {
                           ),
                         )}
                         {working ? (
-                          <div
-                            className="message reply working"
-                            role="status"
-                            aria-label="Folio is working"
-                          >
-                            <span className="dot" aria-hidden="true" />
-                            <span className="dot" aria-hidden="true" />
-                            <span className="dot" aria-hidden="true" />
+                          <div className="message reply working">
+                            <span className="dots" role="status" aria-label="Folio is working">
+                              <span className="dot" aria-hidden="true" />
+                              <span className="dot" aria-hidden="true" />
+                              <span className="dot" aria-hidden="true" />
+                            </span>
+                            <span className="working-line" role="status" aria-live="polite">
+                              {toolLine}
+                            </span>
                           </div>
                         ) : null}
                       </div>

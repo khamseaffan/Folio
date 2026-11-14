@@ -295,7 +295,9 @@ export type StreamResult =
   | ApiDown
   | ApiMessage;
 
-function streamEvent(block: string): { text: string } | { done: true } | { failed: true } | null {
+function streamEvent(
+  block: string,
+): { text: string } | { tool: string } | { done: true } | { failed: true } | null {
   const line = block
     .split("\n")
     .map((item) => item.trim())
@@ -309,6 +311,7 @@ function streamEvent(block: string): { text: string } | { done: true } | { faile
   }
   if (!isRecord(parsed)) return null;
   if (typeof parsed.text === "string") return { text: parsed.text };
+  if (typeof parsed.tool === "string") return { tool: parsed.tool };
   if (parsed.done === true) return { done: true };
   if (parsed.failed === true) return { failed: true };
   return null;
@@ -320,6 +323,7 @@ async function streamPost(
   signal: AbortSignal,
   onOpen: () => void,
   onText: (chunk: string) => void,
+  onTool?: (name: string) => void,
 ): Promise<StreamResult> {
   let response: Response;
   try {
@@ -359,6 +363,7 @@ async function streamPost(
     const event = streamEvent(block);
     if (event === null) return;
     if ("text" in event) onText(event.text);
+    else if ("tool" in event) onTool?.(event.tool);
     else if ("failed" in event) failed = true;
     else done = true;
   };
@@ -388,6 +393,7 @@ export async function streamThreadMessage(
   signal: AbortSignal,
   onOpen: () => void,
   onText: (chunk: string) => void,
+  onTool?: (name: string) => void,
 ): Promise<StreamResult> {
   return streamPost(
     `/threads/${encodeURIComponent(id)}/messages`,
@@ -395,6 +401,7 @@ export async function streamThreadMessage(
     signal,
     onOpen,
     onText,
+    onTool,
   );
 }
 
@@ -403,6 +410,7 @@ export async function streamThreadRetry(
   signal: AbortSignal,
   onOpen: () => void,
   onText: (chunk: string) => void,
+  onTool?: (name: string) => void,
 ): Promise<StreamResult> {
   return streamPost(
     `/threads/${encodeURIComponent(id)}/retry`,
@@ -410,6 +418,7 @@ export async function streamThreadRetry(
     signal,
     onOpen,
     onText,
+    onTool,
   );
 }
 
