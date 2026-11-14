@@ -63,16 +63,29 @@ export function Settings({ account, onClose, onAccountChange, onSignedOut, onDow
     void (async () => {
       const [listed, totals] = await Promise.all([listSessions(), getUsage()]);
       if (!active) return;
+      // Both requests can fail the same way, but the screen is told once.
+      let reportedDown = false;
+      let reportedSignedOut = false;
+      const down = () => {
+        if (reportedDown) return;
+        reportedDown = true;
+        onDown();
+      };
+      const signedOut = (message: string) => {
+        if (reportedSignedOut) return;
+        reportedSignedOut = true;
+        onSignedOut(message);
+      };
       if (listed.kind === "value") setSessions(listed.value);
       else {
         setSessions([]);
-        if (listed.kind === "down") onDown();
-        else if (listed.unauthorized) onSignedOut(listed.message);
+        if (listed.kind === "down") down();
+        else if (listed.unauthorized) signedOut(listed.message);
         else setSessionsError(listed.message);
       }
       if (totals.kind === "value") setUsage(totals.value);
-      else if (totals.kind === "down") onDown();
-      else if (totals.unauthorized) onSignedOut(totals.message);
+      else if (totals.kind === "down") down();
+      else if (totals.unauthorized) signedOut(totals.message);
       else setUsageError(totals.message);
     })();
     return () => {
