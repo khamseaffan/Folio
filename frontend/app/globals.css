@@ -732,7 +732,129 @@ h1 {
 }
 
 .thread-empty {
+  position: relative;
   justify-content: center;
+}
+
+.thread-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.thread-empty .thread-head {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.thread-head .profile-toggle {
+  width: auto;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.profile {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.profile > .settings-note {
+  margin-top: -0.4rem;
+}
+
+.profile .profile-back {
+  width: auto;
+}
+
+.profile-files,
+.profile-abilities {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-self: stretch;
+  min-width: 0;
+}
+
+.profile-file {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.4rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid rgba(61, 88, 114, 0.14);
+  border-radius: 0.7rem;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.profile-file[aria-current="true"] {
+  background: var(--sky);
+  border-color: var(--fuji);
+}
+
+.profile-file:focus-visible {
+  outline: 2px solid var(--fuji);
+  outline-offset: 2px;
+}
+
+.profile-text {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.profile-text h4 {
+  margin: 0;
+  font-size: 1em;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.profile pre {
+  margin: 0;
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.7rem;
+  background: var(--field);
+  font: inherit;
+  font-size: 0.95em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.profile-abilities li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.thread-idle {
+  order: -1;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.desk-body.profile-open .thread,
+.desk-body.profile-open .thread-idle {
+  display: none;
 }
 
 .welcome {
@@ -1159,8 +1281,27 @@ h1 {
     max-height: none;
   }
 
-  .desk-body.idle .threads {
+  .desk-body.profile-open .thread {
+    display: flex;
+  }
+
+  .thread-idle,
+  .desk-body.profile-open .thread-idle {
+    display: block;
+    order: 0;
     flex: 1 1 auto;
-    width: auto;
+  }
+
+  .profile {
+    box-sizing: border-box;
+    flex: 0 0 23rem;
+    width: 23rem;
+    margin-left: 0.5rem;
+    padding-left: 1rem;
+    border-left: 1px solid rgba(61, 88, 114, 0.12);
+  }
+
+  .profile .profile-back {
+    display: none;
   }
 }

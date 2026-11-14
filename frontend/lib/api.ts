@@ -498,6 +498,78 @@ export async function getUsage(): Promise<ApiResult<TokenTotals>> {
   return classify(result, usageFrom);
 }
 
+export type KnowledgeItem = { id: string; name: string; byte_size: number; updated_at: string };
+export type KnowledgeFile = KnowledgeItem & { body: string };
+export type AbilityItem = { id: string; name: string; body: string; updated_at: string };
+
+function knowledgeItemFrom(body: unknown): KnowledgeItem | null {
+  if (!isRecord(body)) return null;
+  const id = textField(body, "id");
+  const name = textField(body, "name");
+  const size = countField(body, "byte_size");
+  const updatedAt = textField(body, "updated_at");
+  if (id === null || id === "" || name === null || size === null || updatedAt === null) return null;
+  return { id, name, byte_size: size, updated_at: updatedAt };
+}
+
+function knowledgeListFrom(body: unknown): KnowledgeItem[] | null {
+  if (!Array.isArray(body)) return null;
+  const items: KnowledgeItem[] = [];
+  for (const entry of body) {
+    const item = knowledgeItemFrom(entry);
+    if (item === null) return null;
+    items.push(item);
+  }
+  return items;
+}
+
+function knowledgeFileFrom(body: unknown): KnowledgeFile | null {
+  const item = knowledgeItemFrom(body);
+  if (item === null || !isRecord(body)) return null;
+  const text = textField(body, "body");
+  if (text === null) return null;
+  return { ...item, body: text };
+}
+
+function abilityFrom(body: unknown): AbilityItem | null {
+  if (!isRecord(body)) return null;
+  const id = textField(body, "id");
+  const name = textField(body, "name");
+  const text = textField(body, "body");
+  const updatedAt = textField(body, "updated_at");
+  if (id === null || id === "" || name === null || text === null || updatedAt === null) return null;
+  return { id, name, body: text, updated_at: updatedAt };
+}
+
+function abilityListFrom(body: unknown): AbilityItem[] | null {
+  if (!Array.isArray(body)) return null;
+  const items: AbilityItem[] = [];
+  for (const entry of body) {
+    const item = abilityFrom(entry);
+    if (item === null) return null;
+    items.push(item);
+  }
+  return items;
+}
+
+export async function listKnowledge(): Promise<ApiResult<KnowledgeItem[]>> {
+  const result = await call("/knowledge", "GET");
+  if ("kind" in result) return result;
+  return classify(result, knowledgeListFrom);
+}
+
+export async function getKnowledge(id: string): Promise<ApiResult<KnowledgeFile>> {
+  const result = await call(`/knowledge/${encodeURIComponent(id)}`, "GET");
+  if ("kind" in result) return result;
+  return classify(result, knowledgeFileFrom);
+}
+
+export async function listAbilities(): Promise<ApiResult<AbilityItem[]>> {
+  const result = await call("/abilities", "GET");
+  if ("kind" in result) return result;
+  return classify(result, abilityListFrom);
+}
+
 export async function deleteAccount(): Promise<ApiResult<true>> {
   const result = await call("/account", "DELETE");
   if ("kind" in result) return result;
