@@ -26,9 +26,9 @@ Live at https://folio.khamseaffan.com.
 
 | Present | Not built |
 | --- | --- |
-| Sign-in with an email allowlist, sessions, a display name | Memory, research, files, schedules |
+| Sign-in with an email allowlist, sessions, a display name, and a settings screen with the sessions, the token totals, and account deletion | Memory, research, files, schedules |
 | Threads with create, rename, and delete by a control or by the agent, and a streamed chat turn with usage rows | Drive, the browser, voice |
-| Deployment: Terraform on Google Cloud, Vercel, and CI/CD | Admin limits and the settings screen |
+| Deployment: Terraform on Google Cloud, Vercel, and CI/CD | Admin limits, and the provider and model selection |
 
 ## Deploy
 
