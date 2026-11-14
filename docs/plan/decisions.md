@@ -31,6 +31,7 @@ None of these is chosen yet.
 - D15. A thread name is trimmed and is 1 to 80 characters. The check is in the operation. The table has no check.
 - D16. A chat turn runs at most 8 rounds of tool calls. The reply then says "I stopped after 8 tool steps."
 - D17. An action on a record is one operation in `backend/app/operations.py`. A route and the agent both call it. Account actions are routes only.
+- D18. A request runs a table's CREATE statements only when that table is missing. The migration job always runs them. CREATE statements inside a request took table locks that blocked other writers.
 
 ## Open questions
 

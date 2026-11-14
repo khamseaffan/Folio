@@ -43,6 +43,7 @@ API, from `backend/`:
 
 ```bash
 uv sync --all-groups
+uv run python -m app.migrate
 uv run uvicorn app.main:app --reload
 uv run ruff check .
 uv run pytest
@@ -57,6 +58,8 @@ npm run lint
 npm run typecheck
 npm run build
 ```
+
+`app.migrate` creates and updates the tables. A request creates a table only when it is missing, so run `app.migrate` after a change to a file in `backend/migrations`.
 
 Health check: `GET /health` returns `{"status":"ok"}`.
 

@@ -23,6 +23,11 @@ def connect() -> Iterator[psycopg.Connection]:
         yield connection
 
 
+def table_exists(connection: psycopg.Connection, name: str) -> bool:
+    row = connection.execute("SELECT to_regclass(%s)", (f"public.{name}",)).fetchone()
+    return row is not None and row[0] is not None
+
+
 def database_ready() -> bool:
     try:
         with connect() as connection:

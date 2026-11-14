@@ -5,6 +5,7 @@ from pathlib import Path
 import psycopg
 
 from app.account import apply as apply_account
+from app.db import table_exists
 from app.email_limit import apply as apply_email_limit
 
 _MIGRATION = Path(__file__).resolve().parent.parent / "migrations" / "thread.sql"
@@ -12,9 +13,13 @@ _MIGRATION = Path(__file__).resolve().parent.parent / "migrations" / "thread.sql
 ThreadRow = tuple[uuid.UUID, uuid.UUID, str, str | None, datetime]
 
 
-def apply(connection: psycopg.Connection) -> None:
-    apply_email_limit(connection)
-    apply_account(connection)
+def apply(connection: psycopg.Connection, force: bool = False) -> None:
+    # CREATE statements take table locks, and held inside a request they block other writers.
+    # The migration job passes force, so a change to an existing table still lands.
+    if not force and table_exists(connection, "thread"):
+        return
+    apply_email_limit(connection, force)
+    apply_account(connection, force)
     connection.execute(_MIGRATION.read_text())
 
 

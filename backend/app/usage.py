@@ -5,6 +5,7 @@ from pathlib import Path
 
 import psycopg
 
+from app.db import table_exists
 from app.message import apply as apply_message
 from app.model import MODEL_ID
 
@@ -36,8 +37,12 @@ UsageRow = tuple[
 ]
 
 
-def apply(connection: psycopg.Connection) -> None:
-    apply_message(connection)
+def apply(connection: psycopg.Connection, force: bool = False) -> None:
+    # CREATE statements take table locks, and held inside a request they block other writers.
+    # The migration job passes force, so a change to an existing table still lands.
+    if not force and table_exists(connection, "usage"):
+        return
+    apply_message(connection, force)
     connection.execute(_MIGRATION.read_text())
 
 
