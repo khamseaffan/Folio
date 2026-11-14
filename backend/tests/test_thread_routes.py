@@ -16,6 +16,7 @@ from app.model import FakeModel as ScriptedModel
 from app.session import apply as apply_session
 from app.session import end_session
 from app.sign_in_proof import VerifiedSignIn
+from app.turn import MEMORY
 from fastapi.testclient import TestClient
 
 ALLOWED = "khamseaffan@gmail.com"
@@ -1036,7 +1037,7 @@ def test_mid_stream_model_error_keeps_the_arrived_text_and_hides_the_cause(
         _remove(email)
 
 
-HARM = "A task that would cause physical harm stops and asks."
+HARM = f"A task that would cause physical harm stops and asks.\n{MEMORY}"
 NO_FAILURE = "There is no failed reply."
 
 
@@ -2246,4 +2247,185 @@ def test_a_stopped_reply_counts_toward_the_cap(monkeypatch: pytest.MonkeyPatch) 
         assert refused.json() == {"error": CAPPED}
     finally:
         release.set()
+        _remove(email)
+
+
+class _PromptModel(ScriptedModel):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.prompts: list[str] = []
+
+    def stream(self, prompt, blocks, tools=()):
+        self.prompts.append(prompt)
+        return super().stream(prompt, blocks, tools)
+
+
+def _put_profile(email: str, body: str) -> None:
+    from app.knowledge_file import PROFILE, put_file
+
+    with connect() as connection:
+        put_file(connection, _account_id(email), PROFILE, body)
+
+
+def test_the_profile_is_in_the_system_prompt_of_every_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Profile")
+    _remove(email)
+    model = _PromptModel(
+        script=(_tool("list_threads", {}), Reply("Hi.", 1, 1, 2)),
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _put_profile(email, "Answer briefly.")
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert _events(posted.text)[-1] == {"done": True}
+        assert len(model.prompts) == 2
+        for prompt in model.prompts:
+            assert MEMORY in prompt
+            assert prompt.endswith("The person's profile:\nAnswer briefly.")
+    finally:
+        _remove(email)
+
+
+def test_the_profile_is_in_the_prompt_of_a_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("ProfileRetry")
+    _remove(email)
+    failing = FakeModel(error=RuntimeError(CAUSE))
+    retrying = FakeModel(reply=Reply("Fine.", 1, 1, 2))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _put_profile(email, "Answer briefly.")
+        _use_model(monkeypatch, failing)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        _use_model(monkeypatch, retrying)
+        retried = client.post(f"/threads/{thread_id}/retry")
+        assert _events(retried.text)[-1] == {"done": True}
+        assert retrying.seen[0][0].endswith("The person's profile:\nAnswer briefly.")
+    finally:
+        _remove(email)
+
+
+def test_a_turn_without_a_profile_sends_no_profile_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("NoProfile")
+    _remove(email)
+    model = _PromptModel(
+        script=(_tool("delete_profile", {}), Reply("Gone.", 1, 1, 2)),
+        reply="Plain.",
+    )
+    after = _PromptModel(reply="Plain.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, after)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "first"})
+        assert MEMORY in after.prompts[0]
+        assert "The person's profile:" not in after.prompts[0]
+        _put_profile(email, "Answer briefly.")
+        _use_model(monkeypatch, model)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "forget me"})
+        # The prompt is fixed for the whole turn, so the profile stays until the next turn.
+        assert "The person's profile:" in model.prompts[0]
+        last = _PromptModel(reply="Plain.")
+        _use_model(monkeypatch, last)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "again"})
+        assert "The person's profile:" not in last.prompts[0]
+    finally:
+        _remove(email)
+
+
+def test_the_agent_stores_a_fact_and_a_later_thread_can_read_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Remember")
+    _remove(email)
+    storing = ScriptedModel(
+        script=(
+            _tool(
+                "write_knowledge",
+                {"name": "travel.md", "body": "Passport expires in May 2027."},
+            ),
+            Reply("Noted.", 1, 1, 2),
+        )
+    )
+    reading = ScriptedModel(
+        script=(
+            _tool("search_knowledge", {"query": "passport"}, "c1"),
+            _tool("read_knowledge", {"name": "travel.md"}, "c2"),
+            Reply("May 2027.", 1, 1, 2),
+        )
+    )
+    try:
+        client, first = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, storing)
+        posted = client.post(f"/threads/{first}/messages", json={"text": "passport ends May 2027"})
+        assert _events(posted.text) == [
+            {"tool": "write_knowledge"},
+            {"text": "Noted."},
+            {"done": True},
+        ]
+        second = client.post("/threads").json()["id"]
+        _use_model(monkeypatch, reading)
+        asked = client.post(f"/threads/{second}/messages", json={"text": "when does it end?"})
+        assert _events(asked.text)[-1] == {"done": True}
+        found = json.loads(reading.seen[1][0][-1].text)
+        assert found["matches"][0]["name"] == "travel.md"
+        opened = json.loads(reading.seen[2][0][-1].text)
+        assert opened["body"] == "Passport expires in May 2027."
+    finally:
+        _remove(email)
+
+
+def test_the_read_limit_resets_on_the_next_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.knowledge_file import put_file
+
+    email = _email("ReadLimit")
+    _remove(email)
+    first_turn = ScriptedModel(
+        script=(
+            *(_tool("read_knowledge", {"name": f"f{n}.md"}, f"c{n}") for n in range(6)),
+            Reply("Done.", 1, 1, 2),
+        )
+    )
+    second_turn = ScriptedModel(
+        script=(_tool("read_knowledge", {"name": "f5.md"}), Reply("Done.", 1, 1, 2))
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        with connect() as connection:
+            for number in range(6):
+                put_file(connection, _account_id(email), f"f{number}.md", f"text {number}")
+        _use_model(monkeypatch, first_turn)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "read all"})
+        refused = json.loads(first_turn.seen[6][0][-1].text)
+        assert refused["ok"] is False
+        assert refused["code"] == "limit"
+        _use_model(monkeypatch, second_turn)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "read one"})
+        assert json.loads(second_turn.seen[1][0][-1].text)["ok"] is True
+    finally:
+        _remove(email)
+
+
+def test_a_refused_memory_call_is_logged(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    email = _email("MemoryLog")
+    _remove(email)
+    model = ScriptedModel(
+        script=(_tool("read_knowledge", {"name": "no.md"}), Reply("Sorry.", 1, 1, 2))
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        with caplog.at_level("WARNING", logger="folio.turn"):
+            client.post(f"/threads/{thread_id}/messages", json={"text": "read it"})
+        assert any(
+            "read_knowledge" in record.getMessage() and "not_found" in record.getMessage()
+            for record in caplog.records
+        )
+    finally:
         _remove(email)

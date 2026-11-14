@@ -9,6 +9,7 @@ import psycopg
 
 from app import operations
 from app.db import connect
+from app.knowledge_file import PROFILE, get_file
 from app.live import LiveReply, register, unregister
 from app.loop import ask, stream_turn
 from app.message import (
@@ -47,6 +48,14 @@ _CAPPED = "You have reached the allowed usage limit."
 _FAILED = "That didn't go through."
 NO_FAILURE = "There is no failed reply."
 _HARM = "A task that would cause physical harm stops and asks."
+MEMORY = (
+    "You have a memory of this person made of Markdown files. When they tell you something "
+    "about themselves or how they want things done, store it as a short plain statement in the "
+    "file whose name fits, without asking. Manner and working preferences go in profile.md. "
+    "Before you answer something about the person that you cannot see here, search the files. "
+    "You can open at most five files in one turn. When two stored facts disagree, tell the "
+    "person, say which one you believe should go, and delete it only after they agree."
+)
 _FOLD = "Summarize the earlier messages so the next reply can continue."
 _KEPT = 10
 
@@ -58,11 +67,15 @@ class TurnResult:
     omitted: tuple[MessageRow, ...]
 
 
-def _system_prompt(display_name: str | None, summary: str | None) -> str:
+def _system_prompt(display_name: str | None, summary: str | None, profile: str | None) -> str:
     parts: list[str] = []
     if display_name is not None:
         parts.append(f"The person's name is {display_name}.")
     parts.append(_HARM)
+    parts.append(MEMORY)
+    if profile is not None:
+        parts.append("The person's profile:")
+        parts.append(profile)
     if summary is not None:
         parts.append(summary)
     return "\n".join(parts)
@@ -156,8 +169,10 @@ def _cover(
     model: Model,
 ) -> tuple[str, list[Block], list[MessageRow]]:
     covered: set[uuid.UUID] = set()
+    profile_file = get_file(connection, account_id, PROFILE)
+    profile = profile_file[3] if profile_file is not None else None
     while True:
-        prompt = _system_prompt(display_name, summary)
+        prompt = _system_prompt(display_name, summary, profile)
         blocks, omitted = select_blocks(prompt, messages, model)
         if all(message[0] in covered for message in omitted):
             return prompt, blocks, omitted
@@ -629,6 +644,7 @@ def _write_reply(
     parts: list[str] = []
     failed = False
     replies: list[Reply] = []
+    turn = operations.Turn(opened=set())
 
     def call_tool(call: ToolCall) -> str:
         if call.unreadable:
@@ -638,7 +654,7 @@ def _write_reply(
                 result = operations.call(
                     connection,
                     prepared.account_id,
-                    operations.Context(prepared.thread_id),
+                    operations.Context(prepared.thread_id, turn),
                     call.name,
                     call.arguments,
                 )

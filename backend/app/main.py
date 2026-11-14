@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import operations
+from app import ability, knowledge_file, operations
 from app.account import (
     delete_account,
     ensure_account,
@@ -482,6 +482,76 @@ def _operate(
     if arguments.keys() & {"name"} or name == "create_thread":
         return _error(400, operations.BAD_NAME)
     return _error(400, str(result.get("error")))
+
+
+@app.get("/knowledge")
+def get_knowledge(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        with connect() as connection:
+            rows = knowledge_file.list_files(connection, account_id)
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content=[
+            {
+                "id": str(row[0]),
+                "name": row[2],
+                "byte_size": row[4],
+                "updated_at": row[6].isoformat(),
+            }
+            for row in rows
+        ]
+    )
+
+
+@app.get("/knowledge/{file_id}")
+def get_knowledge_file(request: Request, file_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    parsed = _parse_thread_id(file_id)
+    if parsed is None:
+        return _error(404, _NOT_FOUND)
+    try:
+        with connect() as connection:
+            row = knowledge_file.get_file_by_id(connection, account_id, parsed)
+    except Exception:
+        return _down()
+    if row is None:
+        return _error(404, _NOT_FOUND)
+    return JSONResponse(
+        content={
+            "id": str(row[0]),
+            "name": row[2],
+            "body": row[3],
+            "byte_size": row[4],
+            "updated_at": row[6].isoformat(),
+        }
+    )
+
+
+@app.get("/abilities")
+def get_abilities(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        with connect() as connection:
+            rows = ability.list_abilities(connection, account_id)
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content=[
+            {"id": str(row[0]), "name": row[2], "body": row[3], "updated_at": row[5].isoformat()}
+            for row in rows
+        ]
+    )
 
 
 @app.get("/threads")

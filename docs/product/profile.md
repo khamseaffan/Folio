@@ -10,7 +10,9 @@ A stored fact is a short declarative form of what the person said. It keeps the 
 
 The assistant writes that fact into the fitting file without asking.
 
-The model is not given every file. It searches the words in the files and opens at most five. `profile.md` is extra and always included. An opened file is sent as its text. A file that does not fit is read in successive parts in that same run. Detail of that read is in `docs/product/files.md`.
+The model is not given every file. It searches the words in the files and opens at most five. `profile.md` is extra and always included. An opened file is sent as its text. A knowledge file is read whole.
+
+The agent changes a file in one of three ways. It appends a new fact to the end of a file, which cannot damage what is there. It replaces one piece of text, which is refused unless that text appears exactly once in the file. It replaces the whole text, which is for a new file or a reorganised one. The agent opens at most five different files in one turn. A sixth is refused. A repeat of an opened file and `profile.md` do not count. Code enforces the limit.
 
 The person can read the files in the profile panel. Detail is in `docs/product/screens.md`. The person tells the agent to change a fact, delete a fact, or delete the profile, and the agent does so. Deleting the profile removes the knowledge files and cannot be restored. The account remains.
 

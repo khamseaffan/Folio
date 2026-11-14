@@ -37,6 +37,9 @@ None of these is chosen yet.
 - D21. A failed chat turn, a failed save, a refused tool call, and a request refused by origin are written to the log. The person sees only the fixed sentence.
 - D22. A thread name with a null character is refused with the name sentence.
 - D23. A stopped model call is stored with token counts that Folio counted itself, marked `estimated`. It counts toward the cap. A failed call stays missing. Before, a stopped call was missing and added nothing to the cap.
+- D24. A knowledge file name and an ability name are trimmed and are 1 to 80 characters. The check is in the operation. The table has no check.
+- D25. An ability is addressed by its id, because its name is not unique.
+- D26. `knowledge_file` has no `storage_key`. The row holds the text, and no Cloud Storage copy exists.
 
 ## Open questions
 
