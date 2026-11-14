@@ -45,6 +45,7 @@ import {
   signInWithGoogle,
   signOutFirebase,
 } from "../lib/firebase-auth";
+import { Markdown } from "./markdown";
 import { ProfilePanel } from "./profile-panel";
 import { Settings } from "./settings";
 import { ThreadList } from "./thread-list";
@@ -1037,7 +1038,7 @@ export function FolioApp() {
                                 </button>
                               )}
                             </div>
-                          ) : (
+                          ) : message.role === "person" || message.kind !== "chat" ? (
                             <p
                               key={message.id}
                               className={
@@ -1049,6 +1050,11 @@ export function FolioApp() {
                               </span>
                               {message.body}
                             </p>
+                          ) : (
+                            <div key={message.id} className="message reply">
+                              <span className="speaker">Folio</span>
+                              <Markdown text={message.body} />
+                            </div>
                           ),
                         )}
                         {working ? (
