@@ -6,7 +6,7 @@
 2. An account is created for khamseaffan@gmail.com or an address at sakana.ai. Any other email is refused at sign-in.
 3. Sign-in is Firebase Authentication with Google or a one-time magic link. The link expires after 6 hours.
 4. The person sets a display name of 1 to 40 characters.
-5. The person can end a session. A session also ends after 30 minutes of silence from the person and the assistant, and an account has at most two sessions.
+5. The person can end a session. A session also ends after 24 hours of silence from the person and the assistant, and an account has at most two sessions.
 6. Deleting an account is immediate and cannot be restored. The usage rows, the token cap, and the stop for that email stay.
 7. `khamseaffan@gmail.com` selects the provider and the model. The person talks with that one platform model and cannot change it. The starting selection is OpenAI and `gpt-6.1-sol`. The call goes through a LangChain chat model. LangGraph is the loop. Tools, memory, and the graph stay the same.
 8. The person has many threads. A thread is created, renamed, and deleted by a control or by the agent when told.

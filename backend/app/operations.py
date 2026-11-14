@@ -64,7 +64,8 @@ def _item(row: thread.ThreadRow) -> dict[str, str]:
 
 def _name(raw: str) -> str | None:
     name = raw.strip()
-    if len(name) < 1 or len(name) > _NAME_LIMIT:
+    # Postgres text cannot hold a null character.
+    if len(name) < 1 or len(name) > _NAME_LIMIT or "\x00" in name:
         return None
     return name
 

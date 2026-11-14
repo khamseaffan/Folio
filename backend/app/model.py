@@ -55,6 +55,8 @@ class ToolCall:
     id: str
     name: str
     arguments: dict[str, object]
+    # The provider sent arguments that are not readable JSON. The call is answered, never run.
+    unreadable: bool = False
 
 
 @dataclass(frozen=True)

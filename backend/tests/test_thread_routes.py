@@ -2041,3 +2041,131 @@ def test_text_from_two_model_calls_is_separated(monkeypatch: pytest.MonkeyPatch)
         )
     finally:
         _remove(email)
+
+
+def test_an_unreadable_tool_call_is_answered_and_logged(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    email = _email("Unreadable")
+    _remove(email)
+    broken = ToolCall("c1", "rename_thread", {}, unreadable=True)
+    model = ScriptedModel(script=(Reply("", 5, 1, 6, (broken,)), Reply("Sorry.", 1, 1, 2)))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        with caplog.at_level("WARNING", logger="folio"):
+            posted = client.post(f"/threads/{thread_id}/messages", json={"text": "rename"})
+        assert _events(posted.text)[-1] == {"done": True}
+        result = json.loads(model.seen[1][0][-1].text)
+        assert result == {"ok": False, "code": "invalid", "error": "That input is not valid."}
+        assert _thread_name(client, thread_id) == "New thread"
+        assert any("rename_thread" in record.getMessage() for record in caplog.records)
+    finally:
+        _remove(email)
+
+
+def test_a_refused_tool_call_is_logged(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    email = _email("RefusedTool")
+    _remove(email)
+    model = ScriptedModel(script=(_tool("drop_tables", {}), Reply("Sorry.", 1, 1, 2)))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        with caplog.at_level("WARNING", logger="folio"):
+            client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert any(
+            "drop_tables" in record.getMessage() and "unknown" in record.getMessage()
+            for record in caplog.records
+        )
+    finally:
+        _remove(email)
+
+
+def test_a_failed_turn_is_logged_without_the_person_seeing_the_cause(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    email = _email("LoudFail")
+    _remove(email)
+    model = FakeModel(error=RuntimeError(CAUSE))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        with caplog.at_level("ERROR", logger="folio"):
+            posted = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert _events(posted.text)[-1] == {"failed": True}
+        assert CAUSE not in posted.text
+        errors = [record for record in caplog.records if record.levelname == "ERROR"]
+        assert len(errors) == 1
+        assert errors[0].exc_info is not None
+        assert thread_id in errors[0].getMessage()
+    finally:
+        _remove(email)
+
+
+FOREIGN = "This request did not come from Folio."
+
+
+def test_a_change_from_another_site_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Origin")
+    _remove(email)
+    evil = {"Origin": "https://evil.example"}
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        for response in (
+            client.post("/threads", headers=evil),
+            client.patch(f"/threads/{thread_id}", json={"name": "Owned"}, headers=evil),
+            client.delete(f"/threads/{thread_id}", headers=evil),
+            client.post("/display-name", json={"display_name": "Owned"}, headers=evil),
+            client.delete("/account", headers=evil),
+            client.post("/sign-out", headers=evil),
+            client.post("/sign-in", json={"id_token": "token"}, headers=evil),
+        ):
+            assert response.status_code == 403
+            assert response.json() == {"error": FOREIGN}
+        assert _thread_name(client, thread_id) == "New thread"
+        assert len(client.get("/threads").json()) == 1
+        assert client.get("/session").status_code == 200
+    finally:
+        _remove(email)
+
+
+def test_a_change_from_the_site_itself_is_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("OwnOrigin")
+    _remove(email)
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        monkeypatch.setenv("FRONTEND_ORIGIN", "https://folio.example")
+        for origin in ("http://localhost:3000", "https://folio.example", "http://testserver"):
+            renamed = client.patch(
+                f"/threads/{thread_id}",
+                json={"name": "Mine"},
+                headers={"Origin": origin},
+            )
+            assert renamed.status_code == 200
+        # A proxy in front says which host the browser asked for.
+        forwarded = client.patch(
+            f"/threads/{thread_id}",
+            json={"name": "Mine"},
+            headers={"Origin": "https://preview.example", "X-Forwarded-Host": "preview.example"},
+        )
+        assert forwarded.status_code == 200
+        assert client.patch(f"/threads/{thread_id}", json={"name": "Mine"}).status_code == 200
+    finally:
+        _remove(email)
+
+
+def test_reading_is_not_refused_by_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("ReadOrigin")
+    _remove(email)
+    try:
+        client = _sign_in(monkeypatch, email)
+        read = client.get("/threads", headers={"Origin": "https://evil.example"})
+        assert read.status_code == 200
+        assert "access-control-allow-origin" not in read.headers
+    finally:
+        _remove(email)

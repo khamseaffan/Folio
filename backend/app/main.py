@@ -1,10 +1,13 @@
+import logging
 import os
 import uuid
+from urllib.parse import urlsplit
 
 import psycopg
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app import operations
 from app.account import (
@@ -44,7 +47,9 @@ _NAME = "Enter a name, up to 40 characters."
 _NOT_FOUND = "Not found"
 _MESSAGE = "Enter a message."
 _NOT_DELETED = "The account could not be deleted. Try again."
+_FOREIGN = "This request did not come from Folio."
 _LOCAL_ORIGIN = "http://localhost:3000"
+_log = logging.getLogger("folio.api")
 
 
 class _BrowserOrigins:
@@ -68,6 +73,44 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
+
+
+_CHANGING = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _from_folio(origin: str, headers: dict[str, str]) -> bool:
+    if origin in _BrowserOrigins():
+        return True
+    host = urlsplit(origin).netloc.lower()
+    if host == "":
+        return False
+    # The site forwards /api to this service, so the browser's own host arrives in a header.
+    forwarded = headers.get("x-forwarded-host", "").split(",")[0].strip().lower()
+    return host in (forwarded, headers.get("host", "").strip().lower())
+
+
+class _OwnOrigin:
+    # A browser names the page a change comes from. A change from another site is refused
+    # before any route runs, so the session cookie cannot be used by a page that is not Folio.
+
+    def __init__(self, inner: ASGIApp) -> None:
+        self._inner = inner
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and scope["method"] in _CHANGING:
+            headers = {
+                key.decode("latin-1").lower(): value.decode("latin-1")
+                for key, value in scope["headers"]
+            }
+            origin = headers.get("origin")
+            if origin is not None and not _from_folio(origin, headers):
+                _log.warning("refused %s %s from origin %s", scope["method"], scope["path"], origin)
+                await _error(403, _FOREIGN)(scope, receive, send)
+                return
+        await self._inner(scope, receive, send)
+
+
+app.add_middleware(_OwnOrigin)
 
 
 @app.get("/health")
@@ -338,6 +381,8 @@ def remove_account(request: Request) -> Response:
         delete_account(account_id)
     except Exception:
         return _down()
+    # A turn started from another tab during the Firebase call is stopped as well.
+    stop_account(account_id)
     response = Response(status_code=204)
     _clear_session(response, request)
     return response

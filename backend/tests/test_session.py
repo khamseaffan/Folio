@@ -78,14 +78,14 @@ def test_third_start_session_ends_the_oldest(stored_account) -> None:
     assert ended[0] is not None
 
 
-def test_open_session_ends_session_idle_for_31_minutes(stored_account) -> None:
+def test_open_session_ends_session_idle_for_25_hours(stored_account) -> None:
     account_id, _email = stored_account
     session_id = start_session(account_id)
     with connect() as connection:
         connection.execute(
             """
             UPDATE session
-            SET last_active_at = now() - interval '31 minutes'
+            SET last_active_at = now() - interval '25 hours'
             WHERE id = %s
             """,
             (session_id,),
@@ -100,14 +100,14 @@ def test_open_session_ends_session_idle_for_31_minutes(stored_account) -> None:
     assert row[0] is not None
 
 
-def test_open_session_keeps_session_active_29_minutes_ago(stored_account) -> None:
+def test_open_session_keeps_session_active_23_hours_ago(stored_account) -> None:
     account_id, _email = stored_account
     session_id = start_session(account_id)
     with connect() as connection:
         connection.execute(
             """
             UPDATE session
-            SET last_active_at = now() - interval '29 minutes'
+            SET last_active_at = now() - interval '23 hours'
             WHERE id = %s
             """,
             (session_id,),
@@ -158,7 +158,7 @@ def test_list_open_sessions_skips_ended_and_idle_oldest_first(stored_account) ->
     assert listed[0][1] <= listed[1][1]
     with connect() as connection:
         connection.execute(
-            "UPDATE session SET last_active_at = now() - interval '31 minutes' WHERE id = %s",
+            "UPDATE session SET last_active_at = now() - interval '25 hours' WHERE id = %s",
             (first,),
         )
     assert [row[0] for row in list_open_sessions(account_id)] == [session_handle(second)]

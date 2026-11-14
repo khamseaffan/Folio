@@ -203,7 +203,7 @@
           attr("account_id", "uuid", "yes", "FK"),
           attr("created_at", "timestamptz", "yes"),
           attr("last_active_at", "timestamptz", "yes", "", "Moves when the person or the assistant acts."),
-          attr("ended_at", "timestamptz", "no", "", "Set after 30 minutes of silence, or when a newer sign-in replaces it.")
+          attr("ended_at", "timestamptz", "no", "", "Set after 24 hours of silence, or when a newer sign-in replaces it.")
         ]
       },
       {

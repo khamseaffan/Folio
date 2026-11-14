@@ -32,6 +32,10 @@ None of these is chosen yet.
 - D16. A chat turn runs at most 8 rounds of tool calls. The reply then says "I stopped after 8 tool steps."
 - D17. An action on a record is one operation in `backend/app/operations.py`. A route and the agent both call it. Account actions are routes only.
 - D18. A request runs a table's CREATE statements only when that table is missing. The migration job always runs them. CREATE statements inside a request took table locks that blocked other writers.
+- D19. A session ends after 24 hours of silence, not 30 minutes.
+- D20. A POST, PUT, PATCH, or DELETE that names an origin is refused with 403 unless the origin is the configured website, the local website, or the host the request was sent to. This is checked before any route runs. It adds to D11.
+- D21. A failed chat turn, a failed save, a refused tool call, and a request refused by origin are written to the log. The person sees only the fixed sentence.
+- D22. A thread name with a null character is refused with the name sentence.
 
 ## Open questions
 

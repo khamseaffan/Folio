@@ -70,6 +70,8 @@ The colors are a cherry blossom morning in front of Mount Fuji.
 - An account requires an allowlisted email.
 - Firebase Authentication holds the sign-in. The account stores no password. Session rules are in `docs/product/access.md`.
 - Every row and file prefix has an owner.
+- A request that changes something is refused when it names an origin that is not the website. The check runs before any route.
+- The page is never given a session id. A session in the settings screen is named by a hash of its id.
 - Model keys and integration secrets are envelope-encrypted with Cloud KMS.
 - Secret Manager holds app secrets only.
 - Cloud SQL has a private IP.
