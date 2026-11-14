@@ -1,7 +1,16 @@
 from app.db import connect
 from app.migrate import run
 
-TABLES = {"account", "email_limit", "session", "thread", "message", "usage"}
+TABLES = {
+    "account",
+    "email_limit",
+    "session",
+    "thread",
+    "message",
+    "usage",
+    "knowledge_file",
+    "ability",
+}
 
 
 def _present() -> set[str]:
@@ -47,7 +56,16 @@ def test_a_write_does_not_wait_on_another_open_write():
 
 
 def test_setup_is_skipped_when_the_table_exists():
-    from app import account, email_limit, message, session, thread, usage
+    from app import (
+        ability,
+        account,
+        email_limit,
+        knowledge_file,
+        message,
+        session,
+        thread,
+        usage,
+    )
 
     run()
 
@@ -62,6 +80,15 @@ def test_setup_is_skipped_when_the_table_exists():
 
     with connect() as connection:
         spy = _Spy(connection)
-        for module in (email_limit, account, session, thread, message, usage):
+        for module in (
+            email_limit,
+            account,
+            session,
+            thread,
+            message,
+            usage,
+            knowledge_file,
+            ability,
+        ):
             module.apply(spy)
     assert not [text for text in spy.statements if "CREATE" in text.upper()]
