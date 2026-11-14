@@ -1,3 +1,4 @@
+import hashlib
 import threading
 import uuid
 
@@ -14,6 +15,10 @@ from app.usage import record_usage
 from fastapi.testclient import TestClient
 
 REFUSED = "The account could not be deleted. Try again."
+
+
+def _handle(client: TestClient) -> str:
+    return hashlib.sha256(client.cookies["session"].encode()).hexdigest()
 
 
 def _email(label: str) -> str:
@@ -97,15 +102,30 @@ def test_sessions_lists_open_ones_and_marks_the_current(monkeypatch, email) -> N
     assert len(body) == 2
     assert [item["current"] for item in body].count(True) == 1
     current = next(item for item in body if item["current"])
-    assert current["id"] == second.cookies["session"]
+    assert current["id"] == _handle(second)
     assert set(current) == {"id", "created_at", "last_active_at", "current"}
     assert first.get("/sessions").json()[0]["id"] == body[0]["id"]
+
+
+def test_sessions_never_return_a_cookie_value(monkeypatch, email) -> None:
+    first = _sign_in(monkeypatch, email)
+    second = _sign_in(monkeypatch, email)
+    listed = second.get("/sessions")
+    cookies = {first.cookies["session"], second.cookies["session"]}
+    for cookie in cookies:
+        assert cookie not in listed.text
+    for item in listed.json():
+        assert len(item["id"]) == 64
+        assert set(item["id"]) <= set("0123456789abcdef")
+    # The cookie value itself is not an address for ending a session.
+    assert second.post(f"/sessions/{first.cookies['session']}/end").status_code == 404
+    assert first.get("/session").status_code == 200
 
 
 def test_ending_another_session_keeps_this_one(monkeypatch, email) -> None:
     first = _sign_in(monkeypatch, email)
     second = _sign_in(monkeypatch, email)
-    ended = second.post(f"/sessions/{first.cookies['session']}/end")
+    ended = second.post(f"/sessions/{_handle(first)}/end")
     assert ended.status_code == 204
     assert first.get("/session").status_code == 401
     assert second.get("/session").status_code == 200
@@ -114,7 +134,7 @@ def test_ending_another_session_keeps_this_one(monkeypatch, email) -> None:
 
 def test_ending_the_current_session_clears_the_cookie(monkeypatch, email) -> None:
     client = _sign_in(monkeypatch, email)
-    ended = client.post(f"/sessions/{client.cookies['session']}/end")
+    ended = client.post(f"/sessions/{_handle(client)}/end")
     assert ended.status_code == 204
     assert "Max-Age=0" in ended.headers["set-cookie"]
     assert client.get("/session").status_code == 401
@@ -125,7 +145,7 @@ def test_ending_another_accounts_session_is_404(monkeypatch, email) -> None:
     try:
         mine = _sign_in(monkeypatch, email)
         theirs = _sign_in(monkeypatch, other_email)
-        other_id = theirs.cookies["session"]
+        other_id = _handle(theirs)
         assert mine.post(f"/sessions/{other_id}/end").status_code == 404
         assert theirs.get("/session").status_code == 200
         assert mine.post(f"/sessions/{uuid.uuid4()}/end").status_code == 404
@@ -137,7 +157,7 @@ def test_ending_another_accounts_session_is_404(monkeypatch, email) -> None:
 def test_ending_a_session_twice_is_404(monkeypatch, email) -> None:
     first = _sign_in(monkeypatch, email)
     second = _sign_in(monkeypatch, email)
-    path = f"/sessions/{first.cookies['session']}/end"
+    path = f"/sessions/{_handle(first)}/end"
     assert second.post(path).status_code == 204
     assert second.post(path).status_code == 404
 

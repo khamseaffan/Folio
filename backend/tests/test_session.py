@@ -8,6 +8,7 @@ from app.session import (
     end_session,
     list_open_sessions,
     open_session,
+    session_handle,
     start_session,
 )
 
@@ -153,14 +154,14 @@ def test_list_open_sessions_skips_ended_and_idle_oldest_first(stored_account) ->
     first = start_session(account_id)
     second = start_session(account_id)
     listed = list_open_sessions(account_id)
-    assert [row[0] for row in listed] == [first, second]
+    assert [row[0] for row in listed] == [session_handle(first), session_handle(second)]
     assert listed[0][1] <= listed[1][1]
     with connect() as connection:
         connection.execute(
             "UPDATE session SET last_active_at = now() - interval '31 minutes' WHERE id = %s",
             (first,),
         )
-    assert [row[0] for row in list_open_sessions(account_id)] == [second]
+    assert [row[0] for row in list_open_sessions(account_id)] == [session_handle(second)]
     end_session(second)
     assert list_open_sessions(account_id) == []
 
@@ -174,10 +175,11 @@ def test_end_account_session_only_ends_an_open_session_of_that_account(
     try:
         mine = start_session(account_id)
         theirs = start_session(other_id)
-        assert end_account_session(account_id, theirs) is False
+        assert end_account_session(account_id, session_handle(theirs)) is False
+        assert end_account_session(account_id, str(mine)) is False
         assert open_session(theirs) == other_id
-        assert end_account_session(account_id, mine) is True
-        assert end_account_session(account_id, mine) is False
+        assert end_account_session(account_id, session_handle(mine)) is True
+        assert end_account_session(account_id, session_handle(mine)) is False
         assert open_session(mine) is None
     finally:
         with connect() as connection:

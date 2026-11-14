@@ -23,6 +23,7 @@ from app.session import (
     end_session,
     list_open_sessions,
     open_session,
+    session_handle,
     start_session,
 )
 from app.sign_in_proof import (
@@ -266,10 +267,10 @@ def get_sessions(request: Request) -> Response:
     return JSONResponse(
         content=[
             {
-                "id": str(row[0]),
+                "id": row[0],
                 "created_at": row[1].isoformat(),
                 "last_active_at": row[2].isoformat(),
-                "current": row[0] == session_id,
+                "current": row[0] == session_handle(session_id),
             }
             for row in rows
         ]
@@ -282,17 +283,16 @@ def end_account_session_route(request: Request, target_id: str) -> Response:
     if isinstance(opened, JSONResponse):
         return opened
     session_id, account_id = opened
-    target = _parse_thread_id(target_id)
-    if target is None:
+    if len(target_id) != 64 or set(target_id) - set("0123456789abcdef"):
         return _error(404, _NOT_FOUND)
     try:
-        ended = end_account_session(account_id, target)
+        ended = end_account_session(account_id, target_id)
     except Exception:
         return _down()
     if not ended:
         return _error(404, _NOT_FOUND)
     response = Response(status_code=204)
-    if target == session_id:
+    if target_id == session_handle(session_id):
         _clear_session(response, request)
     return response
 
