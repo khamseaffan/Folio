@@ -93,6 +93,35 @@ def list_threads(connection: psycopg.Connection, account_id: uuid.UUID) -> list[
     return list(rows)
 
 
+def list_threads_with_latest(
+    connection: psycopg.Connection, account_id: uuid.UUID
+) -> list[tuple[uuid.UUID, str, datetime, datetime | None]]:
+    # Imported here because message imports this module.
+    from app.message import apply as apply_message
+
+    apply(connection)
+    apply_message(connection)
+    # id, name, created_at, and the time of the newest message, which is null with none.
+    rows = connection.execute(
+        """
+        SELECT t.id,
+               t.name,
+               t.created_at,
+               (
+                   SELECT max(m.created_at)
+                   FROM message m
+                   WHERE m.thread_id = t.id
+                     AND m.account_id = t.account_id
+               )
+        FROM thread t
+        WHERE t.account_id = %s
+        ORDER BY t.created_at ASC
+        """,
+        (account_id,),
+    ).fetchall()
+    return list(rows)
+
+
 def set_summary(
     connection: psycopg.Connection,
     account_id: uuid.UUID,

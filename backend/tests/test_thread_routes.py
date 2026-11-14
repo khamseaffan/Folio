@@ -493,6 +493,7 @@ def test_create_and_list_only_the_callers_threads(monkeypatch: pytest.MonkeyPatc
         assert [item["id"] for item in rows] == [first_id, second_id]
         for item in rows:
             assert item.pop("working") is False
+            assert item.pop("latest_message_at") is None
             _assert_item(item)
             assert item["name"] == "New thread"
         assert their_id not in {item["id"] for item in rows}
@@ -2668,5 +2669,103 @@ def test_a_real_failed_reply_still_retries_after_a_schedule_line(
         assert retried.status_code == 200
         assert _events(retried.text)[-1] == {"done": True}
         assert retrying.calls == 1
+    finally:
+        _remove(email)
+
+
+def _latest_of(client: TestClient, thread_id: str) -> object:
+    listed = client.get("/threads")
+    assert listed.status_code == 200
+    items = [item for item in listed.json() if item["id"] == thread_id]
+    assert len(items) == 1
+    assert set(items[0]) == {"id", "name", "created_at", "working", "latest_message_at"}
+    return items[0]["latest_message_at"]
+
+
+def test_the_thread_list_says_when_a_thread_last_received_a_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.run import create_run
+    from app.schedule import create_schedule
+    from app.scheduled import execute
+
+    email = _email("Latest")
+    _remove(email)
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        assert _latest_of(client, thread_id) is None
+
+        _use_model(monkeypatch, FakeModel(reply=Reply("Hi.", 1, 1, 2)))
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        with connect() as connection:
+            newest = connection.execute(
+                "SELECT max(created_at) FROM message WHERE thread_id = %s", (thread_id,)
+            ).fetchone()
+        assert newest is not None
+        first = _latest_of(client, thread_id)
+        assert first == newest[0].isoformat()
+
+        account_id = _account_id(email)
+        with connect() as connection:
+            made = create_schedule(
+                connection,
+                account_id,
+                uuid.UUID(thread_id),
+                "task",
+                "daily",
+                datetime.now(UTC) + timedelta(hours=1),
+            )
+            assert made is not None
+            run = create_run(
+                connection, account_id, uuid.UUID(thread_id), made[0], "schedule", "task"
+            )
+        assert run is not None
+        assert execute(run[0], ScriptedModel(reply="Result.")) == "ready"
+        second = _latest_of(client, thread_id)
+        assert isinstance(first, str) and isinstance(second, str)
+        assert datetime.fromisoformat(second) > datetime.fromisoformat(first)
+        # The other routes keep their shape.
+        assert set(client.get(f"/threads/{thread_id}").json()) == {
+            "id",
+            "name",
+            "created_at",
+            "messages",
+        }
+    finally:
+        _remove(email)
+
+
+def test_the_latest_message_time_never_shows_another_accounts_threads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mine = _email("LatestMine")
+    theirs = _email("LatestTheirs")
+    _remove(mine)
+    _remove(theirs)
+    try:
+        client, my_thread = _open_thread(monkeypatch, mine)
+        other, their_thread = _open_thread(monkeypatch, theirs)
+        _use_model(monkeypatch, FakeModel(reply=Reply("Hi.", 1, 1, 2)))
+        other.post(f"/threads/{their_thread}/messages", json={"text": "hello"})
+        ids = {item["id"] for item in client.get("/threads").json()}
+        assert ids == {my_thread}
+        assert _latest_of(client, my_thread) is None
+    finally:
+        _remove(mine)
+        _remove(theirs)
+
+
+def test_the_agent_list_threads_result_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.operations import Context, call
+
+    email = _email("AgentList")
+    _remove(email)
+    try:
+        _, thread_id = _open_thread(monkeypatch, email)
+        with connect() as connection:
+            result = call(connection, _account_id(email), Context(None), "list_threads", {})
+        assert result["ok"] is True
+        assert [set(item) for item in result["threads"]] == [{"id", "name", "created_at"}]
+        assert result["threads"][0]["id"] == thread_id
     finally:
         _remove(email)

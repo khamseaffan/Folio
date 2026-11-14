@@ -36,7 +36,7 @@ from app.sign_in_proof import (
     delete_firebase_user,
     verify_allowed_sign_in,
 )
-from app.thread import ThreadRow, get_thread, list_threads
+from app.thread import ThreadRow, get_thread, list_threads, list_threads_with_latest
 from app.turn import NO_FAILURE, start_reply, start_retry
 from app.usage import token_totals_for_email
 
@@ -571,18 +571,23 @@ def get_threads(request: Request) -> Response:
     if isinstance(opened, JSONResponse):
         return opened
     _, account_id = opened
-    result = _operate(account_id, "list_threads", {})
-    if isinstance(result, JSONResponse):
-        return result
     try:
         with connect() as connection:
+            rows = list_threads_with_latest(connection, account_id)
             working = run.in_flight_threads(connection, account_id)
     except Exception:
         return _down()
-    threads = result["threads"]
-    assert isinstance(threads, list)
     return JSONResponse(
-        content=[{**item, "working": uuid.UUID(item["id"]) in working} for item in threads]
+        content=[
+            {
+                "id": str(row[0]),
+                "name": row[1],
+                "created_at": row[2].isoformat(),
+                "working": row[0] in working,
+                "latest_message_at": row[3].isoformat() if row[3] is not None else None,
+            }
+            for row in rows
+        ]
     )
 
 
