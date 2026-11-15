@@ -33,3 +33,15 @@ output "worker_service" {
 output "run_queue" {
   value = google_cloud_tasks_queue.runs.name
 }
+
+output "research_url" {
+  value = local.research_url
+}
+
+output "research_service" {
+  value = google_cloud_run_v2_service.research.name
+}
+
+output "research_queue" {
+  value = google_cloud_tasks_queue.research.name
+}

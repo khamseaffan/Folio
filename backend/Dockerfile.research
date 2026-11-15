@@ -1,0 +1,36 @@
+FROM python:3.13-slim
+
+ARG VERSION=dev
+LABEL org.opencontainers.image.version=$VERSION
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --group research --no-install-project
+
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Playwright's own installer is a Node program that needs libatomic, which the slim image lacks,
+# so it has to be there before the installer can fetch the other libraries and the browser.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Installed as root, into a path the app user can read, because the app user has no home.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY app ./app
+COPY migrations ./migrations
+
+RUN useradd --system --no-create-home folio
+USER folio
+
+CMD ["sh", "-c", "exec uvicorn app.research_worker:app --host 0.0.0.0 --port ${PORT:-8080} --proxy-headers --forwarded-allow-ips='*'"]

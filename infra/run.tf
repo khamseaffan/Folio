@@ -53,7 +53,7 @@ resource "google_cloud_run_v2_service" "api" {
       image = var.api_image
 
       dynamic "env" {
-        for_each = local.plain_env
+        for_each = merge(local.plain_env, local.research_env)
         content {
           name  = env.key
           value = env.value

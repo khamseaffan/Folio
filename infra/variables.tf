@@ -23,3 +23,9 @@ variable "api_image" {
   type    = string
   default = "us-docker.pkg.dev/cloudrun/container/hello"
 }
+
+# Same placeholder idea as api_image, for the image that has Chrome.
+variable "research_image" {
+  type    = string
+  default = "us-docker.pkg.dev/cloudrun/container/hello"
+}
