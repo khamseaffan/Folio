@@ -55,6 +55,22 @@ None of these is chosen yet.
 - D36. The worker is a second Cloud Run service made from the same image. It serves only the tick and the run routes, and only the queue's service account may call it.
 - D37. `run` has a `started_at` column. It is set each time an attempt begins. Time spent waiting in the queue is not counted against a working run.
 
+## Research
+
+- D38. The browser is Playwright with Chromium, in a new empty context for each page. Search is Tavily, behind one small interface.
+- D39. Research runs in a second Cloud Run service with its own queue and image. A research run is a `run` of kind `research`, and the same `execute` runs it with a switch on the kind.
+- D40. A page becomes a digest of about 300 words, made by a separate model call with no tools. The research loop never sees the page text, and the text is not stored.
+- D41. The loop can open only an address that a search result or an opened page showed it.
+- D42. Limits that the product docs do not give: 25 searches in an attempt, 60 steps, 8 results for a search, 30 links for a page, 40,000 characters read from a page, 30 seconds to load a page, 12,000 characters of a knowledge file, a report of at most 100,000 characters, and a report name of 1 to 80 characters.
+- D43. Reading stops at 25 minutes of the 30. The time of each attempt adds up across attempts. A retry with less than 3 minutes left is not started.
+- D44. The token cap does not throw work away: a run that reaches it writes one last report. The admin's stop cancels the run.
+- D45. A run with no source is `failed`, writes no report, and is not tried again.
+- D46. A cancelled run writes no report. A run cancelled because the admin stopped the account puts one line in the thread. A run cancelled because the thread was deleted says nothing.
+- D47. The loop, the digests, and the report use the one model the admin chose.
+- D48. A search is a usage row with the price of one search. It does not count toward the token cap.
+- D49. `report` has no `storage_key`, and `report_source` has no `file_id` yet.
+- D50. A run for an account that is stopped or at its limit when it starts shows the matching line in the thread, so the person is not left waiting.
+
 ## Open questions
 
 The schema picture lacks an answer to each.

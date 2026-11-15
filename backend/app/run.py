@@ -28,6 +28,8 @@ RunRow = tuple[
     datetime | None,
 ]
 
+MAX_ATTEMPTS = 4
+
 # Measured from the start of the latest attempt, so time spent waiting in the queue does not
 # count. One attempt is cut off at 30 minutes. The wait before the next attempt is at most
 # 5 minutes of backoff, plus up to 30 minutes for a free slot when 3 other runs are going.
@@ -149,6 +151,12 @@ def hold_working(connection: psycopg.Connection, run_id: uuid.UUID) -> bool:
         (run_id,),
     ).fetchone()
     return held is not None
+
+
+def add_work_ms(connection: psycopg.Connection, run_id: uuid.UUID, ms: int) -> None:
+    # An increment in one statement, so the time of an attempt is never lost to another write.
+    apply(connection)
+    connection.execute("UPDATE run SET work_ms = work_ms + %s WHERE id = %s", (ms, run_id))
 
 
 def cancel_run(connection: psycopg.Connection, account_id: uuid.UUID, run_id: uuid.UUID) -> bool:

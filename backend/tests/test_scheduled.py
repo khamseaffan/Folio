@@ -12,6 +12,7 @@ from app.db import connect
 from app.knowledge_file import put_file
 from app.message import list_messages
 from app.model import Block, FakeModel, Reply, ToolCall
+from app.research import FAILED_LINE as RESEARCH_FAILED_LINE
 from app.run import create_run, get_run, start_attempt
 from app.schedule import create_schedule, get_schedule, list_schedules
 from app.scheduled import FAILED_LINE, MAX_ATTEMPTS, NO_NEXT_LINE, execute, next_time, tick
@@ -824,3 +825,53 @@ def test_a_run_another_copy_delivered_reports_its_real_status(connection, accoun
 
     assert execute(run[0], _Other(reply=RESULT, total_tokens=2)) == "ready"
     assert list_messages(connection, account_id, thread_id) == []
+
+
+def _research_run(connection, account_id):
+    thread = create_thread(connection, account_id)
+    run = create_run(connection, account_id, thread[0], None, "research", TASK)
+    assert run is not None
+    return thread[0], run[0]
+
+
+def test_a_stranded_research_run_goes_back_on_the_research_queue(connection, account, monkeypatch):
+    account_id, _ = account
+    _, research_run = _research_run(connection, account_id)
+    thread_id, schedule_id = _quiet_schedule(connection, account_id)
+    schedule_run = _make_run(connection, account_id, thread_id, schedule_id)
+    _age(connection, research_run, 3)
+    _age(connection, schedule_run[0], 3)
+    calls: list[tuple] = []
+    monkeypatch.setattr("app.scheduled.enqueue", lambda *args: calls.append(args))
+
+    counts = tick(_model())
+
+    assert counts["requeued"] == 2
+    assert sorted(calls, key=len) == [(schedule_run[0],), (research_run, "research")]
+
+
+def test_a_stuck_research_run_is_given_up_with_the_research_line(connection, account, enqueued):
+    account_id, _ = account
+    thread_id, run_id = _research_run(connection, account_id)
+    assert start_attempt(connection, run_id) is not None
+    _age_attempt(connection, run_id, 91)
+
+    counts = tick(_model())
+
+    assert counts["stuck"] == 1
+    stored = get_run(connection, run_id)
+    assert stored is not None and stored[5] == "dead"
+    assert _lines(connection, account_id, thread_id, "result") == [RESEARCH_FAILED_LINE]
+
+
+def test_a_research_run_queued_for_too_long_is_given_up_with_the_research_line(
+    connection, account, enqueued
+):
+    account_id, _ = account
+    thread_id, run_id = _research_run(connection, account_id)
+    _age(connection, run_id, 31)
+
+    counts = tick(_model())
+
+    assert counts["stuck"] == 1 and enqueued == []
+    assert _lines(connection, account_id, thread_id, "result") == [RESEARCH_FAILED_LINE]
