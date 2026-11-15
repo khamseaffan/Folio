@@ -84,7 +84,14 @@ class ChromePageOpener:
             # Chrome skips a proxy for loopback names unless told not to, which would be a way
             # around it. The sandbox cannot start inside Cloud Run, so the proxy is the boundary.
             proxy={"server": f"http://127.0.0.1:{self._proxy.port}", "bypass": "<-loopback>"},
-            args=["--no-sandbox", "--disable-dev-shm-usage"],
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                # WebRTC and QUIC use UDP, which a proxy does not carry, so a page could use them
+                # to reach a destination the proxy refuses.
+                "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+                "--disable-quic",
+            ],
         )
 
     def close(self) -> None:

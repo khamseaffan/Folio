@@ -279,3 +279,41 @@ def test_the_fake_opener_returns_its_pages_and_records_the_order():
         fake.open("https://c.test/")
     assert fake.opened == ["https://a.test/", "https://b.test/", "https://c.test/"]
     fake.close()
+
+
+def test_chrome_is_started_so_that_nothing_goes_around_the_proxy(monkeypatch):
+    # A page can open WebRTC connections, which use UDP and ignore a proxy, unless Chrome is told
+    # not to. The proxy is the only way out, so these must be set.
+    import sys
+    import types
+
+    launched: dict = {}
+
+    class _Chromium:
+        def launch(self, **kwargs):
+            launched.update(kwargs)
+            return types.SimpleNamespace(close=lambda: None)
+
+    class _Playwright:
+        chromium = _Chromium()
+
+        def stop(self):
+            pass
+
+    started = types.SimpleNamespace(start=lambda: _Playwright())
+    fake = types.ModuleType("playwright.sync_api")
+    fake.sync_playwright = lambda: started
+    monkeypatch.setitem(sys.modules, "playwright", types.ModuleType("playwright"))
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", fake)
+
+    proxy = SafeProxy()
+    opener = ChromePageOpener(proxy=proxy, robots=Robots(lambda url: (404, "")))
+    try:
+        opener._start()
+        assert launched["proxy"]["bypass"] == "<-loopback>"
+        assert launched["proxy"]["server"] == f"http://127.0.0.1:{proxy.port}"
+        assert "--force-webrtc-ip-handling-policy=disable_non_proxied_udp" in launched["args"]
+        assert "--disable-quic" in launched["args"]
+    finally:
+        opener.close()
+        proxy.stop()
