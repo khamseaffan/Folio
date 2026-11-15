@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownTrayIcon, ArrowLeftIcon } from "@heroicons/react/24/outline";
+import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getReport,
@@ -15,7 +15,6 @@ import {
 import { Markdown } from "./markdown";
 
 type Props = {
-  onClose: () => void;
   // The message is the sentence to show on the public page.
   onSignedOut: (message: string | null) => void;
   onDown: () => void;
@@ -58,7 +57,7 @@ function Source({ source }: { source: ReportSource }) {
   );
 }
 
-export function Reports({ onClose, onSignedOut, onDown, reloadKey }: Props) {
+export function Reports({ onSignedOut, onDown, reloadKey }: Props) {
   const [items, setItems] = useState<ReportItem[] | null>(null);
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -165,10 +164,6 @@ export function Reports({ onClose, onSignedOut, onDown, reloadKey }: Props) {
     <section className="reports" aria-label="Reports">
       <div className="settings-head">
         <h2>Reports</h2>
-        <button type="button" className="quiet settings-back" onClick={onClose}>
-          <ArrowLeftIcon aria-hidden="true" />
-          Back to chat
-        </button>
       </div>
 
       {items === null ? <p className="settings-note">One moment.</p> : null}

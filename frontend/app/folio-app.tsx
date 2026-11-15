@@ -3,12 +3,9 @@
 import {
   ArrowPathIcon,
   ArrowRightStartOnRectangleIcon,
-  BookOpenIcon,
-  ClockIcon,
+  Bars3Icon,
   Cog6ToothIcon,
   DocumentTextIcon,
-  EnvelopeIcon,
-  MagnifyingGlassIcon,
   PaperAirplaneIcon,
   StopIcon,
   UserCircleIcon,
@@ -76,37 +73,12 @@ function GoogleMark() {
 
 function Mark() {
   return (
-    <svg viewBox="0 0 64 64" aria-hidden="true">
-      <rect width="64" height="64" rx="14" fill="#3d5872" />
-      <path d="M18 12h20l10 10v30H18z" fill="#f7f4f1" />
-      <path d="M38 12l10 10H38z" fill="#d7e4ee" />
-      <path d="M24 26h18v5H29v3h8v4h-8v8h-5z" fill="#3d5872" />
+    <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
+      <rect width="24" height="24" rx="6" fill="currentColor" />
+      <path d="M16 0h2a6 6 0 0 1 6 6v2h-4a4 4 0 0 1-4-4z" fill="var(--mark)" />
     </svg>
   );
 }
-
-const abilities: { title: string; text: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
-  {
-    title: "Memory",
-    text: "It keeps notes about you and your work, and you change them in plain words.",
-    icon: BookOpenIcon,
-  },
-  {
-    title: "Research",
-    text: "Ask for a report, then open the finished file with its sources.",
-    icon: MagnifyingGlassIcon,
-  },
-  {
-    title: "Scheduled work",
-    text: "Say when a task should run. The result is waiting when you return.",
-    icon: ClockIcon,
-  },
-  {
-    title: "Files",
-    text: "Upload a document, or bring one across from Google Drive.",
-    icon: DocumentTextIcon,
-  },
-];
 
 // What the agent is doing while it runs a tool. A new tool is one more line here.
 function toolStatus(name: string): string {
@@ -348,6 +320,8 @@ export function FolioApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [reportsOpen, setReportsOpen] = useState(false);
+  // Only used below 900 px, where the sidebar is a menu that covers the page.
+  const [railOpen, setRailOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const linkHref = useRef<string | null>(null);
   const streamAbort = useRef<AbortController | null>(null);
@@ -1053,178 +1027,247 @@ export function FolioApp() {
     setView("signed-out");
   }
 
-  // Side by side only from 900 px, so below that the thread must take the panel's place.
-  function closeProfileIfNarrow() {
-    if (!window.matchMedia("(min-width: 900px)").matches) setProfileOpen(false);
-  }
-
   function holdFocus(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Tab") event.preventDefault();
+  }
+
+  type Page = "chat" | "reports" | "profile" | "settings";
+
+  // One page at a time. Leaving a page is choosing another one in the sidebar.
+  function go(next: Page) {
+    setSettingsOpen(next === "settings");
+    setReportsOpen(next === "reports");
+    setProfileOpen(next === "profile");
+    setRailOpen(false);
   }
 
   const signedIn = view === "ask-name" || view === "ready";
   const landing = view === "signed-out" || view === "link-email";
   const visibleThreads = threadsNewestFirst(threads);
-  const profileButton = (
-    <button
-      type="button"
-      className="quiet profile-toggle"
-      aria-expanded={profileOpen}
-      onClick={() => {
-        setReportsOpen(false);
-        setProfileOpen((open) => !open);
-      }}
-    >
-      <UserCircleIcon aria-hidden="true" />
-      Profile
-    </button>
-  );
   const openThread = visibleThreads.find((thread) => thread.id === openId) ?? null;
+  const page: Page = settingsOpen ? "settings" : reportsOpen ? "reports" : profileOpen ? "profile" : "chat";
+  const initials =
+    (displayName ?? "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0]?.toUpperCase() ?? "")
+      .join("") || "F";
+  const navItems: { id: Exclude<Page, "chat">; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
+    { id: "reports", label: "Reports", icon: DocumentTextIcon },
+    { id: "profile", label: "Profile", icon: UserCircleIcon },
+    { id: "settings", label: "Settings", icon: Cog6ToothIcon },
+  ];
 
   return (
     <>
-      <div className="scene" inert={down}>
-        <svg className="fuji" viewBox="0 0 1440 360" aria-hidden="true">
-          <path fill="#3d5872" d="M0 320 720 40 1440 320V360H0Z" />
-          <path fill="#ffffff" d="M468 138 720 40 972 138Z" />
-        </svg>
-        <div className={landing ? "stage landing" : named ? "stage desk" : "stage"}>
-          {landing ? (
-            <section className="intro" aria-label="Folio">
-              <h2>A private assistant that remembers your work.</h2>
-              <p>Your notes, files, and research stay in one account that only you can open.</p>
-              <ul>
-                {abilities.map((item) => (
-                  <li key={item.title}>
-                    <item.icon aria-hidden="true" />
-                    <div>
-                      <strong>{item.title}</strong>
-                      <p>{item.text}</p>
-                    </div>
+      <div className="app" inert={down}>
+        {landing ? (
+          <div className="landing">
+            <div className="landing-side">
+              <span className="wordmark">
+                <Mark />
+                Folio
+              </span>
+              <div className="landing-body">
+                <h1>An assistant that keeps a record of your work.</h1>
+                <p className="landing-lead">
+                  Ask questions, run research that cites its sources, and let Folio remember how you
+                  like things done. Everything stays in your own account.
+                </p>
+                {notice ? (
+                  <p role="alert" className="notice">
+                    {notice}
+                  </p>
+                ) : null}
+                {status ? (
+                  <p role="status" className="status">
+                    {status}
+                  </p>
+                ) : null}
+                {view === "signed-out" ? (
+                  <>
+                    <button
+                      type="button"
+                      className="google"
+                      onClick={() => void onGoogle()}
+                      disabled={pending}
+                    >
+                      <GoogleMark />
+                      Continue with Google
+                    </button>
+                    <p className="divider">or use your email</p>
+                  </>
+                ) : (
+                  <p className="hint">Enter the email address the link was sent to.</p>
+                )}
+                <form className="email-form" onSubmit={(event) => void onEmail(event)} aria-busy={pending}>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    inputMode="email"
+                    placeholder="you@example.com"
+                    aria-label="Email"
+                    required
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
+                  <button type="submit" disabled={pending}>
+                    {view === "link-email" ? "Continue" : "Email me a link"}
+                  </button>
+                </form>
+                {view === "link-email" ? (
+                  <button type="button" className="text-button" onClick={leaveLink} disabled={pending}>
+                    Use another sign-in
+                  </button>
+                ) : null}
+                <p className="fine">Folio is invite only. Only approved email addresses can sign in.</p>
+              </div>
+              <p className="landing-foot">Your conversations are private to your account.</p>
+            </div>
+            <div className="landing-sample" aria-hidden="true">
+              <article className="sample">
+                <p className="sample-meta">
+                  <span className="chip">Example report</span>12 sources opened, 9 cited
+                </p>
+                <h2>Do 4-day work weeks hold up for small teams?</h2>
+                <p>
+                  Across the pilots Folio read, most small teams{" "}
+                  <mark>kept output level while cutting hours</mark>
+                  <sup>1</sup>, though results were weaker where work depends on customer coverage
+                  <sup>2</sup>.
+                </p>
+                <p>
+                  Reported gains were mostly <mark>fewer sick days and lower turnover</mark>
+                  <sup>3</sup>. Two sources disagree on how long the effect lasts<sup>4</sup>.
+                </p>
+                <ol>
+                  <li>
+                    <b>Four Day Week pilot results</b>, 4dayweek.com
                   </li>
+                  <li>
+                    <b>Coverage limits in service teams</b>, hbr.org
+                  </li>
+                  <li>
+                    <b>Turnover after a shorter week</b>, nber.org
+                  </li>
+                  <li>
+                    <b>Do the gains last?</b>, economist.com
+                  </li>
+                </ol>
+              </article>
+            </div>
+          </div>
+        ) : named && displayName !== null ? (
+          <div className="desk" data-rail={railOpen ? "open" : "closed"}>
+            <aside className="rail" id="rail">
+              <span className="wordmark">
+                <Mark />
+                Folio
+              </span>
+              <ThreadList
+                threads={visibleThreads}
+                openId={openId}
+                disabled={pending}
+                onOpen={(id) => {
+                  go("chat");
+                  void onOpenThread(id);
+                }}
+                onCreate={() => {
+                  go("chat");
+                  void onNewThread();
+                }}
+                onRename={onRenameThread}
+                onDelete={onDeleteThread}
+              />
+              <nav aria-label="Account">
+                {navItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="nav-item"
+                    aria-current={page === item.id ? "page" : undefined}
+                    onClick={() => go(item.id)}
+                  >
+                    <item.icon aria-hidden="true" />
+                    {item.label}
+                  </button>
                 ))}
-              </ul>
-            </section>
-          ) : null}
-          {named && displayName !== null ? (
-            <div className="desk">
+              </nav>
+              <div className="who">
+                <span className="avatar" aria-hidden="true">
+                  {initials}
+                </span>
+                <div className="who-text">
+                  <p className="account-name">{displayName}</p>
+                  {accountEmail ? <p className="mail">{accountEmail}</p> : null}
+                </div>
+                <button
+                  type="button"
+                  className="sign-out"
+                  onClick={() => void onSignOut()}
+                  disabled={pending}
+                >
+                  <ArrowRightStartOnRectangleIcon aria-hidden="true" />
+                  Sign out
+                </button>
+              </div>
+            </aside>
+            <main className="main">
+              <div className="mobilebar">
+                <button
+                  type="button"
+                  className="menu-button"
+                  aria-expanded={railOpen}
+                  aria-controls="rail"
+                  onClick={() => setRailOpen((open) => !open)}
+                >
+                  <Bars3Icon aria-hidden="true" />
+                  {railOpen ? "Close menu" : "Menu"}
+                </button>
+              </div>
               {notice ? (
                 <p role="alert" className="notice">
                   {notice}
                 </p>
               ) : null}
-              {!threadsLoaded ? <p className="hint">One moment.</p> : null}
-              {threadsLoaded ? (
-                <div
-                  className={
-                    !(openThread || settingsOpen || profileOpen || reportsOpen)
-                      ? "desk-body idle"
-                      : profileOpen && !settingsOpen
-                        ? "desk-body profile-open"
-                        : "desk-body"
-                  }
-                >
-                  <div className="threads">
-                    <div className="rail-brand">
-                      <div className="mark" aria-hidden="true">
-                        <Mark />
+              {!threadsLoaded ? <p className="hint pad">One moment.</p> : null}
+              {threadsLoaded && page === "settings" ? (
+                <Settings
+                  account={{ email: accountEmail ?? "", display_name: displayName }}
+                  onAccountChange={(account) => {
+                    setDisplayName(account.display_name);
+                    setAccountEmail(account.email);
+                  }}
+                  onSignedOut={settingsSignedOut}
+                  onDown={settingsDown}
+                />
+              ) : null}
+              {threadsLoaded && page === "reports" ? (
+                <Reports reloadKey={reloadKey} onSignedOut={settingsSignedOut} onDown={settingsDown} />
+              ) : null}
+              {threadsLoaded && page === "profile" ? (
+                <ProfilePanel reloadKey={reloadKey} onSignedOut={settingsSignedOut} onDown={settingsDown} />
+              ) : null}
+              {threadsLoaded && page === "chat" ? (
+                openThread ? (
+                  <section
+                    className={messages.length === 0 ? "thread thread-empty" : "thread"}
+                    aria-label={openThread.name}
+                  >
+                    <header className="top">
+                      <h1 className="thread-name">{openThread.name}</h1>
+                    </header>
+                    {messages.length === 0 ? (
+                      <div className="welcome">
+                        <p className="welcome-hello">Hello, {displayName}</p>
+                        <h2>How can I help today?</h2>
                       </div>
-                      <p className="kicker">Folio</p>
-                    </div>
-                    <ThreadList
-                      threads={visibleThreads}
-                      openId={openId}
-                      disabled={pending}
-                      onOpen={(id) => {
-                        setSettingsOpen(false);
-                        setReportsOpen(false);
-                        closeProfileIfNarrow();
-                        void onOpenThread(id);
-                      }}
-                      onCreate={() => {
-                        setSettingsOpen(false);
-                        setReportsOpen(false);
-                        closeProfileIfNarrow();
-                        void onNewThread();
-                      }}
-                      onRename={onRenameThread}
-                      onDelete={onDeleteThread}
-                    />
-                    <div className="desk-account">
-                      <p className="account-name">{displayName}</p>
-                      {accountEmail ? <p className="mail">{accountEmail}</p> : null}
-                      <div className="account-actions">
-                        <button
-                          type="button"
-                          className="quiet"
-                          onClick={() => {
-                            setProfileOpen(false);
-                            setSettingsOpen(false);
-                            setReportsOpen(true);
-                          }}
-                        >
-                          <DocumentTextIcon aria-hidden="true" />
-                          Reports
-                        </button>
-                        <button type="button" className="quiet" onClick={() => {
-                            setProfileOpen(false);
-                            setReportsOpen(false);
-                            setSettingsOpen(true);
-                          }}
-                        >
-                          <Cog6ToothIcon aria-hidden="true" />
-                          Settings
-                        </button>
-                        <button
-                          type="button"
-                          className="quiet"
-                          onClick={() => void onSignOut()}
-                          disabled={pending}
-                        >
-                          <ArrowRightStartOnRectangleIcon aria-hidden="true" />
-                          Sign out
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  {settingsOpen ? (
-                    <Settings
-                      account={{ email: accountEmail ?? "", display_name: displayName }}
-                      onClose={() => setSettingsOpen(false)}
-                      onAccountChange={(account) => {
-                        setDisplayName(account.display_name);
-                        setAccountEmail(account.email);
-                      }}
-                      onSignedOut={settingsSignedOut}
-                      onDown={settingsDown}
-                    />
-                  ) : reportsOpen ? (
-                    <Reports
-                      reloadKey={reloadKey}
-                      onClose={() => setReportsOpen(false)}
-                      onSignedOut={settingsSignedOut}
-                      onDown={settingsDown}
-                    />
-                  ) : (
-                    <>
-                  {openThread ? (
-                    <section
-                      className={messages.length === 0 ? "thread thread-empty" : "thread"}
-                      aria-label={openThread.name}
-                    >
-                      <div className="thread-head">
-                        {messages.length === 0 ? null : (
-                          <h2 className="thread-name">{openThread.name}</h2>
-                        )}
-                        {profileButton}
-                      </div>
-                      {messages.length === 0 ? (
-                        <div className="welcome">
-                          <p className="welcome-hello">Hello, {displayName}</p>
-                          <h1>How can I assist you today?</h1>
-                        </div>
-                      ) : null}
-                      {messages.length === 0 ? null : (
+                    ) : (
                       <div className="messages" ref={messagePane} tabIndex={0} aria-label="Messages">
                         {messages.map((message) =>
                           message.kind === "failure" ? (
@@ -1243,16 +1286,12 @@ export function FolioApp() {
                               )}
                             </div>
                           ) : message.role === "person" ||
-                          (message.kind !== "chat" && message.kind !== "result") ? (
+                            (message.kind !== "chat" && message.kind !== "result") ? (
                             <p
                               key={message.id}
-                              className={
-                                message.role === "person" ? "message person" : "message reply"
-                              }
+                              className={message.role === "person" ? "message person" : "message reply"}
                             >
-                              <span className="speaker">
-                                {message.role === "person" ? "You" : "Folio"}
-                              </span>
+                              <span className="speaker">{message.role === "person" ? "You" : "Folio"}</span>
                               {message.body}
                             </p>
                           ) : (
@@ -1275,154 +1314,105 @@ export function FolioApp() {
                           </div>
                         ) : null}
                       </div>
+                    )}
+                    <form className="composer" onSubmit={(event) => void sendDraft(event)}>
+                      <textarea
+                        rows={1}
+                        value={draft}
+                        placeholder="Ask Folio anything"
+                        aria-label="Message"
+                        autoComplete="off"
+                        disabled={pending}
+                        onChange={(event) => setDraft(event.target.value)}
+                        onKeyDown={onComposerKey}
+                      />
+                      {streaming ? (
+                        <button type="button" className="primary send" onClick={() => void onStop()}>
+                          <StopIcon aria-hidden="true" />
+                          Stop
+                        </button>
+                      ) : (
+                        <button
+                          type="submit"
+                          className="primary send"
+                          disabled={pending || draft.trim() === ""}
+                        >
+                          <PaperAirplaneIcon aria-hidden="true" />
+                          Send
+                        </button>
                       )}
-                      <form className="composer" onSubmit={(event) => void sendDraft(event)}>
-                        <textarea
-                          rows={2}
-                          value={draft}
-                          placeholder="Ask me anything..."
-                          aria-label="Message"
-                          autoComplete="off"
-                          disabled={pending}
-                          onChange={(event) => setDraft(event.target.value)}
-                          onKeyDown={onComposerKey}
-                        />
-                        {streaming ? (
-                          <button type="button" className="primary send" onClick={() => void onStop()}>
-                            <StopIcon aria-hidden="true" />
-                            Stop
-                          </button>
-                        ) : (
-                          <button
-                            type="submit"
-                            className="primary send"
-                            disabled={pending || draft.trim() === ""}
-                          >
-                            <PaperAirplaneIcon aria-hidden="true" />
-                            Send
-                          </button>
-                        )}
-                      </form>
-                    </section>
-                  ) : null}
-                  {openThread ? null : (
-                    <div className="thread-idle">
-                      <div className="thread-head">{profileButton}</div>
+                    </form>
+                  </section>
+                ) : (
+                  <section className="thread thread-empty" aria-label="Start">
+                    <header className="top">
+                      <h1 className="thread-name">Folio</h1>
+                    </header>
+                    <div className="welcome">
+                      <p className="welcome-hello">Hello, {displayName}</p>
+                      <h2>Start a thread to begin.</h2>
+                      <button
+                        type="button"
+                        className="primary"
+                        onClick={() => void onNewThread()}
+                        disabled={pending}
+                      >
+                        New thread
+                      </button>
                     </div>
-                  )}
-                  {profileOpen ? (
-                    <ProfilePanel
-                      reloadKey={reloadKey}
-                      onClose={() => setProfileOpen(false)}
-                      onSignedOut={settingsSignedOut}
-                      onDown={settingsDown}
-                    />
-                  ) : null}
-                    </>
-                  )}
-                </div>
+                  </section>
+                )
               ) : null}
-            </div>
-          ) : (
-          <section className="panel">
-          <div className="panel-head">
-            <div className="mark" aria-hidden="true">
-              <Mark />
-            </div>
-            <div>
-              {named ? <p className="kicker">Folio</p> : null}
-              <h1>{named ? displayName : "Folio"}</h1>
-            </div>
+            </main>
           </div>
-          {signedIn && accountEmail ? <p className="mail">{accountEmail}</p> : null}
-          {notice ? (
-            <p role="alert" className="notice">
-              {notice}
-            </p>
-          ) : null}
-          {status ? (
-            <p role="status" className="status">
-              {status}
-            </p>
-          ) : null}
-          {view === "checking" ? <p className="hint">One moment.</p> : null}
-          {view === "signed-out" || view === "link-email" ? (
-            <form className="block" onSubmit={(event) => void onEmail(event)} aria-busy={pending}>
-              {view === "link-email" ? (
-                <p className="hint">Enter the email address the link was sent to.</p>
+        ) : (
+          <div className="center">
+            <section className="panel">
+              <span className="wordmark">
+                <Mark />
+                Folio
+              </span>
+              {notice ? (
+                <p role="alert" className="notice">
+                  {notice}
+                </p>
               ) : null}
-              <div className="field">
-                <EnvelopeIcon aria-hidden="true" />
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  inputMode="email"
-                  placeholder="Email"
-                  aria-label="Email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </div>
-              <button type="submit" className="primary" disabled={pending}>
-                {view === "link-email" ? "Continue" : "Send a link"}
-              </button>
-              {view === "link-email" ? (
-                <button type="button" className="text-button" onClick={leaveLink} disabled={pending}>
-                  Use another sign-in
+              {status ? (
+                <p role="status" className="status">
+                  {status}
+                </p>
+              ) : null}
+              {view === "checking" ? <p className="hint">One moment.</p> : null}
+              {view === "ask-name" ? (
+                <form className="block" onSubmit={(event) => void onName(event)} aria-busy={pending}>
+                  <h1>What should Folio call you?</h1>
+                  <input
+                    id="display-name"
+                    name="display-name"
+                    type="text"
+                    autoComplete="name"
+                    autoCapitalize="words"
+                    placeholder="Your name"
+                    aria-label="Your name"
+                    maxLength={40}
+                    required
+                    value={draftName}
+                    onChange={(event) => setDraftName(event.target.value)}
+                  />
+                  <button type="submit" className="primary" disabled={pending}>
+                    Save
+                  </button>
+                </form>
+              ) : null}
+              {signedIn ? (
+                <button type="button" className="quiet" onClick={() => void onSignOut()} disabled={pending}>
+                  <ArrowRightStartOnRectangleIcon aria-hidden="true" />
+                  Sign out
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  className="google"
-                  onClick={() => void onGoogle()}
-                  disabled={pending}
-                >
-                  <GoogleMark />
-                  Continue with Google
-                </button>
-              )}
-            </form>
-          ) : null}
-          {view === "ask-name" ? (
-            <form className="block" onSubmit={(event) => void onName(event)} aria-busy={pending}>
-              <div className="field">
-                <input
-                  id="display-name"
-                  name="display-name"
-                  type="text"
-                  autoComplete="name"
-                  autoCapitalize="words"
-                  placeholder="Your name"
-                  aria-label="Your name"
-                  required
-                  value={draftName}
-                  onChange={(event) => setDraftName(event.target.value)}
-                />
-              </div>
-              <button type="submit" className="primary" disabled={pending}>
-                Save
-              </button>
-            </form>
-          ) : null}
-          {signedIn ? (
-            <button
-              type="button"
-              className="quiet"
-              onClick={() => void onSignOut()}
-              disabled={pending}
-            >
-              <ArrowRightStartOnRectangleIcon aria-hidden="true" />
-              Sign out
-            </button>
-          ) : null}
-          </section>
-          )}
-        </div>
+              ) : null}
+            </section>
+          </div>
+        )}
       </div>
       {down ? (
         <div className="down-layer">

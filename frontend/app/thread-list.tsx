@@ -136,7 +136,9 @@ export function ThreadList({
         New thread
       </button>
       {threads.length > 0 ? (
-        <ul aria-label="Threads" ref={listRef}>
+        <div className="thread-scroll">
+        <h3 id="thread-heading">Threads</h3>
+        <ul aria-labelledby="thread-heading" ref={listRef}>
           {threads.map((thread) => (
             <li key={thread.id} className="thread-row">
               {renamingId === thread.id ? (
@@ -173,7 +175,7 @@ export function ThreadList({
                         <span className="visually-hidden">Working</span>
                       </span>
                     ) : null}
-                    {thread.name}
+                    <span className="thread-open-name">{thread.name}</span>
                   </button>
                   <div className="row-actions">
                     <button
@@ -203,7 +205,10 @@ export function ThreadList({
             </li>
           ))}
         </ul>
-      ) : null}
+        </div>
+      ) : (
+        <div className="thread-scroll" />
+      )}
       {confirmId !== null ? (
         <ConfirmDialog
           title="Delete this thread?"
