@@ -1,4 +1,4 @@
-from app import ability, knowledge_file, schedule, session, usage
+from app import ability, knowledge_file, report, report_source, schedule, session, usage
 from app import run as run_table
 from app.db import connect
 
@@ -12,6 +12,8 @@ def run() -> None:
         ability.apply(connection, force=True)
         schedule.apply(connection, force=True)
         run_table.apply(connection, force=True)
+        report.apply(connection, force=True)
+        report_source.apply(connection, force=True)
 
 
 if __name__ == "__main__":

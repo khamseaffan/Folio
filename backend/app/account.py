@@ -115,6 +115,9 @@ def load_firebase_uid(account_id: uuid.UUID) -> str | None:
 
 def delete_account(account_id: uuid.UUID) -> bool:
     with connect() as connection:
+        # A report restricts the delete of its run, so it goes first, in the same transaction.
+        if table_exists(connection, "report"):
+            connection.execute("DELETE FROM report WHERE account_id = %s", (account_id,))
         deleted = connection.execute(
             "DELETE FROM account WHERE id = %s RETURNING id",
             (account_id,),

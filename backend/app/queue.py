@@ -6,13 +6,29 @@ from typing import Any
 DISPATCH_DEADLINE_SECONDS = 1800
 
 
-def enqueue(run_id: uuid.UUID, client: Any = None) -> None:
-    queue = os.environ.get("RUN_QUEUE")
-    worker_url = os.environ.get("WORKER_URL")
+# The variables each kind of run needs, as (queue, service address). The invoker is shared.
+_TARGETS = {
+    "schedule": ("RUN_QUEUE", "WORKER_URL"),
+    "research": ("RESEARCH_QUEUE", "RESEARCH_URL"),
+}
+
+
+class QueueNotConfigured(Exception):
+    pass
+
+
+def enqueue(run_id: uuid.UUID, kind: str = "schedule", client: Any = None) -> None:
+    queue_name, url_name = _TARGETS.get(kind, _TARGETS["schedule"])
+    queue = os.environ.get(queue_name)
+    worker_url = os.environ.get(url_name)
     invoker = os.environ.get("INVOKER_ACCOUNT")
     if queue and worker_url and invoker:
         _put_on_cloud_queue(run_id, queue, worker_url.rstrip("/"), invoker, client)
         return
+    if os.environ.get("K_SERVICE"):
+        # On Cloud Run a missing variable is a setup mistake. Running the run in a thread of a
+        # service that may stop at any moment would lose it, so it is refused instead.
+        raise QueueNotConfigured(kind)
     threading.Thread(target=_run_here, args=(run_id,), name="folio-run").start()
 
 

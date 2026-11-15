@@ -1,3 +1,4 @@
+import logging
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -7,7 +8,9 @@ from typing import Any
 import psycopg
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app import ability, knowledge_file, live, schedule, thread
+from app import ability, knowledge_file, live, report, schedule, thread
+from app import queue as run_queue
+from app import run as run_table
 from app.model import ToolSpec
 
 NOT_FOUND = "Thread not found."
@@ -21,6 +24,11 @@ BAD_TEXT = "That text cannot be stored."
 NO_SCHEDULE = "Schedule not found."
 BAD_TIME = "Give the next time as a date and time with a time zone, in the future."
 BAD_TASK = "A schedule needs a task and the words for when."
+NO_REPORT = "Report not found."
+NO_RUN = "Run not found."
+BAD_REPORT_NAME = "A report name is 1 to 80 characters."
+BAD_QUESTION = "A research question is 1 to 2,000 characters."
+NOT_AVAILABLE = "Research is not available right now."
 TOO_MANY = "This turn has already opened five files."
 PROFILE_TOO_LONG = (
     "profile.md can hold at most 20,000 characters. Shorten it, or move facts into another file."
@@ -30,6 +38,8 @@ PROFILE_LIMIT = 20_000
 
 _NAME_LIMIT = 80
 _SCHEDULE_TEXT_LIMIT = 2_000
+_QUESTION_LIMIT = 2_000
+_log = logging.getLogger("folio.operations")
 
 Result = dict[str, Any]
 
@@ -122,6 +132,23 @@ class _WriteSchedule(_Input):
 
 class _DeleteSchedule(_Input):
     schedule_id: uuid.UUID
+
+
+class _StartResearch(_Input):
+    question: str
+
+
+class _CancelResearch(_Input):
+    run_id: uuid.UUID
+
+
+class _RenameReport(_Input):
+    report_id: uuid.UUID
+    name: str
+
+
+class _DeleteReport(_Input):
+    report_id: uuid.UUID
 
 
 def _refused(code: str, error: str) -> Result:
@@ -480,6 +507,127 @@ def _delete_schedule(
     return {"ok": True, "schedule_id": str(given.schedule_id)}
 
 
+def _start_research(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _StartResearch,
+) -> Result:
+    # Imported here because turn imports this module.
+    from app import turn
+
+    question = given.question.strip()
+    if len(question) < 1 or len(question) > _QUESTION_LIMIT or not _clean(question):
+        return _refused("invalid", BAD_QUESTION)
+    if context.thread_id is None:
+        return _refused("not_found", NOT_FOUND)
+    if thread.get_thread(connection, account_id, context.thread_id) is None:
+        return _refused("not_found", NOT_FOUND)
+    email, _ = turn._account(connection, account_id)
+    cap, stopped = turn._limit(connection, email)
+    if stopped:
+        return _refused("limit", turn._STOPPED)
+    if turn.tokens_for_email(connection, email) >= cap:
+        return _refused("limit", turn._CAPPED)
+    row = run_table.create_run(
+        connection, account_id, context.thread_id, None, "research", question
+    )
+    if row is None:
+        return _refused("not_found", NOT_FOUND)
+    # The worker may pick the run up the moment it is on the queue, from its own connection.
+    connection.commit()
+    try:
+        run_queue.enqueue(row[0], "research")
+    except run_queue.QueueNotConfigured:
+        _log.error("research run %s could not be put on a queue: not configured", row[0])
+        run_table.finish_working(connection, row[0], "failed", 0, "queued")
+        connection.commit()
+        return _refused("unavailable", NOT_AVAILABLE)
+    except Exception as error:
+        # The tick puts a queued run back on its queue after two minutes.
+        _log.error("research run %s was not put on the queue: %s", row[0], type(error).__name__)
+    return {"ok": True, "run": {"id": str(row[0]), "question": question, "status": "queued"}}
+
+
+def _cancel_research(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _CancelResearch,
+) -> Result:
+    if not run_table.cancel_run(connection, account_id, given.run_id):
+        return _refused("not_found", NO_RUN)
+    return {"ok": True, "run_id": str(given.run_id)}
+
+
+def _list_research_runs(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _NoInput,
+) -> Result:
+    rows = run_table.list_in_flight(connection, account_id, "research")
+    return {
+        "ok": True,
+        "runs": [
+            {
+                "id": str(row[0]),
+                "question": row[6],
+                "status": row[5],
+                "created_at": row[10].isoformat(),
+            }
+            for row in rows
+        ],
+    }
+
+
+def _list_reports(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _NoInput,
+) -> Result:
+    rows = report.list_reports(connection, account_id)
+    return {
+        "ok": True,
+        "reports": [
+            {
+                "id": str(row[0]),
+                "name": row[4],
+                "question": row[5],
+                "created_at": row[11].isoformat(),
+            }
+            for row in rows
+        ],
+    }
+
+
+def _rename_report(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _RenameReport,
+) -> Result:
+    name = _name(given.name)
+    if name is None:
+        return _refused("invalid", BAD_REPORT_NAME)
+    renamed = report.rename_report(connection, account_id, given.report_id, name)
+    if renamed is None:
+        return _refused("not_found", NO_REPORT)
+    return {"ok": True, "report": {"id": str(renamed[0]), "name": renamed[4]}}
+
+
+def _delete_report(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _DeleteReport,
+) -> Result:
+    if not report.delete_report(connection, account_id, given.report_id):
+        return _refused("not_found", NO_REPORT)
+    return {"ok": True, "report_id": str(given.report_id)}
+
+
 OPERATIONS: dict[str, Operation] = {
     operation.name: operation
     for operation in (
@@ -623,6 +771,57 @@ OPERATIONS: dict[str, Operation] = {
             "Delete one schedule by its id. It cannot be restored.",
             _DeleteSchedule,
             _delete_schedule,
+            True,
+            True,
+        ),
+        Operation(
+            "start_research",
+            "Start a research run for the question, written out in full. Folio searches the "
+            "web, reads pages, and writes one report with its sources, which appears in "
+            "Reports when it is ready. It can take up to 30 minutes.",
+            _StartResearch,
+            _start_research,
+            True,
+            True,
+        ),
+        Operation(
+            "cancel_research",
+            "Cancel one research run that is waiting or working, by its id. No report is "
+            "written for a cancelled run.",
+            _CancelResearch,
+            _cancel_research,
+            True,
+            True,
+        ),
+        Operation(
+            "list_research_runs",
+            "List the research runs that are waiting or working, with their ids and questions.",
+            _NoInput,
+            _list_research_runs,
+            True,
+            True,
+        ),
+        Operation(
+            "list_reports",
+            "List the person's reports with their ids, names, questions, and times.",
+            _NoInput,
+            _list_reports,
+            True,
+            True,
+        ),
+        Operation(
+            "rename_report",
+            "Give a report a new name of 1 to 80 characters.",
+            _RenameReport,
+            _rename_report,
+            True,
+            True,
+        ),
+        Operation(
+            "delete_report",
+            "Delete one report with its source list. It cannot be restored.",
+            _DeleteReport,
+            _delete_report,
             True,
             True,
         ),

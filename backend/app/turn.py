@@ -58,6 +58,12 @@ MEMORY = (
     "You can open at most five files in one turn. When two stored facts disagree, tell the "
     "person, say which one you believe should go, and delete it only after they agree."
 )
+RESEARCH = (
+    "When the person asks for a report that needs many sources, make sure you understand the "
+    "question. If it is unclear, ask one short question first. Then call start_research with "
+    "the question written out in full, tell the person it has started, and say the report "
+    "will appear in Reports when it is ready. Do not do the research yourself in the chat."
+)
 _FOLD = "Summarize the earlier messages so the next reply can continue."
 _KEPT = 10
 
@@ -94,12 +100,16 @@ def _system_prompt(
     summary: str | None,
     profile: str | None,
     time_zone: str | None = None,
+    chat: bool = False,
 ) -> str:
     parts: list[str] = []
     if display_name is not None:
         parts.append(f"The person's name is {display_name}.")
     parts.append(_HARM)
     parts.append(MEMORY)
+    if chat:
+        # A scheduled run cannot start research, so only a chat turn is told how.
+        parts.append(RESEARCH)
     parts.append(_time_line(time_zone))
     if profile is not None:
         parts.append("The person's profile:")
@@ -201,7 +211,7 @@ def _cover(
     profile_file = get_file(connection, account_id, PROFILE)
     profile = profile_file[3] if profile_file is not None else None
     while True:
-        prompt = _system_prompt(display_name, summary, profile, time_zone)
+        prompt = _system_prompt(display_name, summary, profile, time_zone, chat=True)
         blocks, omitted = select_blocks(prompt, messages, model)
         if all(message[0] in covered for message in omitted):
             return prompt, blocks, omitted

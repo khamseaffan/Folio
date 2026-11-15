@@ -16,7 +16,7 @@ from app.model import FakeModel as ScriptedModel
 from app.session import apply as apply_session
 from app.session import end_session
 from app.sign_in_proof import VerifiedSignIn
-from app.turn import MEMORY
+from app.turn import MEMORY, RESEARCH
 from fastapi.testclient import TestClient
 
 ALLOWED = "khamseaffan@gmail.com"
@@ -1041,7 +1041,9 @@ def test_mid_stream_model_error_keeps_the_arrived_text_and_hides_the_cause(
 
 NOW = datetime(2026, 11, 14, 9, 30, 41, tzinfo=UTC)
 TIME_LINE = "The time now is 2026-11-14T09:30+00:00. The person's time zone is UTC."
-HARM = f"A task that would cause physical harm stops and asks.\n{MEMORY}\n{TIME_LINE}"
+HARM = (
+    f"A task that would cause physical harm stops and asks.\n{MEMORY}\n{RESEARCH}\n{TIME_LINE}"
+)
 
 
 @pytest.fixture(autouse=True)

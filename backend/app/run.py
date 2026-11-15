@@ -151,6 +151,42 @@ def hold_working(connection: psycopg.Connection, run_id: uuid.UUID) -> bool:
     return held is not None
 
 
+def cancel_run(connection: psycopg.Connection, account_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+    # Only research can be cancelled by the person. A scheduled run is stopped by its schedule.
+    apply(connection)
+    changed = connection.execute(
+        """
+        UPDATE run
+        SET status = 'cancelled'
+        WHERE id = %s
+          AND account_id = %s
+          AND kind = 'research'
+          AND status IN ('queued', 'working')
+        RETURNING id
+        """,
+        (run_id, account_id),
+    ).fetchone()
+    return changed is not None
+
+
+def list_in_flight(
+    connection: psycopg.Connection, account_id: uuid.UUID, kind: str
+) -> list[RunRow]:
+    apply(connection)
+    rows = connection.execute(
+        f"""
+        SELECT {_COLUMNS}
+        FROM run
+        WHERE account_id = %s
+          AND kind = %s
+          AND status IN ('queued', 'working')
+        ORDER BY created_at DESC, id ASC
+        """,
+        (account_id, kind),
+    ).fetchall()
+    return list(rows)
+
+
 def in_flight_threads(connection: psycopg.Connection, account_id: uuid.UUID) -> set[uuid.UUID]:
     apply(connection)
     rows = connection.execute(
