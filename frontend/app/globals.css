@@ -1025,6 +1025,37 @@ a svg {
   min-width: 0;
 }
 
+.work-toggle {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  margin: -0.15rem -0.3rem -0.15rem 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-2);
+}
+
+.work-toggle:hover {
+  background: var(--paper);
+}
+
+.work-toggle svg {
+  transition: transform 120ms ease;
+}
+
+.work-toggle[aria-expanded="false"] svg {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .work-toggle svg {
+    transition: none;
+  }
+}
+
 .work-now {
   color: var(--ink-2);
   overflow: hidden;

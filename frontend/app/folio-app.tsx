@@ -4,6 +4,7 @@ import {
   ArrowPathIcon,
   ArrowRightStartOnRectangleIcon,
   Bars3Icon,
+  ChevronDownIcon,
   Cog6ToothIcon,
   DocumentTextIcon,
   PaperAirplaneIcon,
@@ -355,6 +356,7 @@ function WorkBanner({
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [lines, setLines] = useState<ActivityLine[]>([]);
+  const [open, setOpen] = useState(true);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -382,12 +384,21 @@ function WorkBanner({
           {title}
           {since ? <span className="work-time">{elapsedText(since, now)}</span> : null}
         </p>
-        {latest ? (
+        {latest && open ? (
           <p className="work-now">
             <ActivityText line={latest} />
           </p>
         ) : null}
       </div>
+      <button
+        type="button"
+        className="work-toggle"
+        aria-expanded={open}
+        aria-label={open ? "Minimize progress" : "Show progress"}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <ChevronDownIcon aria-hidden="true" />
+      </button>
     </div>
   );
 }
