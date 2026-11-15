@@ -442,7 +442,6 @@
       { from: "run", to: "usage", column: "run_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
       { from: "message", to: "usage", column: "message_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
       { from: "report", to: "report_source", column: "report_id, account_id", card: "many", onDelete: "cascade", draw: "fan" },
-      { from: "file", to: "report_source", column: "file_id, account_id", card: "many", onDelete: "set null", draw: "bus" },
       { from: "knowledge_file", to: "report_source", column: "knowledge_file_id, account_id", card: "many", onDelete: "set null", draw: "bus" }
     ];
 
