@@ -300,6 +300,49 @@ export async function getThread(id: string): Promise<ApiResult<ThreadWithMessage
   return threadCall(result, threadPageFrom);
 }
 
+export type ActivityLine = {
+  at: string;
+  kind: "search" | "read" | "skipped";
+  text: string;
+  url: string | null;
+};
+
+export type ThreadActivity = {
+  working: boolean;
+  items: ActivityLine[];
+};
+
+function activityLineFrom(body: unknown): ActivityLine | null {
+  if (!isRecord(body)) return null;
+  const at = textField(body, "at");
+  const text = textField(body, "text");
+  const kind = body.kind;
+  const url = body.url;
+  if (at === null || text === null) return null;
+  if (kind !== "search" && kind !== "read" && kind !== "skipped") return null;
+  if (url !== null && typeof url !== "string") return null;
+  return { at, kind, text, url };
+}
+
+function activityFrom(body: unknown): ThreadActivity | null {
+  if (!isRecord(body) || typeof body.working !== "boolean" || !Array.isArray(body.items)) {
+    return null;
+  }
+  const items: ActivityLine[] = [];
+  for (const entry of body.items) {
+    const line = activityLineFrom(entry);
+    if (line === null) return null;
+    items.push(line);
+  }
+  return { working: body.working, items };
+}
+
+export async function getActivity(id: string): Promise<ApiResult<ThreadActivity>> {
+  const result = await call(`/threads/${encodeURIComponent(id)}/activity`, "GET");
+  if ("kind" in result) return result;
+  return threadCall(result, activityFrom);
+}
+
 export type StreamResult =
   | { kind: "done" }
   | { kind: "failed" }
