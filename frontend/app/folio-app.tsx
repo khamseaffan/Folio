@@ -348,6 +348,7 @@ export function FolioApp() {
   // What the page last knew about the open thread, to tell when something changed without it.
   const knownOpen = useRef<{ id: string; latest: string | null; working: boolean } | null>(null);
   const threadsRef = useRef<Thread[]>([]);
+  const messagesRef = useRef<ThreadMessage[]>([]);
   const openIdRef = useRef<string | null>(null);
   // Set when messages are reloaded while the person has scrolled up, so the view stays put.
   const keepScroll = useRef(false);
@@ -474,8 +475,31 @@ export function FolioApp() {
 
   useEffect(() => {
     threadsRef.current = threads;
+    messagesRef.current = messages;
     openIdRef.current = openId;
   });
+
+  // True when the thread's messages were loaded again. A failure or a skipped load is false,
+  // so the caller can leave its record of the thread unchanged and try again later.
+  const reloadOpen = useCallback(
+    async (threadId: string): Promise<boolean> => {
+      const generation = requestGeneration.current;
+      const pane = messagePane.current;
+      const atBottom = pane === null || pane.scrollHeight - pane.scrollTop - pane.clientHeight < 40;
+      const page = await getThread(threadId);
+      if (requestGeneration.current !== generation || acting.current) return false;
+      if (page.kind === "value") {
+        keepScroll.current = !atBottom;
+        setMessages(page.value.messages);
+        setReloadKey((key) => key + 1);
+        return true;
+      }
+      if (page.kind === "down") setDown(true);
+      else if (page.unauthorized) await endSession(page.message, () => true);
+      return false;
+    },
+    [endSession],
+  );
 
   useEffect(() => {
     const open = threadsRef.current.find((thread) => thread.id === openId);
@@ -488,21 +512,6 @@ export function FolioApp() {
   useEffect(() => {
     if (!named) return;
     let active = true;
-    async function reloadOpen(threadId: string) {
-      const generation = requestGeneration.current;
-      const pane = messagePane.current;
-      const atBottom = pane === null || pane.scrollHeight - pane.scrollTop - pane.clientHeight < 40;
-      const page = await getThread(threadId);
-      if (!active || requestGeneration.current !== generation || acting.current) return;
-      if (page.kind === "value") {
-        keepScroll.current = !atBottom;
-        setMessages(page.value.messages);
-        setReloadKey((key) => key + 1);
-        return;
-      }
-      if (page.kind === "down") setDown(true);
-      else if (page.unauthorized) await endSession(page.message, () => active);
-    }
     async function poll() {
       if (pollBusy.current || document.visibilityState === "hidden") return;
       pollBusy.current = true;
@@ -517,14 +526,25 @@ export function FolioApp() {
           const now = listed.value.find((thread) => thread.id === id);
           const before = knownOpen.current;
           // A turn of the person's own records its result itself, so it is left alone here.
-          if (now === undefined || acting.current) return;
-          knownOpen.current = { id: now.id, latest: now.latest_message_at, working: now.working };
-          if (
+          if (acting.current || id === null) return;
+          if (now === undefined) {
+            // Deleted elsewhere, so show the empty chat as a delete here does.
+            requestGeneration.current += 1;
+            knownOpen.current = null;
+            setOpenId(null);
+            setMessages([]);
+            setDraft("");
+            setToolLine(null);
+            return;
+          }
+          const changed =
             before !== null &&
             before.id === now.id &&
-            (before.latest !== now.latest_message_at || (before.working && !now.working))
-          ) {
-            await reloadOpen(now.id);
+            (before.latest !== now.latest_message_at || (before.working && !now.working));
+          // The record moves on only after the reload worked, so a failed one is tried again.
+          if (changed && !(await reloadOpen(now.id))) return;
+          if (openIdRef.current === now.id) {
+            knownOpen.current = { id: now.id, latest: now.latest_message_at, working: now.working };
           }
           return;
         }
@@ -545,7 +565,7 @@ export function FolioApp() {
       clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [named, endSession]);
+  }, [named, endSession, reloadOpen]);
 
   useEffect(() => {
     const pane = messagePane.current;
@@ -746,12 +766,25 @@ export function FolioApp() {
     listEdits.current += 1;
     setThreads(listed.value);
     const turned = listed.value.find((t) => t.id === threadId);
-    if (turned !== undefined && knownOpen.current?.id === threadId) {
-      knownOpen.current = {
-        id: turned.id,
-        latest: turned.latest_message_at,
-        working: turned.working,
-      };
+    if (
+      turned !== undefined &&
+      requestGeneration.current === generation &&
+      openIdRef.current === threadId
+    ) {
+      // A scheduled run may have written into this thread while the turn was running.
+      const shownNewest = Math.max(
+        0,
+        ...messagesRef.current.map((message) => Date.parse(message.created_at) || 0),
+      );
+      const newest = turned.latest_message_at === null ? 0 : Date.parse(turned.latest_message_at);
+      const behind = Number.isFinite(newest) && newest > shownNewest;
+      if (!behind || (await reloadOpen(threadId))) {
+        knownOpen.current = {
+          id: turned.id,
+          latest: turned.latest_message_at,
+          working: turned.working,
+        };
+      }
     }
     // The agent may have deleted the thread it was in.
     if (requestGeneration.current === generation && !listed.value.some((t) => t.id === threadId)) {
