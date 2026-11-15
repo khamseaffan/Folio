@@ -167,6 +167,12 @@ export function ThreadList({
                     onClick={() => onOpen(thread.id)}
                     disabled={disabled}
                   >
+                    {thread.working ? (
+                      <span className="thread-working">
+                        <span className="thread-working-dot" aria-hidden="true" />
+                        <span className="visually-hidden">Working</span>
+                      </span>
+                    ) : null}
                     {thread.name}
                   </button>
                   <div className="row-actions">

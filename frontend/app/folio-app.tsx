@@ -138,6 +138,12 @@ function toolStatus(name: string): string {
       return "Saving an ability";
     case "delete_ability":
       return "Deleting an ability";
+    case "list_schedules":
+      return "Looking at your schedules";
+    case "write_schedule":
+      return "Saving a schedule";
+    case "delete_schedule":
+      return "Deleting a schedule";
     default:
       return "Working on it";
   }
@@ -220,8 +226,25 @@ function applyRetryChunk(
 }
 
 function threadSummary(thread: Thread): Thread {
-  return { id: thread.id, name: thread.name, created_at: thread.created_at };
+  return {
+    id: thread.id,
+    name: thread.name,
+    created_at: thread.created_at,
+    working: thread.working,
+    latest_message_at: thread.latest_message_at,
+  };
 }
+
+// A single thread's answer may not carry the list's fields, so the list's values stay.
+function withListed(page: Thread, listed: Thread | undefined): Thread {
+  return {
+    ...threadSummary(page),
+    working: listed?.working ?? page.working,
+    latest_message_at: listed?.latest_message_at ?? page.latest_message_at,
+  };
+}
+
+const POLL_MS = 20000;
 
 function accountBoot(account: Account): BootResult {
   if (account.display_name === null || account.display_name.trim() === "") {
@@ -319,6 +342,16 @@ export function FolioApp() {
   const messagePane = useRef<HTMLDivElement>(null);
   const requestGeneration = useRef(0);
   const acting = useRef(false);
+  const pollBusy = useRef(false);
+  // Raised when the list is changed by a rename, create or delete, so an older poll answer is dropped.
+  const listEdits = useRef(0);
+  // What the page last knew about the open thread, to tell when something changed without it.
+  const knownOpen = useRef<{ id: string; latest: string | null; working: boolean } | null>(null);
+  const threadsRef = useRef<Thread[]>([]);
+  const messagesRef = useRef<ThreadMessage[]>([]);
+  const openIdRef = useRef<string | null>(null);
+  // Set when messages are reloaded while the person has scrolled up, so the view stays put.
+  const keepScroll = useRef(false);
 
   function applyBoot(result: BootResult) {
     setDown(result.down);
@@ -427,7 +460,9 @@ export function FolioApp() {
       }
       const page = opened.value;
       setThreads((current) =>
-        current.map((thread) => (thread.id === page.id ? threadSummary(page) : thread)),
+        current.map((thread) =>
+          thread.id === page.id ? withListed(page, thread) : thread,
+        ),
       );
       setOpenId(page.id);
       setMessages(page.messages);
@@ -439,8 +474,106 @@ export function FolioApp() {
   }, [named, endSession]);
 
   useEffect(() => {
+    threadsRef.current = threads;
+    messagesRef.current = messages;
+    openIdRef.current = openId;
+  });
+
+  // True when the thread's messages were loaded again. A failure or a skipped load is false,
+  // so the caller can leave its record of the thread unchanged and try again later.
+  const reloadOpen = useCallback(
+    async (threadId: string): Promise<boolean> => {
+      const generation = requestGeneration.current;
+      const pane = messagePane.current;
+      const atBottom = pane === null || pane.scrollHeight - pane.scrollTop - pane.clientHeight < 40;
+      const page = await getThread(threadId);
+      if (requestGeneration.current !== generation || acting.current) return false;
+      if (page.kind === "value") {
+        keepScroll.current = !atBottom;
+        setMessages(page.value.messages);
+        setReloadKey((key) => key + 1);
+        return true;
+      }
+      if (page.kind === "down") setDown(true);
+      else if (page.unauthorized) await endSession(page.message, () => true);
+      return false;
+    },
+    [endSession],
+  );
+
+  useEffect(() => {
+    const open = threadsRef.current.find((thread) => thread.id === openId);
+    knownOpen.current =
+      open === undefined
+        ? null
+        : { id: open.id, latest: open.latest_message_at, working: open.working };
+  }, [openId]);
+
+  useEffect(() => {
+    if (!named) return;
+    let active = true;
+    async function poll() {
+      if (pollBusy.current || document.visibilityState === "hidden") return;
+      pollBusy.current = true;
+      const edits = listEdits.current;
+      try {
+        const listed = await listThreads();
+        if (!active) return;
+        if (listed.kind === "value") {
+          if (listEdits.current !== edits) return;
+          setThreads(listed.value);
+          const id = openIdRef.current;
+          const now = listed.value.find((thread) => thread.id === id);
+          const before = knownOpen.current;
+          // A turn of the person's own records its result itself, so it is left alone here.
+          if (acting.current || id === null) return;
+          if (now === undefined) {
+            // Deleted elsewhere, so show the empty chat as a delete here does.
+            requestGeneration.current += 1;
+            knownOpen.current = null;
+            setOpenId(null);
+            setMessages([]);
+            setDraft("");
+            setToolLine(null);
+            return;
+          }
+          const changed =
+            before !== null &&
+            before.id === now.id &&
+            (before.latest !== now.latest_message_at || (before.working && !now.working));
+          // The record moves on only after the reload worked, so a failed one is tried again.
+          if (changed && !(await reloadOpen(now.id))) return;
+          if (openIdRef.current === now.id) {
+            knownOpen.current = { id: now.id, latest: now.latest_message_at, working: now.working };
+          }
+          return;
+        }
+        if (listed.kind === "down") setDown(true);
+        else if (listed.unauthorized) await endSession(listed.message, () => active);
+      } finally {
+        pollBusy.current = false;
+      }
+    }
+    const timer = setInterval(() => void poll(), POLL_MS);
+    // The timer skips while hidden, so catch up once when the page comes back.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void poll();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      active = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [named, endSession, reloadOpen]);
+
+  useEffect(() => {
     const pane = messagePane.current;
     if (!pane) return;
+    if (keepScroll.current) {
+      keepScroll.current = false;
+      return;
+    }
     pane.scrollTop = pane.scrollHeight;
   }, [messages, openId]);
 
@@ -562,11 +695,12 @@ export function FolioApp() {
   }
 
   function remember(page: ThreadWithMessages) {
-    const summary = threadSummary(page);
     setThreads((current) => {
-      const exists = current.some((thread) => thread.id === summary.id);
-      if (!exists) return [...current, summary];
-      return current.map((thread) => (thread.id === summary.id ? summary : thread));
+      const exists = current.some((thread) => thread.id === page.id);
+      if (!exists) return [...current, threadSummary(page)];
+      return current.map((thread) =>
+        thread.id === page.id ? withListed(page, thread) : thread,
+      );
     });
     setOpenId(page.id);
     setMessages(page.messages);
@@ -586,6 +720,7 @@ export function FolioApp() {
         return;
       }
       const created = threadSummary(result.value);
+      listEdits.current += 1;
       setThreads((current) =>
         current.some((thread) => thread.id === created.id) ? current : [...current, created],
       );
@@ -628,7 +763,29 @@ export function FolioApp() {
       if (requestGeneration.current === generation) await showChatError(listed);
       return;
     }
+    listEdits.current += 1;
     setThreads(listed.value);
+    const turned = listed.value.find((t) => t.id === threadId);
+    if (
+      turned !== undefined &&
+      requestGeneration.current === generation &&
+      openIdRef.current === threadId
+    ) {
+      // A scheduled run may have written into this thread while the turn was running.
+      const shownNewest = Math.max(
+        0,
+        ...messagesRef.current.map((message) => Date.parse(message.created_at) || 0),
+      );
+      const newest = turned.latest_message_at === null ? 0 : Date.parse(turned.latest_message_at);
+      const behind = Number.isFinite(newest) && newest > shownNewest;
+      if (!behind || (await reloadOpen(threadId))) {
+        knownOpen.current = {
+          id: turned.id,
+          latest: turned.latest_message_at,
+          working: turned.working,
+        };
+      }
+    }
     // The agent may have deleted the thread it was in.
     if (requestGeneration.current === generation && !listed.value.some((t) => t.id === threadId)) {
       setOpenId(null);
@@ -646,8 +803,12 @@ export function FolioApp() {
   async function onRenameThread(id: string, name: string): Promise<string | null> {
     const result = await renameThread(id, name);
     if (result.kind === "value") {
-      const renamed = threadSummary(result.value);
-      setThreads((current) => current.map((thread) => (thread.id === id ? renamed : thread)));
+      listEdits.current += 1;
+      setThreads((current) =>
+        current.map((thread) =>
+          thread.id === id ? withListed(result.value, thread) : thread,
+        ),
+      );
       return null;
     }
     return refusal(result);
@@ -656,6 +817,7 @@ export function FolioApp() {
   async function onDeleteThread(id: string): Promise<string | null> {
     const result = await deleteThread(id);
     if (result.kind !== "value") return refusal(result);
+    listEdits.current += 1;
     setThreads((current) => current.filter((thread) => thread.id !== id));
     if (id === openId) {
       requestGeneration.current += 1;
@@ -1038,7 +1200,8 @@ export function FolioApp() {
                                 </button>
                               )}
                             </div>
-                          ) : message.role === "person" || message.kind !== "chat" ? (
+                          ) : message.role === "person" ||
+                          (message.kind !== "chat" && message.kind !== "result") ? (
                             <p
                               key={message.id}
                               className={

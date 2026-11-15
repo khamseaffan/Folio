@@ -560,6 +560,40 @@ h1 {
   font-weight: 500;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.thread-working {
+  display: inline-block;
+  margin-right: 0.45rem;
+}
+
+.thread-working-dot {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--blossom);
+  vertical-align: middle;
+  animation: working-pulse 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thread-working-dot {
+    animation: none;
+  }
+}
+
 .thread-row {
   position: relative;
   display: flex;
@@ -837,6 +871,25 @@ h1 {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   min-width: 0;
+}
+
+.profile-schedules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-self: stretch;
+  min-width: 0;
+}
+
+.profile-schedules li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .profile-abilities li {
