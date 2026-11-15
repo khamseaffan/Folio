@@ -1,7 +1,7 @@
 import logging
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -29,6 +29,7 @@ NO_RUN = "Run not found."
 BAD_REPORT_NAME = "A report name is 1 to 80 characters."
 BAD_QUESTION = "A research question is 1 to 2,000 characters."
 NOT_AVAILABLE = "Research is not available right now."
+RESEARCH_BUSY = "A research run is already working in this thread."
 TOO_MANY = "This turn has already opened five files."
 PROFILE_TOO_LONG = (
     "profile.md can hold at most 20,000 characters. Shorten it, or move facts into another file."
@@ -55,6 +56,8 @@ class Context:
     thread_id: uuid.UUID | None
     # None for a route call, which has no turn to limit.
     turn: Turn | None = None
+    # True when a scheduled run, and not a person in the chat, is calling.
+    in_run: bool = False
 
 
 @dataclass(frozen=True)
@@ -523,6 +526,10 @@ def _start_research(
         return _refused("not_found", NOT_FOUND)
     if thread.get_thread(connection, account_id, context.thread_id) is None:
         return _refused("not_found", NOT_FOUND)
+    # A schedule that fires often must not pile research runs up while the cap is far away.
+    # A person in the chat is not held by this.
+    if context.in_run and run_table.research_in_flight(connection, account_id, context.thread_id):
+        return _refused("busy", RESEARCH_BUSY)
     email, _ = turn._account(connection, account_id)
     cap, stopped = turn._limit(connection, email)
     if stopped:
@@ -782,7 +789,7 @@ OPERATIONS: dict[str, Operation] = {
             _StartResearch,
             _start_research,
             True,
-            True,
+            False,
         ),
         Operation(
             "cancel_research",
@@ -840,6 +847,8 @@ def call(
     operation = OPERATIONS.get(name)
     if operation is None or (in_run and operation.chat_only):
         return _refused("unknown", UNKNOWN)
+    if in_run:
+        context = replace(context, in_run=True)
     try:
         given = operation.input.model_validate(arguments)
     except ValidationError:

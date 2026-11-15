@@ -48,7 +48,10 @@ _NEXT_TIME = (
 )
 _RUN_LINE = (
     "You are running a scheduled task while the person is away. Do the task and write the "
-    "result for them. Do not ask a question."
+    "result for them. Do not ask a question. When the task asks for a report that needs many "
+    "sources, call start_research with the question written out in full, and say in the result "
+    "that it has started and that the report will appear in Reports when it is ready. Do not "
+    "do the research yourself."
 )
 
 

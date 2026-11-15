@@ -42,7 +42,7 @@ A research report is separate from a chat reply. You can leave the page. The fin
 **How a run starts**
 
 - You ask for it in the thread. The agent asks one short question first if yours is unclear, then starts it.
-- A schedule cannot start one yet.
+- A scheduled task can start one in its own thread. It cannot start a second while one is queued or working there, so a schedule that fires often cannot pile runs up. The token cap still applies to every run.
 
 **What it may read**
 

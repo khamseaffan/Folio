@@ -249,6 +249,25 @@ def in_flight_run(
     return (row[0], row[1], row[2]) if row is not None else None
 
 
+def research_in_flight(
+    connection: psycopg.Connection, account_id: uuid.UUID, thread_id: uuid.UUID
+) -> bool:
+    apply(connection)
+    row = connection.execute(
+        """
+        SELECT 1
+        FROM run
+        WHERE account_id = %s
+          AND thread_id = %s
+          AND kind = 'research'
+          AND status IN ('queued', 'working')
+        LIMIT 1
+        """,
+        (account_id, thread_id),
+    ).fetchone()
+    return row is not None
+
+
 def stuck_runs(
     connection: psycopg.Connection, minutes: int = WORKING_GIVE_UP_MINUTES
 ) -> list[RunRow]:

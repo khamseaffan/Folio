@@ -16,6 +16,7 @@ from app.operations import (
     NOT_AVAILABLE,
     NOT_FOUND,
     OPERATIONS,
+    RESEARCH_BUSY,
     Context,
     Turn,
     agent_tools,
@@ -404,28 +405,115 @@ def test_bad_arguments_are_invalid(connection, account):
         assert result == {"ok": False, "code": "invalid", "error": BAD_INPUT}
 
 
-def test_the_six_operations_are_agent_and_chat_only(account):
+def test_the_six_operations_are_agent_operations_and_only_start_research_is_open_to_a_run(account):
     assert SIX <= set(OPERATIONS)
     for name in SIX:
-        assert OPERATIONS[name].agent is True and OPERATIONS[name].chat_only is True
+        assert OPERATIONS[name].agent is True
+        assert OPERATIONS[name].chat_only is (name != "start_research")
 
     chat = {spec.name: spec for spec in agent_tools()}
     assert SIX <= set(chat)
-    assert not SIX & {spec.name for spec in agent_tools(in_run=True)}
+    in_run = {spec.name for spec in agent_tools(in_run=True)}
+    assert in_run & SIX == {"start_research"}
     for name in SIX:
         assert "account" not in json.dumps(chat[name].schema).lower()
 
 
-def test_a_run_cannot_call_them(connection, account, queued):
+def test_a_run_cannot_call_the_other_five(connection, account, queued):
     account_id, _ = account
     thread = create_thread(connection, account_id)
 
-    for name in SIX:
+    for name in SIX - {"start_research"}:
         result = call(
             connection, account_id, Context(thread[0]), name, {"question": "q"}, in_run=True
         )
         assert result["ok"] is False and result["code"] == "unknown"
     assert queued == []
+
+
+def test_a_run_can_start_research_in_its_thread(connection, account, queued):
+    account_id, _ = account
+    thread = create_thread(connection, account_id)
+
+    result = call(
+        connection,
+        account_id,
+        Context(thread[0], Turn(opened=set())),
+        "start_research",
+        {"question": "How do heat pumps compare?"},
+        in_run=True,
+    )
+
+    assert result["ok"] is True and result["run"]["status"] == "queued"
+    run_id = uuid.UUID(result["run"]["id"])
+    row = get_run(connection, run_id)
+    assert row is not None and row[4] == "research" and row[2] == thread[0]
+    assert queued == [(run_id, "research")]
+
+
+def test_a_run_cannot_start_a_second_research_while_one_is_working_in_the_thread(
+    connection, account, queued
+):
+    account_id, _ = account
+    thread = create_thread(connection, account_id)
+    context = Context(thread[0], Turn(opened=set()))
+    first = call(
+        connection, account_id, context, "start_research", {"question": "one"}, in_run=True
+    )
+    assert first["ok"] is True
+
+    again = call(
+        connection, account_id, context, "start_research", {"question": "two"}, in_run=True
+    )
+
+    assert again == {"ok": False, "code": "busy", "error": RESEARCH_BUSY}
+    assert len(queued) == 1
+
+
+def test_a_person_in_the_chat_is_not_held_by_that_limit(connection, account, queued):
+    account_id, _ = account
+    thread = create_thread(connection, account_id)
+    context = Context(thread[0], Turn(opened=set()))
+    for question in ("one", "two"):
+        result = call(connection, account_id, context, "start_research", {"question": question})
+        assert result["ok"] is True
+    assert len(queued) == 2
+
+
+def test_the_limit_is_per_thread_and_ends_with_the_run(connection, account, queued):
+    account_id, _ = account
+    first_thread = create_thread(connection, account_id)
+    second_thread = create_thread(connection, account_id)
+    started = call(
+        connection,
+        account_id,
+        Context(first_thread[0], Turn(opened=set())),
+        "start_research",
+        {"question": "one"},
+        in_run=True,
+    )
+    other = call(
+        connection,
+        account_id,
+        Context(second_thread[0], Turn(opened=set())),
+        "start_research",
+        {"question": "two"},
+        in_run=True,
+    )
+    assert other["ok"] is True
+
+    connection.execute(
+        "UPDATE run SET status = 'ready' WHERE id = %s", (uuid.UUID(started["run"]["id"]),)
+    )
+    after = call(
+        connection,
+        account_id,
+        Context(first_thread[0], Turn(opened=set())),
+        "start_research",
+        {"question": "three"},
+        in_run=True,
+    )
+    assert after["ok"] is True
 
 
 def test_the_chat_prompt_has_the_research_line_and_a_scheduled_prompt_does_not():
@@ -436,3 +524,10 @@ def test_the_chat_prompt_has_the_research_line_and_a_scheduled_prompt_does_not()
     assert turn.RESEARCH not in scheduled
     assert chat.index(turn.MEMORY) < chat.index(turn.RESEARCH) < chat.index("The time now is ")
     assert "start_research" in turn.RESEARCH
+
+
+def test_a_scheduled_run_is_told_how_to_start_research():
+    from app import scheduled
+
+    assert "start_research" in scheduled._RUN_LINE
+    assert "Do not ask a question" in scheduled._RUN_LINE
