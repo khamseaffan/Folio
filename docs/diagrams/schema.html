@@ -348,7 +348,6 @@
           attr("body", "text", "yes", "", "The report text."),
           attr("stop_note", "text", "yes", "", "A few lines on how the run stopped."),
           attr("status", "text", "yes", "", "ready."),
-          attr("storage_key", "text", "yes", "", "accounts/{account_id}/reports/{id}/{filename}. The body is the report text. This file is the download."),
           attr("content_type", "text", "yes"),
           attr("byte_size", "bigint", "yes"),
           attr("created_at", "timestamptz", "yes")
@@ -366,7 +365,6 @@
           attr("title", "text", "yes"),
           attr("url", "text", "no", "", "The page address. A file uses its name."),
           attr("used_for", "text", "yes", "", "One line on what this source was used for."),
-          attr("file_id", "uuid", "no", "FK", "An upload, a task file, or a Drive copy. Cleared if that file is deleted. The title stays."),
           attr("knowledge_file_id", "uuid", "no", "FK", "Cleared if that knowledge file is deleted. The title stays.")
         ]
       },

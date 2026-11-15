@@ -12,6 +12,8 @@ TABLES = {
     "ability",
     "schedule",
     "run",
+    "report",
+    "report_source",
 }
 
 
@@ -64,6 +66,8 @@ def test_setup_is_skipped_when_the_table_exists():
         email_limit,
         knowledge_file,
         message,
+        report,
+        report_source,
         schedule,
         session,
         thread,
@@ -95,6 +99,8 @@ def test_setup_is_skipped_when_the_table_exists():
             ability,
             schedule,
             run_table,
+            report,
+            report_source,
         ):
             module.apply(spy)
     assert not [text for text in spy.statements if "CREATE" in text.upper()]
