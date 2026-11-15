@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getKnowledge,
@@ -16,7 +15,6 @@ import {
 } from "../lib/api";
 
 type Props = {
-  onClose: () => void;
   // The message is the sentence to show on the public page.
   onSignedOut: (message: string | null) => void;
   onDown: () => void;
@@ -40,7 +38,7 @@ function profileFirst(items: KnowledgeItem[]): KnowledgeItem[] {
   return [...profile, ...rest];
 }
 
-export function ProfilePanel({ onClose, onSignedOut, onDown, reloadKey }: Props) {
+export function ProfilePanel({ onSignedOut, onDown, reloadKey }: Props) {
   const [items, setItems] = useState<KnowledgeItem[] | null>(null);
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [abilities, setAbilities] = useState<AbilityItem[] | null>(null);
@@ -179,10 +177,6 @@ export function ProfilePanel({ onClose, onSignedOut, onDown, reloadKey }: Props)
     <section className="profile" aria-label="Profile">
       <div className="settings-head">
         <h2>Profile</h2>
-        <button type="button" className="quiet profile-back" onClick={onClose}>
-          <ArrowLeftIcon aria-hidden="true" />
-          Back to chat
-        </button>
       </div>
       <p className="settings-note">You change these by telling Folio in the chat.</p>
 

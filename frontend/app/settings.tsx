@@ -1,6 +1,5 @@
 "use client";
 
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   deleteAccount,
@@ -18,7 +17,6 @@ import { ConfirmDialog } from "./confirm-dialog";
 
 type Props = {
   account: Account;
-  onClose: () => void;
   onAccountChange: (account: Account) => void;
   // The message is the sentence to show on the public page, or null for a plain sign out.
   onSignedOut: (message: string | null) => void;
@@ -30,7 +28,7 @@ function whenText(value: string): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-export function Settings({ account, onClose, onAccountChange, onSignedOut, onDown }: Props) {
+export function Settings({ account, onAccountChange, onSignedOut, onDown }: Props) {
   const [nameDraft, setNameDraft] = useState(account.display_name ?? "");
   const [nameSaving, setNameSaving] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
@@ -156,10 +154,6 @@ export function Settings({ account, onClose, onAccountChange, onSignedOut, onDow
     <section className="settings" aria-label="Settings">
       <div className="settings-head">
         <h2>Settings</h2>
-        <button type="button" className="quiet settings-back" onClick={onClose}>
-          <ArrowLeftIcon aria-hidden="true" />
-          Back to chat
-        </button>
       </div>
 
       <section className="settings-section" aria-labelledby="settings-name">
