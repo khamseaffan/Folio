@@ -143,10 +143,10 @@ def test_stuck_runs_are_working_runs_older_than_the_limit(connection, account):
     assert run[0] not in {row[0] for row in stuck_runs(connection)}
 
     connection.execute(
-        "UPDATE run SET created_at = now() - interval '31 minutes' WHERE id = %s", (run[0],)
+        "UPDATE run SET created_at = now() - interval '181 minutes' WHERE id = %s", (run[0],)
     )
     assert run[0] in {row[0] for row in stuck_runs(connection)}
-    assert run[0] not in {row[0] for row in stuck_runs(connection, minutes=60)}
+    assert run[0] not in {row[0] for row in stuck_runs(connection, minutes=300)}
 
 
 def test_deleting_a_run_clears_message_and_usage_run_ids(connection, account):

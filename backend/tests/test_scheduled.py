@@ -516,7 +516,7 @@ def test_a_stuck_run_is_marked_dead_and_frees_the_schedule(
     run = _make_run(connection, account_id, thread[0], made[0])
     assert start_attempt(connection, run[0]) is not None
     connection.execute(
-        "UPDATE run SET created_at = now() - interval '31 minutes' WHERE id = %s", (run[0],)
+        "UPDATE run SET created_at = now() - interval '181 minutes' WHERE id = %s", (run[0],)
     )
 
     with caplog.at_level(logging.INFO, logger=LOGGER):
@@ -575,7 +575,7 @@ def test_a_late_result_after_the_run_was_marked_dead_is_dropped(connection, acco
     try:
         assert started.wait(timeout=30)
         connection.execute(
-            "UPDATE run SET created_at = now() - interval '31 minutes' WHERE id = %s", (run[0],)
+            "UPDATE run SET created_at = now() - interval '181 minutes' WHERE id = %s", (run[0],)
         )
         with caplog.at_level(logging.INFO, logger=LOGGER):
             assert tick(_model())["stuck"] == 1
@@ -604,7 +604,7 @@ def test_a_tick_does_not_overwrite_a_run_that_just_finished(connection, account)
     run = _make_run(connection, account_id, thread[0], made[0])
     assert execute(run[0], _model(RESULT)) == "ready"
     connection.execute(
-        "UPDATE run SET created_at = now() - interval '31 minutes' WHERE id = %s", (run[0],)
+        "UPDATE run SET created_at = now() - interval '181 minutes' WHERE id = %s", (run[0],)
     )
 
     assert tick(_model())["stuck"] == 0
@@ -612,3 +612,193 @@ def test_a_tick_does_not_overwrite_a_run_that_just_finished(connection, account)
     stored = get_run(connection, run[0])
     assert stored is not None and stored[5] == "ready"
     assert _lines(connection, account_id, thread[0], "result") == [RESULT]
+
+
+def _age(connection, run_id, minutes):
+    connection.execute(
+        "UPDATE run SET created_at = now() - make_interval(mins => %s) WHERE id = %s",
+        (minutes, run_id),
+    )
+
+
+def _quiet_schedule(connection, account_id):
+    thread = create_thread(connection, account_id)
+    made = create_schedule(
+        connection, account_id, thread[0], TASK, "daily", datetime.now(UTC) + timedelta(hours=1)
+    )
+    assert made is not None
+    return thread[0], made[0]
+
+
+def test_a_run_left_queued_is_enqueued_again_and_then_runs(connection, account, enqueued):
+    account_id, _ = account
+    thread_id, schedule_id = _quiet_schedule(connection, account_id)
+    run = _make_run(connection, account_id, thread_id, schedule_id)
+    _age(connection, run[0], 3)
+
+    counts = tick(_model())
+
+    assert counts["requeued"] == 1
+    assert enqueued == [run[0]]
+    assert execute(run[0], _model(RESULT)) == "ready"
+    assert tick(_model())["requeued"] == 0
+
+
+def test_a_fresh_queued_run_is_left_alone(connection, account, enqueued):
+    account_id, _ = account
+    thread_id, schedule_id = _quiet_schedule(connection, account_id)
+    _make_run(connection, account_id, thread_id, schedule_id)
+
+    counts = tick(_model())
+
+    assert counts["requeued"] == 0
+    assert enqueued == []
+
+
+def test_a_run_queued_for_too_long_is_dead_and_frees_the_schedule(
+    connection, account, enqueued, caplog
+):
+    account_id, _ = account
+    thread_id, schedule_id = _quiet_schedule(connection, account_id)
+    run = _make_run(connection, account_id, thread_id, schedule_id)
+    _age(connection, run[0], 31)
+
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        counts = tick(_model())
+
+    assert counts["stuck"] == 1 and counts["requeued"] == 0
+    assert enqueued == []
+    stored = get_run(connection, run[0])
+    assert stored is not None and stored[5] == "dead"
+    assert _lines(connection, account_id, thread_id, "result") == [FAILED_LINE]
+    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert len(errors) == 1 and str(run[0]) in errors[0].getMessage()
+    connection.execute(
+        "UPDATE schedule SET next_run_at = now() - interval '1 minute' WHERE id = %s",
+        (schedule_id,),
+    )
+
+    assert tick(_model())["started"] == 1
+    assert len(enqueued) == 1
+
+
+def test_an_enqueue_that_raises_does_not_stop_the_tick(
+    connection, account, monkeypatch, caplog
+):
+    account_id, _ = account
+    first_thread, first = _due_schedule(connection, account_id)
+    second_thread, second = _due_schedule(connection, account_id)
+    connection.execute(
+        "UPDATE schedule SET next_run_at = now() - interval '2 minutes' WHERE id = %s", (first,)
+    )
+    seen: list[uuid.UUID] = []
+
+    def flaky(run_id: uuid.UUID) -> None:
+        seen.append(run_id)
+        if len(seen) == 1:
+            raise RuntimeError("queue is down")
+
+    monkeypatch.setattr("app.scheduled.enqueue", flaky)
+
+    with caplog.at_level(logging.INFO, logger=LOGGER):
+        counts = tick(_model())
+
+    assert counts["started"] == 2
+    assert len(seen) == 2
+    errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert len(errors) == 1 and str(seen[0]) in errors[0].getMessage()
+    assert len(_runs(connection, account_id)) == 2
+    assert TASK not in caplog.text
+
+
+def test_a_working_run_31_minutes_old_is_not_stuck(connection, account, enqueued):
+    account_id, _ = account
+    thread_id, schedule_id = _quiet_schedule(connection, account_id)
+    run = _make_run(connection, account_id, thread_id, schedule_id)
+    assert start_attempt(connection, run[0]) is not None
+    _age(connection, run[0], 31)
+
+    counts = tick(_model())
+
+    assert counts["stuck"] == 0
+    stored = get_run(connection, run[0])
+    assert stored is not None and stored[5] == "working"
+    assert _lines(connection, account_id, thread_id, "result") == []
+
+
+def test_two_deliveries_at_once_run_the_model_once(connection, account):
+    account_id, email = account
+    thread_id, schedule_id = _quiet_schedule(connection, account_id)
+    run = _make_run(connection, account_id, thread_id, schedule_id)
+    started = threading.Event()
+    release = threading.Event()
+    calls: list[int] = []
+
+    class _Held(FakeModel):
+        def stream(self, prompt, blocks, tools=()):
+            calls.append(1)
+            started.set()
+            release.wait(timeout=30)
+            return super().stream(prompt, blocks, tools)
+
+    outcomes: dict[str, str] = {}
+
+    def deliver(name: str, model: FakeModel) -> None:
+        outcomes[name] = execute(run[0], model)
+
+    first = threading.Thread(
+        target=deliver,
+        args=("first", _Held(reply=RESULT, input_tokens=1, output_tokens=1, total_tokens=2)),
+    )
+    second_model = _Held(reply=RESULT, input_tokens=1, output_tokens=1, total_tokens=2)
+    second = threading.Thread(target=deliver, args=("second", second_model))
+    first.start()
+    try:
+        assert started.wait(timeout=30)
+        second.start()
+        second.join(timeout=30)
+        assert not second.is_alive()
+        assert outcomes == {"second": "duplicate"}
+    finally:
+        release.set()
+        first.join(timeout=30)
+
+    assert not first.is_alive()
+    assert outcomes["first"] == "ready"
+    assert len(calls) == 1
+    stored = get_run(connection, run[0])
+    assert stored is not None and stored[8] == 1 and stored[5] == "ready"
+    messages = list_messages(connection, account_id, thread_id) or []
+    assert [m[6] for m in messages] == [RESULT]
+    assert len(_usage(connection, email)) == 1
+    assert execute(run[0], _model("third")) == "duplicate"
+
+
+def test_a_retry_after_a_failed_attempt_still_works(connection, account):
+    account_id, _ = account
+    thread_id, schedule_id = _quiet_schedule(connection, account_id)
+    run = _make_run(connection, account_id, thread_id, schedule_id)
+
+    assert execute(run[0], _BrokenModel()) == "retry"
+    assert execute(run[0], _model(RESULT)) == "ready"
+
+    stored = get_run(connection, run[0])
+    assert stored is not None and stored[8] == 2 and stored[5] == "ready"
+
+
+def test_a_run_another_copy_delivered_reports_its_real_status(connection, account):
+    account_id, _ = account
+    thread_id, schedule_id = _quiet_schedule(connection, account_id)
+    run = _make_run(connection, account_id, thread_id, schedule_id)
+
+    class _Other(FakeModel):
+        def stream(self, prompt, blocks, tools=()):
+            with connect() as other:
+                other.execute(
+                    "UPDATE run SET status = 'ready', delivered_at = now() WHERE id = %s",
+                    (run[0],),
+                )
+            return super().stream(prompt, blocks, tools)
+
+    assert execute(run[0], _Other(reply=RESULT, total_tokens=2)) == "ready"
+    assert list_messages(connection, account_id, thread_id) == []

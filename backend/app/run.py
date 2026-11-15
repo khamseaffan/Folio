@@ -27,6 +27,15 @@ RunRow = tuple[
     datetime,
 ]
 
+# A working run can wait in the queue and between retries. Four attempts of up to 30 minutes
+# each is 2 hours of work, and the waits between attempts add a little over that. Three hours
+# is past any healthy run. There is no started_at column, so this is measured from created_at.
+WORKING_GIVE_UP_MINUTES = 3 * 60
+# A run that never left the queue is given up after this long.
+QUEUED_GIVE_UP_MINUTES = 30
+# A queued run this old was probably never put on the queue, so the tick puts it there again.
+REQUEUE_AFTER_MINUTES = 2
+
 _COLUMNS = (
     "id, account_id, thread_id, schedule_id, kind, status, task, work_ms, attempt_count, "
     "delivered_at, created_at"
@@ -109,19 +118,23 @@ def finish_run(
 
 
 def finish_working(
-    connection: psycopg.Connection, run_id: uuid.UUID, status: str, work_ms: int
+    connection: psycopg.Connection,
+    run_id: uuid.UUID,
+    status: str,
+    work_ms: int,
+    from_status: str = "working",
 ) -> bool:
-    # Only a run still working can be finished. A run the tick marked dead stays dead.
+    # Only a run still in from_status can be finished. A run the tick marked dead stays dead.
     apply(connection)
     changed = connection.execute(
         """
         UPDATE run
         SET status = %s, work_ms = %s
         WHERE id = %s
-          AND status = 'working'
+          AND status = %s
         RETURNING id
         """,
-        (status, work_ms, run_id),
+        (status, work_ms, run_id, from_status),
     ).fetchone()
     return changed is not None
 
@@ -151,7 +164,9 @@ def in_flight_threads(connection: psycopg.Connection, account_id: uuid.UUID) -> 
     return {row[0] for row in rows}
 
 
-def stuck_runs(connection: psycopg.Connection, minutes: int = 30) -> list[RunRow]:
+def stuck_runs(
+    connection: psycopg.Connection, minutes: int = WORKING_GIVE_UP_MINUTES
+) -> list[RunRow]:
     # Across accounts by design: the tick frees runs a crashed worker left behind.
     apply(connection)
     rows = connection.execute(
@@ -159,6 +174,24 @@ def stuck_runs(connection: psycopg.Connection, minutes: int = 30) -> list[RunRow
         SELECT {_COLUMNS}
         FROM run
         WHERE status = 'working'
+          AND created_at < now() - make_interval(mins => %s)
+        ORDER BY created_at ASC
+        """,
+        (minutes,),
+    ).fetchall()
+    return list(rows)
+
+
+def queued_runs(
+    connection: psycopg.Connection, minutes: int = REQUEUE_AFTER_MINUTES
+) -> list[RunRow]:
+    # Across accounts by design: the tick finds runs that never reached the queue.
+    apply(connection)
+    rows = connection.execute(
+        f"""
+        SELECT {_COLUMNS}
+        FROM run
+        WHERE status = 'queued'
           AND created_at < now() - make_interval(mins => %s)
         ORDER BY created_at ASC
         """,

@@ -3,7 +3,7 @@ import logging
 import threading
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import psycopg
 
@@ -15,11 +15,14 @@ from app.message import insert_message
 from app.model import Block, Model, Reply, ToolCall, open_model
 from app.queue import enqueue
 from app.run import (
+    QUEUED_GIVE_UP_MINUTES,
     RunRow,
     create_run,
     finish_run,
     finish_working,
+    get_run,
     hold_working,
+    queued_runs,
     start_attempt,
     stuck_runs,
 )
@@ -156,7 +159,17 @@ def _fire(model: Model, schedule: ScheduleRow, counts: dict[str, int]) -> None:
         counts["skipped"] += 1
         return
     counts["started"] += 1
-    enqueue(new_run[0])
+    _put_on_queue(new_run[0])
+
+
+def _put_on_queue(run_id: uuid.UUID) -> bool:
+    # A run that is not queued stays `queued`, and a later tick puts it there again.
+    try:
+        enqueue(run_id)
+    except Exception as error:
+        _log.error("run %s could not be put on the queue: %s", run_id, type(error).__name__)
+        return False
+    return True
 
 
 def _free_stuck(counts: dict[str, int]) -> None:
@@ -173,8 +186,26 @@ def _free_stuck(counts: dict[str, int]) -> None:
         _log.error("run %s was working for too long and is marked dead", run_id)
 
 
+def _recover_queued(counts: dict[str, int]) -> None:
+    with connect() as connection:
+        waiting = queued_runs(connection)
+    now = datetime.now(UTC)
+    for run in waiting:
+        run_id, account_id, thread_id = run[0], run[1], run[2]
+        if now - run[10] > timedelta(minutes=QUEUED_GIVE_UP_MINUTES):
+            with connect() as connection:
+                if not finish_working(connection, run_id, "dead", 0, "queued"):
+                    continue
+                _write_line(connection, account_id, thread_id, FAILED_LINE, run_id)
+            counts["stuck"] += 1
+            _log.error("run %s never left the queue and is marked dead", run_id)
+        elif _put_on_queue(run_id):
+            # The task name is the run id, so a run that is already on the queue is refused.
+            counts["requeued"] += 1
+
+
 def tick(model: Model) -> dict[str, int]:
-    counts = {"due": 0, "started": 0, "skipped": 0, "held": 0, "stuck": 0}
+    counts = {"due": 0, "started": 0, "skipped": 0, "held": 0, "stuck": 0, "requeued": 0}
     with connect() as connection:
         due = due_schedules(connection)
     counts["due"] = len(due)
@@ -187,6 +218,10 @@ def tick(model: Model) -> dict[str, int]:
         _free_stuck(counts)
     except Exception as error:
         _log.error("stuck runs could not be freed: %s", type(error).__name__)
+    try:
+        _recover_queued(counts)
+    except Exception as error:
+        _log.error("queued runs could not be recovered: %s", type(error).__name__)
     return counts
 
 
@@ -244,7 +279,27 @@ def _answer(
     return "".join(parts), replies, failed
 
 
+def _status(connection: psycopg.Connection, run_id: uuid.UUID) -> str:
+    row = get_run(connection, run_id)
+    return row[5] if row is not None else "dead"
+
+
 def execute(run_id: uuid.UUID, model: Model | None = None) -> str:
+    # A retry needs start_attempt to accept a working run, so two deliveries at the same time
+    # are kept apart here. The lock is held by a connection with no transaction open.
+    with connect() as guard:
+        guard.autocommit = True
+        key = "SELECT {}(hashtextextended(%s, 0))"
+        got = guard.execute(key.format("pg_try_advisory_lock"), (str(run_id),)).fetchone()
+        if got is None or not got[0]:
+            return "duplicate"
+        try:
+            return _execute(run_id, model)
+        finally:
+            guard.execute(key.format("pg_advisory_unlock"), (str(run_id),))
+
+
+def _execute(run_id: uuid.UUID, model: Model | None) -> str:
     with connect() as connection:
         run = start_attempt(connection, run_id)
         if run is None:
@@ -273,7 +328,7 @@ def execute(run_id: uuid.UUID, model: Model | None = None) -> str:
             if not hold_working(connection, run_id):
                 # The tick marked this run dead while it worked. The late result is dropped.
                 _record(connection, account_id, email, chosen, replies, run_id, None)
-                return "dead"
+                return _status(connection, run_id)
             message = None
             if thread_id is not None:
                 message = insert_message(
@@ -293,9 +348,11 @@ def execute(run_id: uuid.UUID, model: Model | None = None) -> str:
     with connect() as connection:
         _record(connection, account_id, email, chosen, replies, run_id, None)
         if run[8] < MAX_ATTEMPTS:
-            return "retry" if hold_working(connection, run_id) else "dead"
+            if hold_working(connection, run_id):
+                return "retry"
+            return _status(connection, run_id)
         if not finish_working(connection, run_id, "dead", work_ms):
-            return "dead"
+            return _status(connection, run_id)
         _write_line(connection, account_id, thread_id, FAILED_LINE, run_id)
     _log.error("run %s is dead after %s attempts", run_id, run[8])
     return "dead"

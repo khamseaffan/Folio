@@ -80,7 +80,7 @@ The schedule keeps the person's own words (`when_text`) and one stored time (`ne
 - Each attempt adds one to `attempt_count` on the run.
 - When the fourth attempt fails, the run is marked `dead`, one line is written in the thread ("A scheduled run failed."), and the failure is logged with the run id.
 - A run that fails because the account is stopped or capped is marked `cancelled` and is not retried.
-- If the worker crashes in the middle of a run, the run stays `working`. A run that has been `working` for more than 30 minutes is treated as failed by the next tick: it is marked `dead` and told in the thread. This is also what frees the schedule to fire again.
+- If the worker crashes in the middle of a run, the run stays `working`. A run that has been `working` for more than 3 hours is treated as failed by the next tick: it is marked `dead` and told in the thread. This is also what frees the schedule to fire again. A run that is still `queued` after 30 minutes is treated the same way. A run that is `queued` for more than 2 minutes is put on the queue again by the tick, because the process may have stopped between saving the run and queueing it.
 
 ## The records
 
@@ -90,7 +90,7 @@ Two new tables, as drawn in `docs/diagrams/schema.html`, and two foreign keys th
 
 **`run`**: `id`, `account_id`, `thread_id` (cleared when the thread is deleted), `schedule_id` (cleared when the schedule is deleted), `kind`, `status`, `task`, `question`, `work_ms`, `attempt_count`, `delivered_at`, and `created_at`. Unique on (`id`, `account_id`). At most one run that is `queued`, `working`, or `waiting` for one schedule. An index on `status` where it is `queued`.
 
-One difference from the picture: `run` gains `created_at`. The 30 minute rule for a stuck run needs to know when the run started, and no drawn column says it. `started_at` would also do. This needs the person's approval.
+One difference from the picture: `run` gains `created_at`. The rule for a stuck run needs to know when the run started, and no drawn column says it. `started_at` would also do. This needs the person's approval.
 
 **New foreign keys on existing tables:** `message.run_id` and `usage.run_id` point at `run`, and are cleared when the run is deleted, as the picture draws.
 
@@ -144,6 +144,9 @@ With a tick, the database is the only place that knows what is due. If a task is
 **Why a queue at all, if the tick already knows what is due?**
 The tick must finish in seconds. A run can take minutes. The queue lets the tick hand the run over and return. It also gives retries with waits, a limit on how many runs happen at once, and a second delivery if a worker dies, without any of that being written by hand.
 
+**Why 3 hours for a run that is working, and 30 minutes for one that is still queued?**
+A working run can be tried four times, each up to 30 minutes, with waits between. That is a little over 2 hours for a healthy run, and there is no start time column, so the age is counted from when the run was made. A queued run has done no work and is only waiting to be put on the queue, so 30 minutes is already long.
+
 **What does "exactly one result" depend on?**
 The run row. Its id is the id of the queued task. The result message and `delivered_at` are written in the same database save. A second delivery of the same task sees `delivered_at` and stops. The queue is allowed to deliver twice, and the row makes the second one harmless.
 
@@ -182,7 +185,7 @@ Each occurrence is one small model call for the next time, plus the model calls 
 
 - `run` gains `created_at`. This changes the picture and needs approval.
 - A run cannot create, change, or delete a schedule.
-- A run stuck in `working` for 30 minutes is marked dead.
+- A run stuck in `working` for 3 hours, or still `queued` after 30 minutes, is marked dead.
 - The queue runs at most 3 runs at once.
 - The thread list is asked for again every 20 seconds while a run is working.
 - The failure line in the thread is "A scheduled run failed."

@@ -129,7 +129,7 @@ The assignment asks for two features of my own.
 - For each one the model works out the next time. The result is stored, and one run is queued.
 - The queue calls the worker, which runs the task and writes one message in the thread.
 - A failed run is tried four times in all. Then it is marked dead, the thread shows one line, and the failure is logged.
-- A run stuck for 30 minutes is marked dead by the next minute's call.
+- A run stuck for 3 hours, or still queued after 30 minutes, is marked dead by the next minute's call. A run that never reached the queue is queued again.
 
 **Why a schedule is built this way**
 

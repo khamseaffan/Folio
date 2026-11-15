@@ -46,7 +46,7 @@ None of these is chosen yet.
 
 - D28. `run` has a `created_at` column that the picture did not show. The rule for a stuck run needs to know when the run started.
 - D29. A run cannot create, change, or delete a schedule. Those three tools are left out of a run.
-- D30. A run that has been `working` for more than 30 minutes is marked dead by the next tick.
+- D30. A run that has been `working` for more than 3 hours is marked dead by the next tick, and a run that never left the queue is marked dead after 30 minutes. Both are measured from `created_at`, because `run` has no `started_at`. A queued run older than 2 minutes is put on the queue again.
 - D31. The queue runs at most 3 runs at once.
 - D32. The thread list is asked for again every 20 seconds while a run is working.
 - D33. The line written in the thread for a dead run is "A scheduled run failed."
