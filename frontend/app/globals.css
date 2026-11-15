@@ -496,6 +496,7 @@ a svg {
 }
 
 .thread-row {
+  --row-bg: var(--wash);
   position: relative;
   display: flex;
   align-items: center;
@@ -503,7 +504,12 @@ a svg {
 }
 
 .thread-row:hover {
-  background: rgba(127, 127, 127, 0.1);
+  --row-bg: color-mix(in srgb, var(--wash), var(--ink) 7%);
+  background: var(--row-bg);
+}
+
+.thread-row:has([aria-current="true"]) {
+  --row-bg: var(--paper);
 }
 
 .thread-open {
@@ -548,11 +554,44 @@ a svg {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+/* Rename and delete wait behind the row's right edge and slide in on hover or keyboard focus.
+   Phones have no hover, so there they stay visible. */
 .row-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
-  flex: none;
+  align-items: center;
   gap: 0.1rem;
-  padding-right: 0.2rem;
+  padding: 0 0.2rem 0 1.2rem;
+  border-radius: 0 6px 6px 0;
+  background: linear-gradient(to right, transparent, var(--row-bg) 1.2rem);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.thread-row:hover .row-actions,
+.thread-row:focus-within .row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .row-actions {
+    position: static;
+    opacity: 1;
+    pointer-events: auto;
+    background: none;
+    padding: 0 0.2rem 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row-actions {
+    transition: none;
+  }
 }
 
 .row-actions button {
@@ -568,6 +607,7 @@ a svg {
 
 .row-actions button:hover:not(:disabled) {
   background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line);
   color: var(--ink);
 }
 
