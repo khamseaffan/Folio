@@ -6,7 +6,7 @@ The person tells the agent to rename or delete a report, and the agent does so. 
 
 A run searches the web, opens public pages in Chrome, and reads the account's knowledge files when the question needs them. It never sees a whole page. A separate model call reads each page and writes a digest, and the run works from the digests. An opened file or page is a source. A run can open only an address that a search result or an opened page showed it.
 
-It opens at most 20 sources, makes at most 25 searches in an attempt, and takes at most 60 steps. A page that cannot be opened does not count. A page that disagrees is kept. A page that only repeats a page already opened is not opened as another source.
+It opens at most 20 sources, makes at most 25 searches in an attempt, and takes at most 60 steps. The 20 is a ceiling for cost and time, not a target. The reasons are in `docs/superpowers/specs/2026-11-15-deep-research-design.md`. A page that cannot be opened does not count. A page that disagrees is kept. A page that only repeats a page already opened is not opened as another source.
 
 The run stops when it has opened 20 sources, when the searches or the steps run out, when reading time reaches 25 minutes, or when new pages mostly repeat the ones already opened. Code enforces the counts and the time. The model decides that new pages mostly repeat, and the stop note says so. When code stops the run, one last call writes the report from what was read, and the stop note ends with a line from code that says why. The run is 30 minutes of work in total, across retries. Reading stops at 25 minutes so that the report can be written inside the 30. A run does not stop to ask a question. The agent asks before it starts.
 
