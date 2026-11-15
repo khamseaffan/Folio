@@ -21,3 +21,15 @@ output "workload_identity_provider" {
 output "deploy_service_account" {
   value = google_service_account.deploy.email
 }
+
+output "worker_url" {
+  value = local.worker_url
+}
+
+output "worker_service" {
+  value = google_cloud_run_v2_service.worker.name
+}
+
+output "run_queue" {
+  value = google_cloud_tasks_queue.runs.name
+}
