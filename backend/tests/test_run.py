@@ -11,6 +11,7 @@ from app.run import (
     create_run,
     finish_run,
     get_run,
+    in_flight_since,
     in_flight_threads,
     start_attempt,
     stuck_runs,
@@ -132,6 +133,23 @@ def test_in_flight_threads_lists_queued_and_working_only(connection, account):
 
     finish_run(connection, run[0], "ready", 1, True)
     assert in_flight_threads(connection, account_id) == set()
+
+
+def test_in_flight_since_gives_when_and_what_kind_for_each_busy_thread(connection, account):
+    account_id, _ = account
+    thread_id, schedule_id = _setup(connection, account_id)
+    assert in_flight_since(connection, account_id) == {}
+
+    run = create_run(connection, account_id, thread_id, None, "research", "look into it")
+    assert run is not None
+    busy = in_flight_since(connection, account_id)
+    assert set(busy) == {thread_id}
+    since, kind = busy[thread_id]
+    assert kind == "research"
+    assert since == run[10]
+
+    finish_run(connection, run[0], "ready", 1, True)
+    assert in_flight_since(connection, account_id) == {}
 
 
 def test_stuck_runs_are_working_runs_older_than_the_limit(connection, account):

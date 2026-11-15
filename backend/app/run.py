@@ -210,6 +210,45 @@ def in_flight_threads(connection: psycopg.Connection, account_id: uuid.UUID) -> 
     return {row[0] for row in rows}
 
 
+def in_flight_since(
+    connection: psycopg.Connection, account_id: uuid.UUID
+) -> dict[uuid.UUID, tuple[datetime, str]]:
+    """For each thread with a queued or working run: when the oldest was asked for, and its kind."""
+    apply(connection)
+    rows = connection.execute(
+        """
+        SELECT thread_id, MIN(created_at), (array_agg(kind ORDER BY created_at))[1]
+        FROM run
+        WHERE account_id = %s
+          AND thread_id IS NOT NULL
+          AND status IN ('queued', 'working')
+        GROUP BY thread_id
+        """,
+        (account_id,),
+    ).fetchall()
+    return {row[0]: (row[1], row[2]) for row in rows}
+
+
+def in_flight_run(
+    connection: psycopg.Connection, account_id: uuid.UUID, thread_id: uuid.UUID
+) -> tuple[uuid.UUID, str, datetime] | None:
+    """The oldest queued or working run in a thread: its id, kind, and when it was asked for."""
+    apply(connection)
+    row = connection.execute(
+        """
+        SELECT id, kind, created_at
+        FROM run
+        WHERE account_id = %s
+          AND thread_id = %s
+          AND status IN ('queued', 'working')
+        ORDER BY created_at ASC
+        LIMIT 1
+        """,
+        (account_id, thread_id),
+    ).fetchone()
+    return (row[0], row[1], row[2]) if row is not None else None
+
+
 def research_in_flight(
     connection: psycopg.Connection, account_id: uuid.UUID, thread_id: uuid.UUID
 ) -> bool:

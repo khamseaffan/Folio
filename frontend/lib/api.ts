@@ -9,6 +9,9 @@ export type Thread = {
   created_at: string;
   // True while a scheduled run is queued or working in this thread.
   working: boolean;
+  // When the oldest queued or working run in this thread was asked for, and what it is.
+  working_since: string | null;
+  working_kind: string | null;
   // When the newest message was written, so the page can tell that one arrived without it.
   latest_message_at: string | null;
 };
@@ -200,6 +203,8 @@ function threadFrom(body: unknown): Thread | null {
   const createdAt = textField(body, "created_at");
   if (id === null || id === "" || name === null || createdAt === null) return null;
   return { id, name, created_at: createdAt, working: body.working === true,
+    working_since: typeof body.working_since === "string" ? body.working_since : null,
+    working_kind: typeof body.working_kind === "string" ? body.working_kind : null,
     latest_message_at:
       typeof body.latest_message_at === "string" ? body.latest_message_at : null,
   };
@@ -293,6 +298,49 @@ export async function getThread(id: string): Promise<ApiResult<ThreadWithMessage
   const result = await call(`/threads/${encodeURIComponent(id)}`, "GET");
   if ("kind" in result) return result;
   return threadCall(result, threadPageFrom);
+}
+
+export type ActivityLine = {
+  at: string;
+  kind: "search" | "read" | "skipped";
+  text: string;
+  url: string | null;
+};
+
+export type ThreadActivity = {
+  working: boolean;
+  items: ActivityLine[];
+};
+
+function activityLineFrom(body: unknown): ActivityLine | null {
+  if (!isRecord(body)) return null;
+  const at = textField(body, "at");
+  const text = textField(body, "text");
+  const kind = body.kind;
+  const url = body.url;
+  if (at === null || text === null) return null;
+  if (kind !== "search" && kind !== "read" && kind !== "skipped") return null;
+  if (url !== null && typeof url !== "string") return null;
+  return { at, kind, text, url };
+}
+
+function activityFrom(body: unknown): ThreadActivity | null {
+  if (!isRecord(body) || typeof body.working !== "boolean" || !Array.isArray(body.items)) {
+    return null;
+  }
+  const items: ActivityLine[] = [];
+  for (const entry of body.items) {
+    const line = activityLineFrom(entry);
+    if (line === null) return null;
+    items.push(line);
+  }
+  return { working: body.working, items };
+}
+
+export async function getActivity(id: string): Promise<ApiResult<ThreadActivity>> {
+  const result = await call(`/threads/${encodeURIComponent(id)}/activity`, "GET");
+  if ("kind" in result) return result;
+  return threadCall(result, activityFrom);
 }
 
 export type StreamResult =
