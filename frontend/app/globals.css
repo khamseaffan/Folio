@@ -1280,6 +1280,192 @@ h1 {
   scrollbar-gutter: stable;
 }
 
+.reports {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.reports-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.reports-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.reports-list li {
+  min-width: 0;
+}
+
+.reports-item {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(61, 88, 114, 0.14);
+  border-radius: 0.7rem;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.reports-item[aria-current="true"] {
+  background: var(--sky);
+  border-color: var(--fuji);
+}
+
+.reports-item:focus-visible,
+.report-download:focus-visible {
+  outline: 2px solid var(--fuji);
+  outline-offset: 2px;
+}
+
+.reports-item-name {
+  font-weight: 600;
+}
+
+.reports-item-question {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.reports-item-time {
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
+.report-pane {
+  min-width: 0;
+}
+
+.report-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.report-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.report-head h3 {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--font-mincho), "Iowan Old Style", Palatino, serif;
+  font-size: 1.2em;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.report-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.4rem;
+  padding: 0.3rem 1rem;
+  border-radius: 999px;
+  background: var(--button);
+  color: var(--button-ink);
+  text-decoration: none;
+}
+
+.report-download svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.report-view p {
+  margin: 0;
+}
+
+.report-question {
+  color: var(--fuji);
+}
+
+.report-text {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.report-text .markdown {
+  overflow-wrap: anywhere;
+}
+
+.report-part {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+  padding-top: 0.8rem;
+  border-top: 1px solid rgba(61, 88, 114, 0.12);
+}
+
+.report-part h4 {
+  margin: 0;
+  font-size: 1.05em;
+  font-weight: 600;
+}
+
+.report-stop {
+  white-space: pre-wrap;
+}
+
+.report-sources {
+  margin: 0;
+  padding-left: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.report-source {
+  min-width: 0;
+}
+
+.report-source > span,
+.report-source > a {
+  display: block;
+}
+
+.report-source a {
+  color: var(--fuji);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
 .settings-head {
   display: flex;
   flex-wrap: wrap;
@@ -1453,6 +1639,21 @@ h1 {
 }
 
 @media (min-width: 900px) {
+  .reports-body {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .reports-list {
+    flex: 0 0 15rem;
+    width: 15rem;
+    max-height: none;
+  }
+
+  .report-pane {
+    flex: 1 1 auto;
+  }
+
   .desk-body {
     flex-direction: row;
     align-items: stretch;

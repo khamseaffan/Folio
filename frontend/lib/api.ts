@@ -638,6 +638,96 @@ export async function listSchedules(): Promise<ApiResult<ScheduleItem[]>> {
   return classify(result, scheduleListFrom);
 }
 
+export type ReportItem = {
+  id: string;
+  name: string;
+  question: string;
+  created_at: string;
+};
+
+export type ReportSource = {
+  position: number;
+  kind: "page" | "file" | "drive_copy";
+  title: string;
+  url: string | null;
+  used_for: string;
+};
+
+export type ReportDetail = ReportItem & {
+  body: string;
+  stop_note: string;
+  sources: ReportSource[];
+};
+
+function reportItemFrom(body: unknown): ReportItem | null {
+  if (!isRecord(body)) return null;
+  const id = textField(body, "id");
+  const name = textField(body, "name");
+  const question = textField(body, "question");
+  const createdAt = textField(body, "created_at");
+  if (id === null || id === "" || name === null || question === null || createdAt === null) {
+    return null;
+  }
+  return { id, name, question, created_at: createdAt };
+}
+
+function reportSourceFrom(body: unknown): ReportSource | null {
+  if (!isRecord(body)) return null;
+  const position = body.position;
+  const kind = body.kind;
+  const title = textField(body, "title");
+  const url = body.url;
+  const usedFor = textField(body, "used_for");
+  if (typeof position !== "number" || !Number.isInteger(position)) return null;
+  if (kind !== "page" && kind !== "file" && kind !== "drive_copy") return null;
+  if (title === null || usedFor === null) return null;
+  if (url !== null && typeof url !== "string") return null;
+  return { position, kind, title, url, used_for: usedFor };
+}
+
+function reportListFrom(body: unknown): ReportItem[] | null {
+  if (!Array.isArray(body)) return null;
+  const items: ReportItem[] = [];
+  for (const entry of body) {
+    const item = reportItemFrom(entry);
+    if (item === null) return null;
+    items.push(item);
+  }
+  return items;
+}
+
+function reportDetailFrom(body: unknown): ReportDetail | null {
+  const item = reportItemFrom(body);
+  if (item === null || !isRecord(body) || !Array.isArray(body.sources)) return null;
+  const reportBody = textField(body, "body");
+  const stopNote = textField(body, "stop_note");
+  if (reportBody === null || stopNote === null) return null;
+  const sources: ReportSource[] = [];
+  for (const entry of body.sources) {
+    const source = reportSourceFrom(entry);
+    if (source === null) return null;
+    sources.push(source);
+  }
+  return { ...item, body: reportBody, stop_note: stopNote, sources };
+}
+
+export async function listReports(): Promise<ApiResult<ReportItem[]>> {
+  const result = await call("/reports", "GET");
+  if ("kind" in result) return result;
+  return classify(result, reportListFrom);
+}
+
+export async function getReport(id: string): Promise<ApiResult<ReportDetail>> {
+  const result = await call(`/reports/${encodeURIComponent(id)}`, "GET");
+  if ("kind" in result) return result;
+  return classify(result, reportDetailFrom);
+}
+
+// A plain link, not a fetch: the browser saves the file the API names.
+export function reportDownloadUrl(id: string): string {
+  return `${apiBase()}/reports/${encodeURIComponent(id)}/download`;
+}
+
 export async function deleteAccount(): Promise<ApiResult<true>> {
   const result = await call("/account", "DELETE");
   if ("kind" in result) return result;
