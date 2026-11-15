@@ -122,6 +122,20 @@ class _Raises(FakeModel):
         return super().complete(prompt, blocks, tools)
 
 
+class _Activity:
+    def __init__(self):
+        self.lines = []
+
+    def searched(self, query):
+        self.lines.append(("search", query))
+
+    def read(self, title, url):
+        self.lines.append(("read", title, url))
+
+    def skipped(self, url):
+        self.lines.append(("skipped", url))
+
+
 def _run(
     model,
     *,
@@ -131,6 +145,7 @@ def _run(
     recorder=None,
     memory=None,
     elapsed=lambda: 0.0,
+    activity=None,
 ):
     opener = FakePageOpener(pages or {})
     recorder = recorder if recorder is not None else _Recorder()
@@ -144,6 +159,7 @@ def _run(
         memory=memory if memory is not None else _Memory(),
         system_prompt="system",
         elapsed=elapsed,
+        **({"activity": activity} if activity is not None else {}),
     )
     return outcome, opener, recorder
 
@@ -753,3 +769,84 @@ def test_the_conversation_uses_assistant_and_tool_blocks() -> None:
     assert isinstance(blocks[0], Block) and QUESTION in blocks[0].text
     assert blocks[1].tool_calls[0].name == "search_web"
     assert blocks[2].call_id == blocks[1].tool_calls[0].id
+
+
+def test_each_search_and_each_page_read_is_reported_as_it_happens() -> None:
+    activity = _Activity()
+    model = FakeModel(
+        script=(
+            _search(),
+            _open(URL_A),
+            _say("Digest A"),
+            _open(URL_B),
+            _say("Digest B"),
+            _submit(),
+        )
+    )
+
+    _run(model, search=FakeSearch(_results(URL_A, URL_B)), pages=_two_pages(), activity=activity)
+
+    assert activity.lines == [
+        ("search", "heat pumps"),
+        ("read", "Title A", URL_A),
+        ("read", "Title B", URL_B),
+    ]
+
+
+def test_a_page_that_cannot_be_opened_is_reported_as_skipped() -> None:
+    activity = _Activity()
+    pages = {URL_A: PageError("That page is a PDF."), URL_B: _page(URL_B, "Title B")}
+    model = FakeModel(
+        script=(_search(), _open(URL_A), _open(URL_B), _say("Digest B"), _submit())
+    )
+
+    _run(model, search=FakeSearch(_results(URL_A, URL_B)), pages=pages, activity=activity)
+
+    assert activity.lines == [
+        ("search", "heat pumps"),
+        ("skipped", URL_A),
+        ("read", "Title B", URL_B),
+    ]
+
+
+def test_an_address_opened_again_or_never_shown_is_not_reported() -> None:
+    activity = _Activity()
+    model = FakeModel(
+        script=(
+            _search(),
+            _open(URL_A),
+            _say("Digest A"),
+            _open("HTTPS://A.example:443/heat#part"),
+            _open(URL_D),
+            _submit(),
+        )
+    )
+
+    _run(model, search=FakeSearch(_results(URL_A)), pages=_two_pages(), activity=activity)
+
+    assert activity.lines == [("search", "heat pumps"), ("read", "Title A", URL_A)]
+
+
+def test_a_search_with_no_words_is_not_reported() -> None:
+    activity = _Activity()
+    model = FakeModel(script=(_call("search_web", {"query": "  "}), _submit()))
+
+    _run(model, activity=activity)
+
+    assert activity.lines == []
+
+
+def test_a_knowledge_file_is_reported_once_when_first_read() -> None:
+    activity = _Activity()
+    memory = _Memory({"notes.md": "My own notes."})
+    model = FakeModel(
+        script=(
+            _call("read_knowledge", {"name": "notes.md"}),
+            _call("read_knowledge", {"name": "notes.md"}),
+            _submit(sources=[{"number": 1, "used_for": "Notes"}]),
+        )
+    )
+
+    _run(model, memory=memory, activity=activity)
+
+    assert activity.lines == [("read", "notes.md", None)]
