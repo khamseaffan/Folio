@@ -47,6 +47,7 @@ import {
 } from "../lib/firebase-auth";
 import { Markdown } from "./markdown";
 import { ProfilePanel } from "./profile-panel";
+import { Reports } from "./reports";
 import { Settings } from "./settings";
 import { ThreadList } from "./thread-list";
 
@@ -144,6 +145,18 @@ function toolStatus(name: string): string {
       return "Saving a schedule";
     case "delete_schedule":
       return "Deleting a schedule";
+    case "start_research":
+      return "Starting research";
+    case "cancel_research":
+      return "Cancelling research";
+    case "list_research_runs":
+      return "Looking at research";
+    case "list_reports":
+      return "Looking at reports";
+    case "rename_report":
+      return "Renaming a report";
+    case "delete_report":
+      return "Deleting a report";
     default:
       return "Working on it";
   }
@@ -334,6 +347,7 @@ export function FolioApp() {
   const [toolLine, setToolLine] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [reportsOpen, setReportsOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const linkHref = useRef<string | null>(null);
   const streamAbort = useRef<AbortController | null>(null);
@@ -382,6 +396,7 @@ export function FolioApp() {
     setPending(false);
     setSettingsOpen(false);
     setProfileOpen(false);
+    setReportsOpen(false);
     setView("signed-out");
   }, []);
 
@@ -614,6 +629,7 @@ export function FolioApp() {
         clearLink();
         linkHref.current = null;
         setProfileOpen(false);
+        setReportsOpen(false);
         setView("signed-out");
         if (finished.kind === "cancel") return;
         setNotice(finished.kind === "unavailable" ? UNAVAILABLE : finished.message);
@@ -1033,6 +1049,7 @@ export function FolioApp() {
     linkHref.current = null;
     setNotice(null);
     setProfileOpen(false);
+    setReportsOpen(false);
     setView("signed-out");
   }
 
@@ -1053,7 +1070,10 @@ export function FolioApp() {
       type="button"
       className="quiet profile-toggle"
       aria-expanded={profileOpen}
-      onClick={() => setProfileOpen((open) => !open)}
+      onClick={() => {
+        setReportsOpen(false);
+        setProfileOpen((open) => !open);
+      }}
     >
       <UserCircleIcon aria-hidden="true" />
       Profile
@@ -1097,7 +1117,7 @@ export function FolioApp() {
               {threadsLoaded ? (
                 <div
                   className={
-                    !(openThread || settingsOpen || profileOpen)
+                    !(openThread || settingsOpen || profileOpen || reportsOpen)
                       ? "desk-body idle"
                       : profileOpen && !settingsOpen
                         ? "desk-body profile-open"
@@ -1117,11 +1137,13 @@ export function FolioApp() {
                       disabled={pending}
                       onOpen={(id) => {
                         setSettingsOpen(false);
+                        setReportsOpen(false);
                         closeProfileIfNarrow();
                         void onOpenThread(id);
                       }}
                       onCreate={() => {
                         setSettingsOpen(false);
+                        setReportsOpen(false);
                         closeProfileIfNarrow();
                         void onNewThread();
                       }}
@@ -1132,8 +1154,21 @@ export function FolioApp() {
                       <p className="account-name">{displayName}</p>
                       {accountEmail ? <p className="mail">{accountEmail}</p> : null}
                       <div className="account-actions">
+                        <button
+                          type="button"
+                          className="quiet"
+                          onClick={() => {
+                            setProfileOpen(false);
+                            setSettingsOpen(false);
+                            setReportsOpen(true);
+                          }}
+                        >
+                          <DocumentTextIcon aria-hidden="true" />
+                          Reports
+                        </button>
                         <button type="button" className="quiet" onClick={() => {
                             setProfileOpen(false);
+                            setReportsOpen(false);
                             setSettingsOpen(true);
                           }}
                         >
@@ -1160,6 +1195,13 @@ export function FolioApp() {
                         setDisplayName(account.display_name);
                         setAccountEmail(account.email);
                       }}
+                      onSignedOut={settingsSignedOut}
+                      onDown={settingsDown}
+                    />
+                  ) : reportsOpen ? (
+                    <Reports
+                      reloadKey={reloadKey}
+                      onClose={() => setReportsOpen(false)}
                       onSignedOut={settingsSignedOut}
                       onDown={settingsDown}
                     />
