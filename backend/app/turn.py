@@ -108,7 +108,8 @@ def _system_prompt(
     parts.append(_HARM)
     parts.append(MEMORY)
     if chat:
-        # A scheduled run cannot start research, so only a chat turn is told how.
+        # A scheduled run is told how to start research in its own run line instead, because it
+        # cannot ask the person a question first.
         parts.append(RESEARCH)
     parts.append(_time_line(time_zone))
     if profile is not None:

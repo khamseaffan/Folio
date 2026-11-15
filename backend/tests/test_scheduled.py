@@ -379,6 +379,40 @@ def test_a_run_uses_memory_and_cannot_make_schedules(connection, account):
     assert [row[0] for row in list_schedules(connection, account_id)] == [schedule_id]
 
 
+def test_a_scheduled_task_can_start_research_and_a_second_start_is_refused(
+    connection, account, monkeypatch
+):
+    queued = []
+
+    def enqueue(run_id, kind="schedule", client=None):
+        queued.append((run_id, kind))
+
+    monkeypatch.setattr("app.queue.enqueue", enqueue)
+    account_id, _ = account
+    thread_id, schedule_id = _due_schedule(connection, account_id)
+    run = _make_run(connection, account_id, thread_id, schedule_id, "Research Sakana AI")
+    question = "What does Sakana AI sell, and what problem does it tackle?"
+    model = FakeModel(
+        script=(
+            _tool("start_research", {"question": question}, "c1"),
+            _tool("start_research", {"question": "again"}, "c2"),
+            Reply("Research has started. The report will appear in Reports.", 1, 1, 2),
+        )
+    )
+
+    outcome = execute(run[0], model)
+
+    assert outcome == "ready"
+    assert "start_research" in {spec.name for spec in model.seen[0][1]}
+    assert len(queued) == 1 and queued[0][1] == "research"
+    started = connection.execute(
+        "SELECT kind, status, task, thread_id FROM run WHERE id = %s", (queued[0][0],)
+    ).fetchone()
+    assert started == ("research", "queued", question, thread_id)
+    second = [b for b in model.seen[2][0] if b.role == "tool"][-1]
+    assert '"busy"' in second.text
+
+
 def test_a_failing_model_is_tried_four_times_then_dead(connection, account, caplog):
     account_id, email = account
     thread_id, schedule_id = _due_schedule(connection, account_id)

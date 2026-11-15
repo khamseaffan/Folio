@@ -1,6 +1,6 @@
 # Research
 
-Research starts when the person asks for a report in the thread. The agent makes sure it understands the question, then starts the run and says so. A schedule cannot start research yet.
+Research starts when the person asks for a report in the thread. The agent makes sure it understands the question, then starts the run and says so. A scheduled task can start research too. It starts one run in its own thread, and it cannot start another while one is queued or working there. A person in the chat is not held by that limit.
 
 The person tells the agent to rename or delete a report, and the agent does so. The person downloads the file that run wrote. The file is Markdown. One account can keep several reports. Each run writes one report. Deleting a report leaves other files and threads.
 

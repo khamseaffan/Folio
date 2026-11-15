@@ -32,7 +32,7 @@ This is also the first use of the browser. It reads public pages only.
 - Watching a browser task live.
 - Reading uploaded files and Drive copies. Those features do not exist yet. A research run reads the account's knowledge files for now.
 - A run that stops to ask the person a question. The agent asks before it starts.
-- Research started by a schedule. A schedule cannot start research yet.
+- Research started by a schedule is built after this design: see `docs/product/research.md`. One research run at a time per thread for a schedule, and the token cap still applies.
 - Download as PDF. The download is Markdown.
 - A control for the person to rename or delete a report. The agent does that, as the product docs say.
 - Searching by meaning (embeddings), and a list of preferred or blocked sites. Both are later, see the questions below.
