@@ -1231,7 +1231,9 @@ export function FolioApp() {
                 ) : null}
                 <p className="fine">Folio is invite only. Only approved email addresses can sign in.</p>
               </div>
-              <p className="landing-foot">Your conversations are private to your account.</p>
+              <p className="landing-foot">
+                Your conversations are private to your account. <a href="/privacy">Privacy policy</a>
+              </p>
             </div>
             <div className="landing-sample" aria-hidden="true">
               <article className="sample">
