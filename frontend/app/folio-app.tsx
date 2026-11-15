@@ -73,9 +73,10 @@ function GoogleMark() {
 
 function Mark() {
   return (
-    <svg className="mark" viewBox="0 0 24 24" aria-hidden="true">
-      <rect width="24" height="24" rx="6" fill="currentColor" />
-      <path d="M16 0h2a6 6 0 0 1 6 6v2h-4a4 4 0 0 1-4-4z" fill="var(--mark)" />
+    <svg className="mark" viewBox="0 0 64 64" aria-hidden="true">
+      <rect width="64" height="64" rx="14" fill="currentColor" />
+      <path d="M42 0H50A14 14 0 0 1 64 14V22H50A8 8 0 0 1 42 14Z" fill="var(--mark)" />
+      <path d="M18 18h22v7H26v6h12v7H26v10h-8z" fill="var(--paper)" />
     </svg>
   );
 }
