@@ -132,3 +132,113 @@ def test_the_cloud_client_is_not_loaded_for_the_local_form(local) -> None:
     assert "google.cloud" not in head
     assert "tasks_v2" not in head
     assert sys.modules.get("app.queue") is run_queue
+
+
+RESEARCH_QUEUE = "projects/p/locations/europe-west1/queues/folio-research"
+RESEARCH_URL = "https://folio-research-abc.a.run.app"
+
+
+def _clear(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "RUN_QUEUE",
+        "WORKER_URL",
+        "RESEARCH_QUEUE",
+        "RESEARCH_URL",
+        "INVOKER_ACCOUNT",
+        "K_SERVICE",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_research_uses_its_own_queue_and_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear(monkeypatch)
+    monkeypatch.setenv("RUN_QUEUE", QUEUE)
+    monkeypatch.setenv("WORKER_URL", WORKER)
+    monkeypatch.setenv("RESEARCH_QUEUE", RESEARCH_QUEUE)
+    monkeypatch.setenv("RESEARCH_URL", RESEARCH_URL + "/")
+    monkeypatch.setenv("INVOKER_ACCOUNT", INVOKER)
+    run_id = uuid.uuid4()
+    stub = _Stub()
+
+    run_queue.enqueue(run_id, "research", client=stub)
+
+    request = stub.requests[0]
+    assert request["parent"] == RESEARCH_QUEUE
+    task = request["task"]
+    assert task["name"] == f"{RESEARCH_QUEUE}/tasks/{run_id}"
+    assert task["dispatch_deadline"] == {"seconds": 1800}
+    http = task["http_request"]
+    assert http["url"] == f"{RESEARCH_URL}/runs/{run_id}"
+    assert http["oidc_token"] == {"service_account_email": INVOKER, "audience": RESEARCH_URL}
+
+
+def test_a_schedule_still_uses_the_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    _clear(monkeypatch)
+    monkeypatch.setenv("RUN_QUEUE", QUEUE)
+    monkeypatch.setenv("WORKER_URL", WORKER)
+    monkeypatch.setenv("RESEARCH_QUEUE", RESEARCH_QUEUE)
+    monkeypatch.setenv("RESEARCH_URL", RESEARCH_URL)
+    monkeypatch.setenv("INVOKER_ACCOUNT", INVOKER)
+    run_id = uuid.uuid4()
+    stub = _Stub()
+
+    run_queue.enqueue(run_id, client=stub)
+    run_queue.enqueue(run_id, "schedule", client=stub)
+
+    for request in stub.requests:
+        assert request["parent"] == QUEUE
+        assert request["task"]["http_request"]["url"] == f"{WORKER}/runs/{run_id}"
+
+
+def test_missing_research_variables_on_cloud_run_are_an_error_and_start_no_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear(monkeypatch)
+    # The schedule variables are set, so a fallback to them would be wrong too.
+    monkeypatch.setenv("RUN_QUEUE", QUEUE)
+    monkeypatch.setenv("WORKER_URL", WORKER)
+    monkeypatch.setenv("INVOKER_ACCOUNT", INVOKER)
+    monkeypatch.setenv("K_SERVICE", "folio-api")
+    started: list[object] = []
+    monkeypatch.setattr("app.queue.threading.Thread", lambda *a, **k: started.append(k))
+    stub = _Stub()
+
+    with pytest.raises(run_queue.QueueNotConfigured):
+        run_queue.enqueue(uuid.uuid4(), "research", client=stub)
+
+    assert started == [] and stub.requests == []
+
+
+def test_missing_schedule_variables_on_cloud_run_are_an_error_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear(monkeypatch)
+    monkeypatch.setenv("K_SERVICE", "folio-api")
+    started: list[object] = []
+    monkeypatch.setattr("app.queue.threading.Thread", lambda *a, **k: started.append(k))
+
+    with pytest.raises(run_queue.QueueNotConfigured):
+        run_queue.enqueue(uuid.uuid4())
+
+    assert started == []
+
+
+def test_without_k_service_the_local_form_still_runs_research(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear(monkeypatch)
+    done = threading.Event()
+    seen: list[uuid.UUID] = []
+
+    def execute(given: uuid.UUID) -> str:
+        seen.append(given)
+        done.set()
+        return "ready"
+
+    monkeypatch.setattr("app.scheduled.execute", execute)
+    run_id = uuid.uuid4()
+
+    run_queue.enqueue(run_id, "research")
+
+    assert done.wait(timeout=10)
+    assert seen == [run_id]

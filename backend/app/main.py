@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import ability, knowledge_file, operations, run, schedule
+from app import ability, knowledge_file, operations, report, report_source, run, schedule
 from app.account import (
     delete_account,
     ensure_account,
@@ -615,6 +615,93 @@ def get_schedules(request: Request) -> Response:
             }
             for row in rows
         ]
+    )
+
+
+@app.get("/reports")
+def get_reports(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        with connect() as connection:
+            rows = report.list_reports(connection, account_id)
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content=[
+            {
+                "id": str(row[0]),
+                "name": row[4],
+                "question": row[5],
+                "created_at": row[11].isoformat(),
+            }
+            for row in rows
+        ]
+    )
+
+
+def _load_report(
+    request: Request, report_id: str
+) -> tuple[report.ReportRow, list[report_source.SourceRow]] | JSONResponse:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    parsed = _parse_thread_id(report_id)
+    if parsed is None:
+        return _error(404, _NOT_FOUND)
+    try:
+        with connect() as connection:
+            row = report.get_report(connection, account_id, parsed)
+            sources = (
+                report_source.list_sources(connection, account_id, parsed)
+                if row is not None
+                else []
+            )
+    except Exception:
+        return _down()
+    if row is None:
+        return _error(404, _NOT_FOUND)
+    return row, sources
+
+
+@app.get("/reports/{report_id}")
+def get_report(request: Request, report_id: str) -> Response:
+    loaded = _load_report(request, report_id)
+    if isinstance(loaded, JSONResponse):
+        return loaded
+    row, sources = loaded
+    return JSONResponse(
+        content={
+            "id": str(row[0]),
+            "name": row[4],
+            "question": row[5],
+            "body": row[6],
+            "stop_note": row[7],
+            "created_at": row[11].isoformat(),
+            "sources": [
+                {"position": item[0], "kind": item[1], "title": item[2], "url": item[3],
+                 "used_for": item[4]}
+                for item in sources
+            ],
+        }
+    )  # fmt: skip
+
+
+@app.get("/reports/{report_id}/download")
+def download_report(request: Request, report_id: str) -> Response:
+    loaded = _load_report(request, report_id)
+    if isinstance(loaded, JSONResponse):
+        return loaded
+    row, sources = loaded
+    return Response(
+        content=report.render_download(row, sources),
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{report.download_filename(row[4])}"'
+        },
     )
 
 
