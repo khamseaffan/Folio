@@ -108,6 +108,21 @@ jobs:
 
   browser:
     runs-on: ubuntu-latest
+    # The test setup creates the tables for every test, so even the browser tests need a database.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: folio
+          POSTGRES_PASSWORD: folio
+          POSTGRES_DB: folio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U folio -d folio"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
