@@ -210,6 +210,25 @@ def in_flight_threads(connection: psycopg.Connection, account_id: uuid.UUID) -> 
     return {row[0] for row in rows}
 
 
+def in_flight_since(
+    connection: psycopg.Connection, account_id: uuid.UUID
+) -> dict[uuid.UUID, tuple[datetime, str]]:
+    """For each thread with a queued or working run: when the oldest was asked for, and its kind."""
+    apply(connection)
+    rows = connection.execute(
+        """
+        SELECT thread_id, MIN(created_at), (array_agg(kind ORDER BY created_at))[1]
+        FROM run
+        WHERE account_id = %s
+          AND thread_id IS NOT NULL
+          AND status IN ('queued', 'working')
+        GROUP BY thread_id
+        """,
+        (account_id,),
+    ).fetchall()
+    return {row[0]: (row[1], row[2]) for row in rows}
+
+
 def stuck_runs(
     connection: psycopg.Connection, minutes: int = WORKING_GIVE_UP_MINUTES
 ) -> list[RunRow]:
