@@ -10,6 +10,8 @@ The call goes through a LangChain chat model. LangGraph is the loop in the Pytho
 
 Every model call writes a usage record: the account email, the time, the provider, the model, the input tokens, the output tokens, the total tokens, and the expected cost of that provider and model. When the provider returns no usage, the record says the usage is missing. A reply that was stopped is the exception: the provider sends no counts for it, so Folio counts the text it sent and the text that arrived, stores those counts, and marks the record as estimated. An estimated record counts toward the cap. The reason is in `docs/superpowers/specs/2026-11-13-stopped-reply-usage-design.md`. A browser task's page text and screenshots are part of those calls. A transcription is one of those calls. A chat turn counts only through the tokens on its usage record.
 
+A research run writes its usage as it goes: one record for each model call, with the operation `research` and the run id, and one record for each web search. A search record has no token counts and carries the expected cost of one search. It does not count toward the token cap, because the cap counts tokens. A record is written when its call ends, so a run that crashes keeps its usage and the cap sees it while the run works.
+
 The person sees that account's recorded input tokens, output tokens, and total tokens in settings, and the file byte count in `docs/product/files.md`. The expected cost is not shown to them. Detail of the screens is in `docs/product/screens.md`.
 
 The usage view is the total for one email, and the split of that total by provider and model, including the expected cost.

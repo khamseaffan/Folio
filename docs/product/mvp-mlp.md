@@ -15,7 +15,7 @@
 11. Knowledge is English Markdown files, profile.md is included in every model call, and a search opens at most five other files.
 12. The agent writes, changes, and deletes knowledge when told, and the person reads it in the profile panel.
 13. The agent remembers abilities, lists them for reading, and changes them when told.
-14. Research opens at most 20 sources, stops when new pages mostly repeat or after 30 minutes, and the file contains the question, the text, how the run stopped, and the source list.
+14. Research opens at most 20 sources, makes at most 25 searches in an attempt, stops when new pages mostly repeat or after 30 minutes of work, and the file contains the question, the text, how the run stopped, and the source list. Reading stops at 25 minutes so that the report can be written.
 15. The person downloads a report, and the agent names, renames, or deletes it when told.
 16. The person says a schedule in the chat, the agent creates, updates, and deletes it, and deleting the thread deletes the schedule.
 17. A scheduled run uses files, imported Drive copies, the web, and a remembered ability when the task needs them.

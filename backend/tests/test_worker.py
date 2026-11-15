@@ -1,9 +1,12 @@
+import subprocess
+import sys
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
-from app import worker
+from app import research_worker, worker
 from app.account import ensure_account
 from app.db import connect
 from app.main import app as public_app
@@ -161,3 +164,64 @@ def test_schedules_and_working_show_only_the_callers_rows(
         assert marks == {"Mine": True, "Quiet": False}
     finally:
         _remove(other_id, other_email)
+
+
+@pytest.fixture
+def research_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setattr("app.research_worker.open_model", lambda: FakeModel(reply="none"))
+    return TestClient(research_worker.app)
+
+
+def test_the_research_worker_has_health_and_the_run_route_and_nothing_else() -> None:
+    paths = {getattr(route, "path", "") for route in research_worker.app.routes}
+
+    assert "/health" in paths and "/runs/{run_id}" in paths
+    assert "/tick" not in paths
+    assert not {"/sign-in", "/threads", "/schedules", "/reports"} & paths
+
+
+def test_the_research_worker_health_and_no_tick(research_client) -> None:
+    response = research_client.get("/health")
+
+    assert response.status_code == 200 and response.json() == {"status": "ok"}
+    assert research_client.post("/tick").status_code in (404, 405)
+
+
+@pytest.mark.parametrize(
+    ("outcome", "status"),
+    [("ready", 200), ("duplicate", 200), ("cancelled", 200), ("dead", 200), ("retry", 503)],
+)
+def test_the_research_worker_answers_like_the_schedule_worker(
+    research_client, account, monkeypatch, outcome, status
+) -> None:
+    account_id, _ = account
+    with connect() as connection:
+        thread = create_thread(connection, account_id)
+        run = create_run(connection, account_id, thread[0], None, "research", "t")
+    assert run is not None
+    monkeypatch.setattr("app.scheduled.execute", lambda run_id, model=None: outcome)
+
+    response = research_client.post(f"/runs/{run[0]}")
+
+    assert response.status_code == status
+    assert response.json() == {"status": outcome}
+
+
+def test_the_research_worker_answers_404_for_an_unknown_run(research_client) -> None:
+    assert research_client.post(f"/runs/{uuid.uuid4()}").status_code == 404
+    assert research_client.post("/runs/not-an-id").status_code == 404
+
+
+def test_the_public_app_imports_neither_worker() -> None:
+    code = (
+        "import sys, app.main\n"
+        "assert 'app.worker' not in sys.modules\n"
+        "assert 'app.research_worker' not in sys.modules\n"
+    )
+    backend = Path(__file__).resolve().parent.parent
+
+    done = subprocess.run(
+        [sys.executable, "-c", code], cwd=backend, capture_output=True, text=True, timeout=60
+    )
+
+    assert done.returncode == 0, done.stderr

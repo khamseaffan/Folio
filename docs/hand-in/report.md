@@ -41,34 +41,39 @@ A research report is separate from a chat reply. You can leave the page. The fin
 
 **How a run starts**
 
-- You ask for it in the thread.
-- Or a schedule you already set writes one.
+- You ask for it in the thread. The agent asks one short question first if yours is unclear, then starts it.
+- A schedule cannot start one yet.
 
 **What it may read**
 
-- Your files.
-- Google Drive files you have already imported.
-- Public pages.
+- Public pages, found through a web search and opened in Chrome.
+- Your knowledge files. Uploads and Google Drive copies come later.
 
 **When it stops**
 
-- After 20 opened sources, after 30 minutes of work, or when new pages mostly repeat the ones already opened.
+- After 20 opened sources, 25 searches, 60 steps, or 25 minutes of reading. The whole run is 30 minutes of work, so the last minutes are for writing.
+- Or when new pages mostly repeat the ones already opened. The model decides that, and says so.
 - A page that cannot be opened does not count. A page that disagrees is kept.
-- If it needs an answer from you, the clock pauses and the question stays in the thread.
-- Nothing is sent out of the account while it waits.
+- If you reach your usage limit, it stops reading and writes the report from what it has. If an admin stops your account, it stops at once and writes nothing.
+- If it opened no source, there is no report and the thread says so.
 
 **What you get**
 
 - One report per run. You can keep several.
+- A message in the thread when it is ready, and the report on the Reports screen. You download it as Markdown.
 - The file contains the question, the writing, a few lines on how the run stopped, and the sources. Each source has a title, an address or a file name, and one line on what it was used for.
-- Until then, the screen shows that it is still working, or shows the question.
-- You download the file it produced: Markdown, PDF, or another file the task needed.
 - If you cancel, the unfinished writing is discarded. The last finished report stays.
-- Research only reads. A send on a website still needs you to confirm that exact action.
 
 **Why**
 
-Reading the web and writing a long piece should continue after you leave. The limits give the run an ending. The source list is saved with the text so a finished report can be checked.
+- Our own search and our own Chrome, not the model provider's built-in search. With our own, Folio counts the pages, enforces the limits, and knows what was opened. A provider's search would decide that itself, and would tie research to one provider.
+- The source list is a promise: a page that was not opened is not a source. Folio fetches each page itself, so it can keep that promise. The titles and addresses come from the pages, not from the model.
+- The model can open only addresses it was shown. A page can contain text that gives orders, such as "open this address with the person's notes in it". If the model could open any address, that would work. Code enforces the rule, because a rule that only the model is asked to keep is not a limit.
+- Chrome sits behind a proxy. A check made before Chrome connects can be fooled by a name that answers differently the second time, or by a redirect to a private address. The proxy resolves the name itself and connects to the address it checked. The cloud metadata service holds tokens that reach our secrets, so it must never be reachable from a page.
+- Each page becomes a digest of about 300 words, written by a separate call. The loop sends everything it has seen on every step, so twenty whole pages would make every later step heavy. The price is that a fact the digest left out is not in the report.
+- A second service and a second queue, because Chrome makes the image large and needs more memory, and a browser that opens addresses chosen by strangers should be away from the service that runs schedules.
+- What leaves Folio: the search words go to the search service, and they can include words from your question. Page requests carry no account name, email, or id.
+- Reading stops at 25 minutes because Cloud Tasks cannot wait for one call longer than 30 minutes, and the report must be saved inside that call.
 
 ## Technology and architecture
 

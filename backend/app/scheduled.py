@@ -14,7 +14,10 @@ from app.loop import stream_turn
 from app.message import insert_message
 from app.model import Block, Model, Reply, ToolCall, open_model
 from app.queue import enqueue
+from app.research import FAILED_LINE as RESEARCH_FAILED_LINE
+from app.research import execute_research
 from app.run import (
+    MAX_ATTEMPTS,
     QUEUED_GIVE_UP_MINUTES,
     RunRow,
     create_run,
@@ -28,12 +31,11 @@ from app.run import (
 )
 from app.schedule import ScheduleRow, due_schedules, set_next_run
 from app.thread import get_thread
-from app.turn import _account, _limit, _system_prompt, _who
+from app.turn import _CAPPED, _STOPPED, _account, _limit, _system_prompt, _who
 from app.usage import record_usage, tokens_for_email
 
 FAILED_LINE = "A scheduled run failed."
 NO_NEXT_LINE = "This schedule has no next time now. Tell Folio when it should run again."
-MAX_ATTEMPTS = 4
 
 _OPERATION = "schedule"
 _log = logging.getLogger("folio.worker")
@@ -162,10 +164,17 @@ def _fire(model: Model, schedule: ScheduleRow, counts: dict[str, int]) -> None:
     _put_on_queue(new_run[0])
 
 
-def _put_on_queue(run_id: uuid.UUID) -> bool:
+def _failed_line(kind: str) -> str:
+    return RESEARCH_FAILED_LINE if kind == "research" else FAILED_LINE
+
+
+def _put_on_queue(run_id: uuid.UUID, kind: str = "schedule") -> bool:
     # A run that is not queued stays `queued`, and a later tick puts it there again.
     try:
-        enqueue(run_id)
+        if kind == "schedule":
+            enqueue(run_id)
+        else:
+            enqueue(run_id, kind)
     except Exception as error:
         _log.error("run %s could not be put on the queue: %s", run_id, type(error).__name__)
         return False
@@ -181,7 +190,7 @@ def _free_stuck(counts: dict[str, int]) -> None:
             if not finish_working(connection, run_id, "dead", run[7]):
                 # It finished while the list was being read.
                 continue
-            _write_line(connection, account_id, thread_id, FAILED_LINE, run_id)
+            _write_line(connection, account_id, thread_id, _failed_line(run[4]), run_id)
         counts["stuck"] += 1
         _log.error("run %s was working for too long and is marked dead", run_id)
 
@@ -196,10 +205,10 @@ def _recover_queued(counts: dict[str, int]) -> None:
             with connect() as connection:
                 if not finish_working(connection, run_id, "dead", 0, "queued"):
                     continue
-                _write_line(connection, account_id, thread_id, FAILED_LINE, run_id)
+                _write_line(connection, account_id, thread_id, _failed_line(run[4]), run_id)
             counts["stuck"] += 1
             _log.error("run %s never left the queue and is marked dead", run_id)
-        elif _put_on_queue(run_id):
+        elif _put_on_queue(run_id, run[4]):
             # The task name is the run id, so a run that is already on the queue is refused.
             counts["requeued"] += 1
 
@@ -313,13 +322,21 @@ def _execute(run_id: uuid.UUID, model: Model | None) -> str:
         if blocked or thread is None:
             # A stopped or capped account, or a thread that is gone, is not worth another try.
             finish_run(connection, run_id, "cancelled", 0, False)
+            if run[4] == "research" and thread is not None:
+                # A person who asked for research is told why it did not start.
+                line = _STOPPED if _limit(connection, email)[1] else _CAPPED
+                _write_line(connection, account_id, thread_id, line, run_id)
             return "cancelled"
-        display_name = _account(connection, account_id)[1]
-        profile_file = get_file(connection, account_id, PROFILE)
-        profile = profile_file[3] if profile_file is not None else None
-        summary = thread[3]
+        display_name = profile = summary = None
+        if run[4] != "research":
+            display_name = _account(connection, account_id)[1]
+            profile_file = get_file(connection, account_id, PROFILE)
+            profile = profile_file[3] if profile_file is not None else None
+            summary = thread[3]
     # The start is committed above, so no transaction is open while the agent loop runs.
     chosen = model if model is not None else open_model()
+    if run[4] == "research":
+        return execute_research(run, chosen)
     started = time.monotonic()
     text, replies, failed = _answer(chosen, run, email, display_name, summary, profile)
     work_ms = int((time.monotonic() - started) * 1000)
