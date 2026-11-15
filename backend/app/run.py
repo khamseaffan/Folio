@@ -12,7 +12,7 @@ from app.usage import apply as apply_usage
 _MIGRATION = Path(__file__).resolve().parent.parent / "migrations" / "run.sql"
 
 # id, account_id, thread_id, schedule_id, kind, status, task, work_ms, attempt_count,
-# delivered_at, created_at
+# delivered_at, created_at, started_at
 RunRow = tuple[
     uuid.UUID,
     uuid.UUID,
@@ -25,12 +25,14 @@ RunRow = tuple[
     int,
     datetime | None,
     datetime,
+    datetime | None,
 ]
 
-# A working run can wait in the queue and between retries. Four attempts of up to 30 minutes
-# each is 2 hours of work, and the waits between attempts add a little over that. Three hours
-# is past any healthy run. There is no started_at column, so this is measured from created_at.
-WORKING_GIVE_UP_MINUTES = 3 * 60
+# Measured from the start of the latest attempt, so time spent waiting in the queue does not
+# count. One attempt is cut off at 30 minutes. The wait before the next attempt is at most
+# 5 minutes of backoff, plus up to 30 minutes for a free slot when 3 other runs are going.
+# That is 65 minutes in the worst healthy case, and 90 leaves room.
+WORKING_GIVE_UP_MINUTES = 90
 # A run that never left the queue is given up after this long.
 QUEUED_GIVE_UP_MINUTES = 30
 # A queued run this old was probably never put on the queue, so the tick puts it there again.
@@ -38,7 +40,7 @@ REQUEUE_AFTER_MINUTES = 2
 
 _COLUMNS = (
     "id, account_id, thread_id, schedule_id, kind, status, task, work_ms, attempt_count, "
-    "delivered_at, created_at"
+    "delivered_at, created_at, started_at"
 )
 
 
@@ -87,7 +89,7 @@ def start_attempt(connection: psycopg.Connection, run_id: uuid.UUID) -> RunRow |
     return connection.execute(
         f"""
         UPDATE run
-        SET status = 'working', attempt_count = attempt_count + 1
+        SET status = 'working', attempt_count = attempt_count + 1, started_at = now()
         WHERE id = %s
           AND status IN ('queued', 'working')
           AND delivered_at IS NULL
@@ -174,8 +176,8 @@ def stuck_runs(
         SELECT {_COLUMNS}
         FROM run
         WHERE status = 'working'
-          AND created_at < now() - make_interval(mins => %s)
-        ORDER BY created_at ASC
+          AND COALESCE(started_at, created_at) < now() - make_interval(mins => %s)
+        ORDER BY COALESCE(started_at, created_at) ASC
         """,
         (minutes,),
     ).fetchall()

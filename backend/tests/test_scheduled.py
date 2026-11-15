@@ -516,7 +516,7 @@ def test_a_stuck_run_is_marked_dead_and_frees_the_schedule(
     run = _make_run(connection, account_id, thread[0], made[0])
     assert start_attempt(connection, run[0]) is not None
     connection.execute(
-        "UPDATE run SET created_at = now() - interval '181 minutes' WHERE id = %s", (run[0],)
+        "UPDATE run SET started_at = now() - interval '91 minutes' WHERE id = %s", (run[0],)
     )
 
     with caplog.at_level(logging.INFO, logger=LOGGER):
@@ -575,7 +575,7 @@ def test_a_late_result_after_the_run_was_marked_dead_is_dropped(connection, acco
     try:
         assert started.wait(timeout=30)
         connection.execute(
-            "UPDATE run SET created_at = now() - interval '181 minutes' WHERE id = %s", (run[0],)
+            "UPDATE run SET started_at = now() - interval '91 minutes' WHERE id = %s", (run[0],)
         )
         with caplog.at_level(logging.INFO, logger=LOGGER):
             assert tick(_model())["stuck"] == 1
@@ -604,7 +604,7 @@ def test_a_tick_does_not_overwrite_a_run_that_just_finished(connection, account)
     run = _make_run(connection, account_id, thread[0], made[0])
     assert execute(run[0], _model(RESULT)) == "ready"
     connection.execute(
-        "UPDATE run SET created_at = now() - interval '181 minutes' WHERE id = %s", (run[0],)
+        "UPDATE run SET started_at = now() - interval '91 minutes' WHERE id = %s", (run[0],)
     )
 
     assert tick(_model())["stuck"] == 0
@@ -617,6 +617,13 @@ def test_a_tick_does_not_overwrite_a_run_that_just_finished(connection, account)
 def _age(connection, run_id, minutes):
     connection.execute(
         "UPDATE run SET created_at = now() - make_interval(mins => %s) WHERE id = %s",
+        (minutes, run_id),
+    )
+
+
+def _age_attempt(connection, run_id, minutes):
+    connection.execute(
+        "UPDATE run SET started_at = now() - make_interval(mins => %s) WHERE id = %s",
         (minutes, run_id),
     )
 
@@ -716,7 +723,7 @@ def test_a_working_run_31_minutes_old_is_not_stuck(connection, account, enqueued
     thread_id, schedule_id = _quiet_schedule(connection, account_id)
     run = _make_run(connection, account_id, thread_id, schedule_id)
     assert start_attempt(connection, run[0]) is not None
-    _age(connection, run[0], 31)
+    _age_attempt(connection, run[0], 31)
 
     counts = tick(_model())
 
@@ -724,6 +731,21 @@ def test_a_working_run_31_minutes_old_is_not_stuck(connection, account, enqueued
     stored = get_run(connection, run[0])
     assert stored is not None and stored[5] == "working"
     assert _lines(connection, account_id, thread_id, "result") == []
+
+
+def test_a_run_made_hours_ago_but_started_just_now_is_not_stuck(connection, account, enqueued):
+    # It waited in the queue for a long time. The wait is not work.
+    account_id, _ = account
+    thread_id, schedule_id = _quiet_schedule(connection, account_id)
+    run = _make_run(connection, account_id, thread_id, schedule_id)
+    assert start_attempt(connection, run[0]) is not None
+    _age(connection, run[0], 5 * 60)
+
+    counts = tick(_model())
+
+    assert counts["stuck"] == 0
+    stored = get_run(connection, run[0])
+    assert stored is not None and stored[5] == "working"
 
 
 def test_two_deliveries_at_once_run_the_model_once(connection, account):

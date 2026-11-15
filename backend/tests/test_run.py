@@ -143,10 +143,76 @@ def test_stuck_runs_are_working_runs_older_than_the_limit(connection, account):
     assert run[0] not in {row[0] for row in stuck_runs(connection)}
 
     connection.execute(
-        "UPDATE run SET created_at = now() - interval '181 minutes' WHERE id = %s", (run[0],)
+        "UPDATE run SET started_at = now() - interval '91 minutes' WHERE id = %s", (run[0],)
     )
     assert run[0] in {row[0] for row in stuck_runs(connection)}
     assert run[0] not in {row[0] for row in stuck_runs(connection, minutes=300)}
+
+
+def test_a_new_run_has_no_started_at_and_each_attempt_sets_it(connection, account):
+    account_id, _ = account
+    thread_id, schedule_id = _setup(connection, account_id)
+    run = create_run(connection, account_id, thread_id, schedule_id, "schedule", "a")
+    assert run is not None
+    assert run[11] is None
+
+    first = start_attempt(connection, run[0])
+    assert first is not None and first[11] is not None
+
+    connection.execute(
+        "UPDATE run SET started_at = now() - interval '1 hour' WHERE id = %s", (run[0],)
+    )
+    second = start_attempt(connection, run[0])
+    assert second is not None and second[8] == 2
+    age = connection.execute(
+        "SELECT now() - started_at FROM run WHERE id = %s", (run[0],)
+    ).fetchone()[0]
+    assert age.total_seconds() < 60
+
+
+def test_a_run_is_stuck_by_when_its_attempt_started_not_when_it_was_made(connection, account):
+    account_id, _ = account
+    thread_id, schedule_id = _setup(connection, account_id)
+    run = create_run(connection, account_id, thread_id, schedule_id, "schedule", "a")
+    assert run is not None
+    start_attempt(connection, run[0])
+
+    # Made 5 hours ago, but this attempt began 10 minutes ago: it is working, not stuck.
+    connection.execute(
+        """
+        UPDATE run
+        SET created_at = now() - interval '5 hours', started_at = now() - interval '10 minutes'
+        WHERE id = %s
+        """,
+        (run[0],),
+    )
+    assert run[0] not in {row[0] for row in stuck_runs(connection)}
+
+    connection.execute(
+        "UPDATE run SET started_at = now() - interval '91 minutes' WHERE id = %s", (run[0],)
+    )
+    assert run[0] in {row[0] for row in stuck_runs(connection)}
+
+
+def test_a_working_run_with_no_started_at_falls_back_to_created_at(connection, account):
+    # A run that was working before the column existed has no started_at.
+    account_id, _ = account
+    thread_id, schedule_id = _setup(connection, account_id)
+    run = create_run(connection, account_id, thread_id, schedule_id, "schedule", "a")
+    assert run is not None
+    connection.execute(
+        """
+        UPDATE run
+        SET status = 'working', started_at = NULL, created_at = now() - interval '10 minutes'
+        WHERE id = %s
+        """,
+        (run[0],),
+    )
+    assert run[0] not in {row[0] for row in stuck_runs(connection)}
+    connection.execute(
+        "UPDATE run SET created_at = now() - interval '91 minutes' WHERE id = %s", (run[0],)
+    )
+    assert run[0] in {row[0] for row in stuck_runs(connection)}
 
 
 def test_deleting_a_run_clears_message_and_usage_run_ids(connection, account):
