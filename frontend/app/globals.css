@@ -10,6 +10,7 @@
   --ink-3: #6b7380;
   --accent: #2b3fd6;
   --accent-wash: #eceffe;
+  --on-accent: #ffffff;
   --mark: #ffe27a;
   --alert: #b3261e;
   --alert-line: #e6b8b4;
@@ -27,6 +28,7 @@
     --ink-3: #8f97a6;
     --accent: #8d9bff;
     --accent-wash: #20264a;
+    --on-accent: #12151c;
     --mark: #6b5a12;
     --alert: #ff8a80;
     --alert-line: #5a2b28;
@@ -150,15 +152,24 @@ a svg {
 }
 
 .primary,
-.new-thread,
+.new-thread {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+.primary:hover:not(:disabled),
+.new-thread:hover:not(:disabled) {
+  background: var(--accent);
+  opacity: 0.88;
+}
+
 .confirm-delete {
   background: var(--ink);
   color: var(--paper);
   border-color: var(--ink);
 }
 
-.primary:hover:not(:disabled),
-.new-thread:hover:not(:disabled),
 .confirm-delete:hover {
   background: var(--ink);
   opacity: 0.88;
@@ -261,13 +272,13 @@ a svg {
 
 .landing-body .google {
   width: 100%;
-  background: var(--ink);
-  color: var(--paper);
-  border-color: var(--ink);
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
 }
 
 .landing-body .google:hover:not(:disabled) {
-  background: var(--ink);
+  background: var(--accent);
   opacity: 0.88;
 }
 
