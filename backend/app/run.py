@@ -229,6 +229,26 @@ def in_flight_since(
     return {row[0]: (row[1], row[2]) for row in rows}
 
 
+def in_flight_run(
+    connection: psycopg.Connection, account_id: uuid.UUID, thread_id: uuid.UUID
+) -> tuple[uuid.UUID, str, datetime] | None:
+    """The oldest queued or working run in a thread: its id, kind, and when it was asked for."""
+    apply(connection)
+    row = connection.execute(
+        """
+        SELECT id, kind, created_at
+        FROM run
+        WHERE account_id = %s
+          AND thread_id = %s
+          AND status IN ('queued', 'working')
+        ORDER BY created_at ASC
+        LIMIT 1
+        """,
+        (account_id, thread_id),
+    ).fetchone()
+    return (row[0], row[1], row[2]) if row is not None else None
+
+
 def stuck_runs(
     connection: psycopg.Connection, minutes: int = WORKING_GIVE_UP_MINUTES
 ) -> list[RunRow]:

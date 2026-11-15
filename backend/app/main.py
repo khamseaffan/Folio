@@ -21,6 +21,7 @@ from app.db import connect, database_ready
 from app.live import stop_account, stop_reply
 from app.message import MessageRow, list_messages
 from app.model import open_model
+from app.run_activity import list_activity
 from app.session import (
     end_account_session,
     end_session,
@@ -770,6 +771,36 @@ def read_thread(request: Request, thread_id: str) -> Response:
     if view is None:
         return _error(404, _NOT_FOUND)
     return JSONResponse(content=view)
+
+
+@app.get("/threads/{thread_id}/activity")
+def thread_activity(request: Request, thread_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    parsed = _parse_thread_id(thread_id)
+    if parsed is None:
+        return _error(404, _NOT_FOUND)
+    try:
+        with connect() as connection:
+            if get_thread(connection, account_id, parsed) is None:
+                return _error(404, _NOT_FOUND)
+            busy = run.in_flight_run(connection, account_id, parsed)
+            lines = list_activity(connection, account_id, busy[0]) if busy is not None else []
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content={
+            "working": busy is not None,
+            "kind": busy[1] if busy is not None else None,
+            "since": busy[2].isoformat() if busy is not None else None,
+            "items": [
+                {"at": at.isoformat(), "kind": kind, "text": text, "url": url}
+                for at, kind, text, url in lines
+            ],
+        }
+    )
 
 
 @app.post("/threads/{thread_id}/messages")
