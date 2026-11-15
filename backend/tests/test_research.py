@@ -426,6 +426,29 @@ def test_reading_stops_at_25_minutes_and_one_last_call_writes_the_report() -> No
     assert [tool.name for tool in model.seen[-1][1]] == ["submit_report"]
 
 
+def test_the_last_call_says_the_research_system_ended_it_and_not_the_person() -> None:
+    # The note reaches the model as a message with the role of the person. A real run showed the
+    # model then writing that the user told it to stop, which was not true.
+    recorder = _Recorder()
+    model = FakeModel(script=(_search(), _open(URL_A), _say("Digest A"), _submit(note="Done.")))
+
+    def elapsed():
+        return float(READ_SECONDS) if len(recorder.calls) >= 3 else 0.0
+
+    _run(
+        model,
+        search=FakeSearch(_results(URL_A)),
+        pages=_two_pages(),
+        recorder=recorder,
+        elapsed=elapsed,
+    )
+
+    note = model.seen[-1][0][-1].text
+    assert "from the research system, not from the person" in note
+    assert "did not ask you to stop" in note
+    assert "The reading time is over." in note
+
+
 def test_at_30_minutes_no_call_is_made_and_code_writes_the_fallback() -> None:
     recorder = _Recorder()
     model = FakeModel(script=(_search(), _open(URL_A), _say("Digest A about boilers")))

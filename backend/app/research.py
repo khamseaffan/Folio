@@ -84,8 +84,10 @@ _DIGEST_PROMPT = (
 )
 _RESEARCH_NUDGE = "Call a tool. When you have read enough, call submit_report with the report."
 _LAST_CALL = (
-    "The research is over: {why} Write the report now from what you have read, and call "
-    "submit_report. Say in the stop note why the research ended."
+    "This note is from the research system, not from the person. The research is over: {why} "
+    "The person did not ask you to stop, so do not say they did. Write the report now from "
+    "what you have read, and call submit_report. In the stop note, say what the sources did "
+    "and did not cover. The system adds the reason the research ended."
 )
 _LAST_NUDGE = "Call submit_report now with the report."
 
