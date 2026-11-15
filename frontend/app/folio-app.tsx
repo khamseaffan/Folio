@@ -1355,13 +1355,6 @@ export function FolioApp() {
                     <header className="top">
                       <h1 className="thread-name">{openThread.name}</h1>
                     </header>
-                    {openThread.working ? (
-                      <WorkBanner
-                        threadId={openThread.id}
-                        since={openThread.working_since}
-                        kind={openThread.working_kind}
-                      />
-                    ) : null}
                     {messages.length === 0 ? (
                       <div className="welcome">
                         <p className="welcome-hello">Hello, {displayName}</p>
@@ -1415,6 +1408,13 @@ export function FolioApp() {
                         ) : null}
                       </div>
                     )}
+                    {openThread.working ? (
+                      <WorkBanner
+                        threadId={openThread.id}
+                        since={openThread.working_since}
+                        kind={openThread.working_kind}
+                      />
+                    ) : null}
                     <form className="composer" onSubmit={(event) => void sendDraft(event)}>
                       <textarea
                         rows={1}
