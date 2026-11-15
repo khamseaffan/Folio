@@ -4,6 +4,7 @@ import {
   ArrowPathIcon,
   ArrowRightStartOnRectangleIcon,
   Bars3Icon,
+  ChevronDownIcon,
   Cog6ToothIcon,
   DocumentTextIcon,
   PaperAirplaneIcon,
@@ -15,6 +16,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type Keyboard
 import {
   createThread,
   deleteThread,
+  getActivity,
   getReady,
   getSession,
   getThread,
@@ -27,6 +29,7 @@ import {
   streamThreadMessage,
   streamThreadRetry,
   type Account,
+  type ActivityLine,
   type ApiDown,
   type ApiMessage,
   type Thread,
@@ -315,13 +318,64 @@ function elapsedText(since: string, now: number): string {
   return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }
 
-function WorkBanner({ since, kind }: { since: string | null; kind: string | null }) {
+function domainOf(url: string | null): string {
+  if (url === null) return "";
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function ActivityText({ line }: { line: ActivityLine }) {
+  if (line.kind === "search") {
+    return <span className="act-text">Searched for “{line.text}”</span>;
+  }
+  if (line.kind === "skipped") {
+    return <span className="act-text">Could not open {domainOf(line.text) || line.text}</span>;
+  }
+  const site = domainOf(line.url);
+  return (
+    <>
+      <span className="act-text">{line.url === null ? `Read your note ${line.text}` : `Read ${line.text}`}</span>
+      {site ? <span className="act-site">{site}</span> : null}
+    </>
+  );
+}
+
+const ACTIVITY_POLL_MS = 5000;
+
+function WorkBanner({
+  threadId,
+  since,
+  kind,
+}: {
+  threadId: string;
+  since: string | null;
+  kind: string | null;
+}) {
   const [now, setNow] = useState(() => Date.now());
+  const [lines, setLines] = useState<ActivityLine[]>([]);
+  const [open, setOpen] = useState(true);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      const result = await getActivity(threadId);
+      if (alive && result.kind === "value") setLines(result.value.items);
+    }
+    void load();
+    const timer = window.setInterval(() => void load(), ACTIVITY_POLL_MS);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [threadId]);
   const title = kind === "research" ? "Research in progress" : "Working in the background";
+  const latest = lines.length > 0 ? lines[lines.length - 1] : null;
   return (
     <div className="work-banner">
       <span className="work-dot" aria-hidden="true" />
@@ -330,10 +384,21 @@ function WorkBanner({ since, kind }: { since: string | null; kind: string | null
           {title}
           {since ? <span className="work-time">{elapsedText(since, now)}</span> : null}
         </p>
-        <p className="work-note">
-          You can leave this page. The result is added to this thread when it is ready.
-        </p>
+        {latest && open ? (
+          <p className="work-now">
+            <ActivityText line={latest} />
+          </p>
+        ) : null}
       </div>
+      <button
+        type="button"
+        className="work-toggle"
+        aria-expanded={open}
+        aria-label={open ? "Minimize progress" : "Show progress"}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <ChevronDownIcon aria-hidden="true" />
+      </button>
     </div>
   );
 }
@@ -1301,9 +1366,6 @@ export function FolioApp() {
                     <header className="top">
                       <h1 className="thread-name">{openThread.name}</h1>
                     </header>
-                    {openThread.working ? (
-                      <WorkBanner since={openThread.working_since} kind={openThread.working_kind} />
-                    ) : null}
                     {messages.length === 0 ? (
                       <div className="welcome">
                         <p className="welcome-hello">Hello, {displayName}</p>
@@ -1357,6 +1419,13 @@ export function FolioApp() {
                         ) : null}
                       </div>
                     )}
+                    {openThread.working ? (
+                      <WorkBanner
+                        threadId={openThread.id}
+                        since={openThread.working_since}
+                        kind={openThread.working_kind}
+                      />
+                    ) : null}
                     <form className="composer" onSubmit={(event) => void sendDraft(event)}>
                       <textarea
                         rows={1}
