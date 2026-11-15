@@ -493,6 +493,8 @@ def test_create_and_list_only_the_callers_threads(monkeypatch: pytest.MonkeyPatc
         assert [item["id"] for item in rows] == [first_id, second_id]
         for item in rows:
             assert item.pop("working") is False
+            assert item.pop("working_since") is None
+            assert item.pop("working_kind") is None
             assert item.pop("latest_message_at") is None
             _assert_item(item)
             assert item["name"] == "New thread"
@@ -2680,7 +2682,15 @@ def _latest_of(client: TestClient, thread_id: str) -> object:
     assert listed.status_code == 200
     items = [item for item in listed.json() if item["id"] == thread_id]
     assert len(items) == 1
-    assert set(items[0]) == {"id", "name", "created_at", "working", "latest_message_at"}
+    assert set(items[0]) == {
+        "id",
+        "name",
+        "created_at",
+        "working",
+        "working_since",
+        "working_kind",
+        "latest_message_at",
+    }
     return items[0]["latest_message_at"]
 
 

@@ -574,7 +574,7 @@ def get_threads(request: Request) -> Response:
     try:
         with connect() as connection:
             rows = list_threads_with_latest(connection, account_id)
-            working = run.in_flight_threads(connection, account_id)
+            working = run.in_flight_since(connection, account_id)
     except Exception:
         return _down()
     return JSONResponse(
@@ -584,6 +584,8 @@ def get_threads(request: Request) -> Response:
                 "name": row[1],
                 "created_at": row[2].isoformat(),
                 "working": row[0] in working,
+                "working_since": working[row[0]][0].isoformat() if row[0] in working else None,
+                "working_kind": working[row[0]][1] if row[0] in working else None,
                 "latest_message_at": row[3].isoformat() if row[3] is not None else None,
             }
             for row in rows

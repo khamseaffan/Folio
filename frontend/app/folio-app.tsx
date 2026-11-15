@@ -217,6 +217,8 @@ function threadSummary(thread: Thread): Thread {
     name: thread.name,
     created_at: thread.created_at,
     working: thread.working,
+    working_since: thread.working_since,
+    working_kind: thread.working_kind,
     latest_message_at: thread.latest_message_at,
   };
 }
@@ -226,6 +228,8 @@ function withListed(page: Thread, listed: Thread | undefined): Thread {
   return {
     ...threadSummary(page),
     working: listed?.working ?? page.working,
+    working_since: listed ? listed.working_since : page.working_since,
+    working_kind: listed ? listed.working_kind : page.working_kind,
     latest_message_at: listed?.latest_message_at ?? page.latest_message_at,
   };
 }
@@ -298,6 +302,40 @@ async function runBoot(): Promise<BootResult> {
 function bootOnce(): Promise<BootResult> {
   bootTask ??= runBoot();
   return bootTask;
+}
+
+// "4 min 12 s" for a run that has been going on for 252 seconds.
+function elapsedText(since: string, now: number): string {
+  const started = Date.parse(since);
+  if (Number.isNaN(started)) return "";
+  const seconds = Math.max(0, Math.floor((now - started) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  if (minutes === 0) return `${seconds} s`;
+  if (minutes < 60) return `${minutes} min ${seconds % 60} s`;
+  return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+}
+
+function WorkBanner({ since, kind }: { since: string | null; kind: string | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const title = kind === "research" ? "Research in progress" : "Working in the background";
+  return (
+    <div className="work-banner">
+      <span className="work-dot" aria-hidden="true" />
+      <div className="work-text">
+        <p className="work-title" role="status">
+          {title}
+          {since ? <span className="work-time">{elapsedText(since, now)}</span> : null}
+        </p>
+        <p className="work-note">
+          You can leave this page. The result is added to this thread when it is ready.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export function FolioApp() {
@@ -1263,6 +1301,9 @@ export function FolioApp() {
                     <header className="top">
                       <h1 className="thread-name">{openThread.name}</h1>
                     </header>
+                    {openThread.working ? (
+                      <WorkBanner since={openThread.working_since} kind={openThread.working_kind} />
+                    ) : null}
                     {messages.length === 0 ? (
                       <div className="welcome">
                         <p className="welcome-hello">Hello, {displayName}</p>
