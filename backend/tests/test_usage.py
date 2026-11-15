@@ -8,7 +8,14 @@ from app.account import ensure_account
 from app.db import connect
 from app.message import insert_message
 from app.thread import create_thread
-from app.usage import apply, record_usage, token_totals_for_email, tokens_for_email
+from app.usage import (
+    SEARCH_PRICE,
+    apply,
+    record_search,
+    record_usage,
+    token_totals_for_email,
+    tokens_for_email,
+)
 
 PROVIDER = "openai"
 MODEL = "gpt-6.1-sol"
@@ -362,6 +369,63 @@ def test_token_totals_for_email_sums_each_count_and_skips_missing(account) -> No
         assert token_totals_for_email(connection, email.upper()) == (4, 5, 9)
         none = f"none-{uuid.uuid4()}@example.com"
         assert token_totals_for_email(connection, none) == (0, 0, 0)
+
+
+def _run_id(account_id: uuid.UUID) -> uuid.UUID:
+    from app.run import create_run
+
+    with connect() as connection:
+        thread = create_thread(connection, account_id)
+        run = create_run(connection, account_id, thread[0], None, "research", "look")
+    assert run is not None
+    return run[0]
+
+
+def test_record_search_stores_one_priced_row_without_tokens(account) -> None:
+    account_id, email = account
+    run_id = _run_id(account_id)
+    with connect() as connection:
+        row = record_search(connection, account_id, email.upper(), run_id)
+    assert row[1] == account_id
+    assert row[2] == email
+    assert (row[4], row[5]) == ("tavily", "search")
+    assert row[6:9] == (None, None, None)
+    assert row[9] == SEARCH_PRICE
+    assert row[10] is False
+    assert row[12] == run_id
+    assert row[13] == "research"
+    with connect() as connection:
+        flags = connection.execute(
+            "SELECT estimated, usage_missing FROM usage WHERE id = %s", (row[0],)
+        ).fetchone()
+    assert flags == (False, False)
+
+
+def test_a_search_row_adds_no_tokens(account) -> None:
+    account_id, email = account
+    with connect() as connection:
+        record_usage(connection, account_id, email, "chat", PROVIDER, MODEL, 3, 4, 7)
+        record_search(connection, account_id, email, _run_id(account_id))
+        assert tokens_for_email(connection, email) == 7
+        assert token_totals_for_email(connection, email) == (3, 4, 7)
+
+
+def test_a_search_row_keeps_the_account_until_it_is_deleted(account) -> None:
+    account_id, email = account
+    with connect() as connection:
+        row = record_search(connection, account_id, email, _run_id(account_id))
+    with connect() as connection:
+        kept = connection.execute(
+            "SELECT account_id FROM usage WHERE id = %s", (row[0],)
+        ).fetchone()
+    assert kept == (account_id,)
+    with connect() as connection:
+        connection.execute("DELETE FROM account WHERE id = %s", (account_id,))
+    with connect() as connection:
+        after = connection.execute(
+            "SELECT account_id, email FROM usage WHERE id = %s", (row[0],)
+        ).fetchone()
+    assert after == (None, email)
 
 
 def test_apply_is_idempotent() -> None:

@@ -19,6 +19,10 @@ _PRICES: dict[tuple[str, str], tuple[Decimal, Decimal]] = {
     ),
 }
 
+# https://www.tavily.com/pricing pay as you go $0.008 per credit, and a basic search is 1 credit
+# (https://docs.tavily.com/documentation/api-reference/endpoint/search).
+SEARCH_PRICE = Decimal("0.008")
+
 UsageRow = tuple[
     uuid.UUID,
     uuid.UUID | None,
@@ -123,6 +127,44 @@ def record_usage(
             operation,
             estimated and not usage_missing,
         ),
+    ).fetchone()
+    if stored is None:
+        raise RuntimeError("usage was not stored")
+    return stored
+
+
+def record_search(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID | None,
+    email: str,
+    run_id: uuid.UUID | None,
+) -> UsageRow:
+    apply(connection)
+    # A search has no tokens by nature, so it is not "missing" usage.
+    stored = connection.execute(
+        """
+        INSERT INTO usage (
+            account_id, email, provider, model, expected_cost, usage_missing,
+            run_id, operation, estimated
+        )
+        VALUES (%s, %s, 'tavily', 'search', %s, false, %s, 'research', false)
+        RETURNING
+            id,
+            account_id,
+            email,
+            at,
+            provider,
+            model,
+            input_tokens,
+            output_tokens,
+            total_tokens,
+            expected_cost,
+            usage_missing,
+            message_id,
+            run_id,
+            operation
+        """,
+        (account_id, email.lower(), SEARCH_PRICE, run_id),
     ).fetchone()
     if stored is None:
         raise RuntimeError("usage was not stored")
