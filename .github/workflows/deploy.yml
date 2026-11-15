@@ -43,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       IMAGE: ${{ vars.IMAGE_REPO }}/api:${{ github.event.workflow_run.head_sha }}
+      RESEARCH_IMAGE: ${{ vars.IMAGE_REPO }}/research:${{ github.event.workflow_run.head_sha }}
       # The 0.1 base is set here only. A GitHub release tag becomes the version later.
       VERSION: v0.1.${{ github.run_number }}
       REGION: ${{ vars.GCP_REGION }}
@@ -79,6 +80,23 @@ jobs:
             gcloud run deploy folio-worker --image "$IMAGE" --region "$REGION" --project "$PROJECT"
           else
             echo "folio-worker does not exist yet, so it is skipped. Apply Terraform in infra/, then run this workflow again."
+          fi
+      - name: Build and push the research image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          file: backend/Dockerfile.research
+          push: true
+          build-args: VERSION=${{ env.VERSION }}
+          tags: |
+            ${{ env.RESEARCH_IMAGE }}
+            ${{ vars.IMAGE_REPO }}/research:${{ env.VERSION }}
+      - name: Deploy the research service
+        run: |
+          if gcloud run services describe folio-research --region "$REGION" --project "$PROJECT" >/dev/null 2>&1; then
+            gcloud run deploy folio-research --image "$RESEARCH_IMAGE" --region "$REGION" --project "$PROJECT"
+          else
+            echo "folio-research does not exist yet, so it is skipped. Apply Terraform in infra/, then run this workflow again."
           fi
       - name: Check the live site
         run: |

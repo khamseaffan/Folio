@@ -23,3 +23,14 @@ resource "google_secret_manager_secret" "openai_api_key" {
 
   depends_on = [google_project_service.enabled]
 }
+
+# The value is added by hand: gcloud secrets versions add tavily-api-key
+resource "google_secret_manager_secret" "tavily_api_key" {
+  secret_id = "tavily-api-key"
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.enabled]
+}

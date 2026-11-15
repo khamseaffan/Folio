@@ -57,3 +57,9 @@ resource "google_service_account_iam_member" "deploy_acts_as_worker" {
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.deploy.email}"
 }
+
+resource "google_service_account_iam_member" "deploy_acts_as_research" {
+  service_account_id = google_service_account.research.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.deploy.email}"
+}

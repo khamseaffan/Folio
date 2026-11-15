@@ -103,7 +103,7 @@ resource "google_cloud_run_v2_service" "worker" {
       args    = ["exec uvicorn app.worker:app --host 0.0.0.0 --port $${PORT:-8080} --proxy-headers --forwarded-allow-ips='*'"]
 
       dynamic "env" {
-        for_each = merge(local.plain_env, {
+        for_each = merge(local.plain_env, local.research_env, {
           RUN_QUEUE       = google_cloud_tasks_queue.runs.id
           WORKER_URL      = local.worker_url
           INVOKER_ACCOUNT = google_service_account.invoker.email
