@@ -260,6 +260,12 @@ Design for the running service. Not switched on yet.
 - Reading a page, reading a file, saving a file in the account, and reading a Drive copy do not ask.
 - A task that would cause physical harm stops and asks you first.
 
+**Reading pages**
+
+- Chrome reads public pages only. Its only way out is a proxy that refuses private destinations, including the cloud metadata service.
+- The model can open only addresses it was shown, in a search result or on a page it opened.
+- Page text reaches only a model call that has no tools.
+
 **Why**
 
 Sign-in stays in Firebase. The notes stay in Postgres. A yes on one form is not a yes for the next form.
