@@ -292,3 +292,20 @@ def test_a_stopped_proxy_no_longer_accepts():
     proxy.stop()
     with pytest.raises(OSError):
         socket.create_connection(("127.0.0.1", port), timeout=1)
+
+
+@pytest.mark.parametrize(
+    "target", ["http://169.254.169.254/robots.txt", "http://localhost/robots.txt"]
+)
+def test_the_robots_fetch_cannot_go_around_the_proxy(target):
+    # urllib would skip the proxy for some of these on some systems.
+    from app.robots import fetch_through_proxy
+
+    proxy = SafeProxy()
+    proxy.start()
+    try:
+        status, _ = fetch_through_proxy(proxy.port)(target)
+    finally:
+        proxy.stop()
+    assert status == 403
+    assert len(proxy.refused) == 1

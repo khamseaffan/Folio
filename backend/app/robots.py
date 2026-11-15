@@ -1,12 +1,14 @@
-import urllib.error
-import urllib.request
+import http.client
 from collections.abc import Callable
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
+
+from app.urlcheck import normalize_url
 
 USER_AGENT = "FolioResearch/0.1"
 MAX_ROBOTS_BYTES = 500_000
 FETCH_TIMEOUT_SECONDS = 10
+MAX_REDIRECTS = 3
 
 
 class Robots:
@@ -42,18 +44,32 @@ class Robots:
 
 
 def fetch_through_proxy(port: int) -> Callable[[str], tuple[int, str]]:
-    proxy = f"http://127.0.0.1:{port}"
-    opener = urllib.request.build_opener(
-        urllib.request.ProxyHandler({"http": proxy, "https": proxy})
-    )
-
+    # Not urllib: its proxy handler skips the proxy for hosts on the system's exception list
+    # (on macOS that includes 169.254.0.0/16), which would be a way around the proxy.
     def fetch(url: str) -> tuple[int, str]:
-        request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        try:
-            with opener.open(request, timeout=FETCH_TIMEOUT_SECONDS) as response:
+        for _ in range(MAX_REDIRECTS + 1):
+            parts = urlsplit(normalize_url(url))
+            https = parts.scheme == "https"
+            connection = (http.client.HTTPSConnection if https else http.client.HTTPConnection)(
+                "127.0.0.1", port, timeout=FETCH_TIMEOUT_SECONDS
+            )
+            try:
+                headers = {"User-Agent": USER_AGENT, "Connection": "close"}
+                if https:
+                    connection.set_tunnel(parts.hostname or "", parts.port or 443)
+                    target = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+                else:
+                    target = url
+                connection.request("GET", target, headers=headers)
+                response = connection.getresponse()
+                location = response.getheader("Location")
+                if response.status in (301, 302, 303, 307, 308) and location:
+                    url = urljoin(url, location)
+                    continue
                 raw = response.read(MAX_ROBOTS_BYTES)
                 return response.status, raw.decode("utf-8", errors="replace")
-        except urllib.error.HTTPError as error:
-            return error.code, ""
+            finally:
+                connection.close()
+        return 0, ""
 
     return fetch
