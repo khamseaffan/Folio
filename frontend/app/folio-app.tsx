@@ -387,21 +387,6 @@ function WorkBanner({
             <ActivityText line={latest} />
           </p>
         ) : null}
-        <p className="work-note">
-          You can leave this page. The result is added to this thread when it is ready.
-        </p>
-        {lines.length > 0 ? (
-          <details className="work-log">
-            <summary>What it has done so far ({lines.length})</summary>
-            <ol>
-              {lines.map((line, index) => (
-                <li key={`${line.at}-${index}`} className={`act-${line.kind}`}>
-                  <ActivityText line={line} />
-                </li>
-              ))}
-            </ol>
-          </details>
-        ) : null}
       </div>
     </div>
   );
