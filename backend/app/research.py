@@ -27,6 +27,7 @@ from app.run import (
     get_run,
     hold_working,
 )
+from app.run_activity import record_activity
 from app.search import Search, SearchError, open_search
 from app.thread import get_thread
 from app.turn import _STOPPED, _account, _limit, _system_prompt, _who
@@ -186,6 +187,27 @@ class Recorder(Protocol):
     def search_call(self) -> None: ...
 
 
+class Activity(Protocol):
+    """Told what the research is doing, so the person can follow it while it works."""
+
+    def searched(self, query: str) -> None: ...
+
+    def read(self, title: str, url: str | None) -> None: ...
+
+    def skipped(self, url: str) -> None: ...
+
+
+class _NoActivity:
+    def searched(self, query: str) -> None:
+        pass
+
+    def read(self, title: str, url: str | None) -> None:
+        pass
+
+    def skipped(self, url: str) -> None:
+        pass
+
+
 @dataclass
 class _Source:
     kind: str
@@ -228,6 +250,7 @@ class _Research:
         memory: Callable[[ToolCall], str],
         system_prompt: str,
         elapsed: Callable[[], float],
+        activity: Activity | None = None,
     ) -> None:
         self.question = question
         self.model = model
@@ -238,6 +261,7 @@ class _Research:
         self.memory = memory
         self.prompt = system_prompt
         self.elapsed = elapsed
+        self.activity: Activity = activity if activity is not None else _NoActivity()
         self.tools = (_SEARCH_SPEC, _OPEN_SPEC, *_read_specs(), _SUBMIT_SPEC)
         self.blocks = [Block(role="person", text=question)]
         self.sources: list[_Source] = []
@@ -330,6 +354,7 @@ class _Research:
         if self.searches >= MAX_SEARCHES:
             return _error(_LIMIT_ERRORS["searches"])
         self.searches += 1
+        self.activity.searched(query.strip())
         try:
             found = self.search.search(query.strip(), SEARCH_RESULTS)
         except SearchError as error:
@@ -370,10 +395,12 @@ class _Research:
         try:
             page = self.opener.open(address)
         except PageError as error:
+            self.activity.skipped(address)
             return _error(str(error))
+        title = _clean(page.title).strip()[:_TITLE_CHARS] or _clean(page.url)
+        self.activity.read(title, _clean(page.url))
         digest = self._digest(page)
         number = len(self.sources) + 1
-        title = _clean(page.title).strip()[:_TITLE_CHARS] or _clean(page.url)
         links: list[dict[str, str]] = []
         for link in page.links:
             try:
@@ -431,6 +458,7 @@ class _Research:
             if len(self.sources) >= MAX_SOURCES:
                 return _error(_LIMIT_ERRORS["sources"])
             self.files[name] = len(self.sources)
+            self.activity.read(_clean(name), None)
             self.sources.append(
                 _Source("file", _clean(name), None, _clean(body)[:_FILE_NOTE_CHARS], {})
             )
@@ -557,9 +585,10 @@ def run_research(
     memory: Callable[[ToolCall], str],
     system_prompt: str,
     elapsed: Callable[[], float],
+    activity: Activity | None = None,
 ) -> Outcome:
     return _Research(
-        question, model, search, opener, control, recorder, memory, system_prompt, elapsed
+        question, model, search, opener, control, recorder, memory, system_prompt, elapsed, activity
     ).run()
 
 
@@ -643,6 +672,30 @@ class _UsageRecorder:
     def search_call(self) -> None:
         with connect() as connection:
             record_search(connection, self._stored_account(connection), self._email, self._run_id)
+
+
+class _ActivityLog:
+    # Each line is written as it happens, in its own transaction, so the person sees it while the
+    # run works. A line that cannot be written is dropped: following along must never end a run.
+    def __init__(self, account_id: uuid.UUID, run_id: uuid.UUID) -> None:
+        self._account_id = account_id
+        self._run_id = run_id
+
+    def _write(self, kind: str, text: str, url: str | None = None) -> None:
+        try:
+            with connect() as connection:
+                record_activity(connection, self._account_id, self._run_id, kind, text, url)
+        except Exception as error:
+            _log.warning("run %s activity line not written: %s", self._run_id, type(error).__name__)
+
+    def searched(self, query: str) -> None:
+        self._write("search", query)
+
+    def read(self, title: str, url: str | None) -> None:
+        self._write("read", title, url)
+
+    def skipped(self, url: str) -> None:
+        self._write("skipped", url)
 
 
 def _status(connection: psycopg.Connection, run_id: uuid.UUID) -> str:
@@ -767,6 +820,7 @@ def execute_research(
             opener=page_opener,
             control=_RunControl(account_id, run_id, email),
             recorder=_UsageRecorder(account_id, email, run_id, model),
+            activity=_ActivityLog(account_id, run_id),
             memory=_memory_for(account_id, run[2]),
             system_prompt=prompt,
             elapsed=elapsed,
