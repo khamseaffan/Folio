@@ -9,3 +9,13 @@ A failed chat reply keeps the person's message. Words that had already arrived s
 A worker crash is told in the thread. A send on a website that may already have completed is not repeated. The agent tells the person what happened. When nothing was sent, the agent decides the next step, and it can ask the person whether to try again.
 
 A queued run retries a dead provider three times after the first attempt. A stopped account is not retried. After the third retry the run stops. The failed run stays on a dead letter queue for developers. The person sees one line in the thread that the run failed.
+
+A scheduled run is tried up to four times, and each try adds one to `attempt_count`. After the fourth failure the run is marked `dead`, the thread shows "A scheduled run failed.", and the failure is logged with the run id. The dead run stays in the `run` table with its task and attempt count. That table is the dead letter record.
+
+A run that fails because the account is stopped or at its limit is marked `cancelled` and is not tried again. A run whose thread was deleted is cancelled, or finishes with no message when the thread goes during the run.
+
+A run that has been `working` for more than 3 hours is marked `dead` by the next tick and told in the thread. This frees its schedule to fire again. A run that is still `queued` after 30 minutes is marked `dead` the same way. A `queued` run older than 2 minutes is put on the queue again by the tick, so a run that never reached the queue is not lost.
+
+The lines "A scheduled run failed." and the no-next-time line are plain assistant messages of kind `result`. They do not offer Try again, which belongs to a failed chat reply only.
+
+A schedule never stops without a line in the thread. When the next time cannot be worked out, the thread shows "This schedule has no next time now. Tell Folio when it should run again."

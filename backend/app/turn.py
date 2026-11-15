@@ -4,6 +4,8 @@ import threading
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, tzinfo
+from zoneinfo import ZoneInfo
 
 import psycopg
 
@@ -67,12 +69,38 @@ class TurnResult:
     omitted: tuple[MessageRow, ...]
 
 
-def _system_prompt(display_name: str | None, summary: str | None, profile: str | None) -> str:
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _zone(name: str | None) -> tuple[str, tzinfo]:
+    if name is not None:
+        try:
+            return name, ZoneInfo(name)
+        except Exception:
+            # An unknown or malformed name is the browser's problem, not a failed turn.
+            pass
+    return "UTC", UTC
+
+
+def _time_line(time_zone: str | None) -> str:
+    name, zone = _zone(time_zone)
+    now = _now().astimezone(zone).isoformat(timespec="minutes")
+    return f"The time now is {now}. The person's time zone is {name}."
+
+
+def _system_prompt(
+    display_name: str | None,
+    summary: str | None,
+    profile: str | None,
+    time_zone: str | None = None,
+) -> str:
     parts: list[str] = []
     if display_name is not None:
         parts.append(f"The person's name is {display_name}.")
     parts.append(_HARM)
     parts.append(MEMORY)
+    parts.append(_time_line(time_zone))
     if profile is not None:
         parts.append("The person's profile:")
         parts.append(profile)
@@ -167,12 +195,13 @@ def _cover(
     summary: str | None,
     messages: list[MessageRow],
     model: Model,
+    time_zone: str | None = None,
 ) -> tuple[str, list[Block], list[MessageRow]]:
     covered: set[uuid.UUID] = set()
     profile_file = get_file(connection, account_id, PROFILE)
     profile = profile_file[3] if profile_file is not None else None
     while True:
-        prompt = _system_prompt(display_name, summary, profile)
+        prompt = _system_prompt(display_name, summary, profile, time_zone)
         blocks, omitted = select_blocks(prompt, messages, model)
         if all(message[0] in covered for message in omitted):
             return prompt, blocks, omitted
@@ -278,6 +307,7 @@ def _prepare(
     thread_id: uuid.UUID,
     text: str,
     model: Model,
+    time_zone: str | None = None,
 ) -> _Prepared | str | None:
     opened = _open_turn(connection, account_id, thread_id)
     if not isinstance(opened, tuple):
@@ -299,6 +329,7 @@ def _prepare(
         thread[3],
         messages,
         model,
+        time_zone,
     )
     return _Prepared(
         session_id=session_id,
@@ -352,8 +383,9 @@ def run_turn(
     thread_id: uuid.UUID,
     text: str,
     model: Model,
+    time_zone: str | None = None,
 ) -> TurnResult | str | None:
-    prepared = _prepare(connection, session_id, account_id, thread_id, text, model)
+    prepared = _prepare(connection, session_id, account_id, thread_id, text, model, time_zone)
     if not isinstance(prepared, _Prepared):
         return prepared
     try:
@@ -521,6 +553,7 @@ def _prepare_retry(
     account_id: uuid.UUID,
     thread_id: uuid.UUID,
     model: Model,
+    time_zone: str | None = None,
 ) -> _Retry | str | None:
     opened = _open_turn(connection, account_id, thread_id)
     if not isinstance(opened, tuple):
@@ -547,6 +580,7 @@ def _prepare_retry(
         thread[3],
         context,
         model,
+        time_zone,
     )
     prepared = _Prepared(
         session_id=session_id,
@@ -745,8 +779,9 @@ def start_reply(
     thread_id: uuid.UUID,
     text: str,
     model: Model,
+    time_zone: str | None = None,
 ) -> LiveReply | str | None:
-    prepared = _prepare(connection, session_id, account_id, thread_id, text, model)
+    prepared = _prepare(connection, session_id, account_id, thread_id, text, model, time_zone)
     if not isinstance(prepared, _Prepared):
         return prepared
 
@@ -762,8 +797,9 @@ def start_retry(
     account_id: uuid.UUID,
     thread_id: uuid.UUID,
     model: Model,
+    time_zone: str | None = None,
 ) -> LiveReply | str | None:
-    prepared = _prepare_retry(connection, session_id, account_id, thread_id, model)
+    prepared = _prepare_retry(connection, session_id, account_id, thread_id, model, time_zone)
     if not isinstance(prepared, _Retry):
         return prepared
 

@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import ability, knowledge_file, operations
+from app import ability, knowledge_file, operations, run, schedule
 from app.account import (
     delete_account,
     ensure_account,
@@ -36,7 +36,7 @@ from app.sign_in_proof import (
     delete_firebase_user,
     verify_allowed_sign_in,
 )
-from app.thread import ThreadRow, get_thread
+from app.thread import ThreadRow, get_thread, list_threads, list_threads_with_latest
 from app.turn import NO_FAILURE, start_reply, start_retry
 from app.usage import token_totals_for_email
 
@@ -408,6 +408,17 @@ async def _message_text(request: Request) -> str | None:
     return text
 
 
+async def _time_zone(request: Request) -> str | None:
+    try:
+        body = await request.json()
+    except Exception:
+        return None
+    if not isinstance(body, dict):
+        return None
+    zone = body.get("time_zone")
+    return zone if isinstance(zone, str) else None
+
+
 def _thread_item(row: ThreadRow) -> dict[str, str]:
     return {
         "id": str(row[0]),
@@ -560,10 +571,51 @@ def get_threads(request: Request) -> Response:
     if isinstance(opened, JSONResponse):
         return opened
     _, account_id = opened
-    result = _operate(account_id, "list_threads", {})
-    if isinstance(result, JSONResponse):
-        return result
-    return JSONResponse(content=result["threads"])
+    try:
+        with connect() as connection:
+            rows = list_threads_with_latest(connection, account_id)
+            working = run.in_flight_threads(connection, account_id)
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content=[
+            {
+                "id": str(row[0]),
+                "name": row[1],
+                "created_at": row[2].isoformat(),
+                "working": row[0] in working,
+                "latest_message_at": row[3].isoformat() if row[3] is not None else None,
+            }
+            for row in rows
+        ]
+    )
+
+
+@app.get("/schedules")
+def get_schedules(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        with connect() as connection:
+            rows = schedule.list_schedules(connection, account_id)
+            names = {row[0]: row[2] for row in list_threads(connection, account_id)}
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content=[
+            {
+                "id": str(row[0]),
+                "task": row[3],
+                "when_text": row[4],
+                "next_run_at": row[5].isoformat() if row[5] is not None else None,
+                "thread_id": str(row[2]),
+                "thread_name": names.get(row[2], ""),
+            }
+            for row in rows
+        ]
+    )
 
 
 @app.post("/threads")
@@ -643,6 +695,7 @@ async def post_message(request: Request, thread_id: str) -> Response:
     text = await _message_text(request)
     if text is None:
         return _error(400, _MESSAGE)
+    time_zone = await _time_zone(request)
     try:
         with connect() as connection:
             started = start_reply(
@@ -652,6 +705,7 @@ async def post_message(request: Request, thread_id: str) -> Response:
                 parsed,
                 text,
                 open_model(),
+                time_zone,
             )
     except Exception:
         return _down()
@@ -675,6 +729,7 @@ async def retry_message(request: Request, thread_id: str) -> Response:
     parsed = _parse_thread_id(thread_id)
     if parsed is None:
         return _error(404, _NOT_FOUND)
+    time_zone = await _time_zone(request)
     try:
         with connect() as connection:
             started = start_retry(
@@ -683,6 +738,7 @@ async def retry_message(request: Request, thread_id: str) -> Response:
                 account_id,
                 parsed,
                 open_model(),
+                time_zone,
             )
     except Exception:
         return _down()

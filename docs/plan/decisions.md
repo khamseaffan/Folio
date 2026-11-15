@@ -42,6 +42,18 @@ None of these is chosen yet.
 - D26. `knowledge_file` has no `storage_key`. The row holds the text, and no Cloud Storage copy exists.
 - D27. `profile.md` holds at most 20,000 characters. A write, append, or edit that would pass it is refused and the agent is told. It is sent on every call, so an unlimited file could outgrow the model's context and stop every turn.
 
+## Schedules
+
+- D28. `run` has a `created_at` column that the picture did not show. The rule for a stuck run needs to know when the run started.
+- D29. A run cannot create, change, or delete a schedule. Those three tools are left out of a run.
+- D30. A run that has been `working` for more than 3 hours is marked dead by the next tick, and a run that never left the queue is marked dead after 30 minutes. Both are measured from `created_at`, because `run` has no `started_at`. A queued run older than 2 minutes is put on the queue again.
+- D31. The queue runs at most 3 runs at once.
+- D32. The thread list is asked for again every 20 seconds while a run is working.
+- D33. The line written in the thread for a dead run is "A scheduled run failed."
+- D34. A one-time schedule stays listed with no next time after it has run. The agent deletes it when asked.
+- D35. `message.run_id` and `usage.run_id` now have keys to `run`, as the picture draws. They clear when the run is deleted.
+- D36. The worker is a second Cloud Run service made from the same image. It serves only the tick and the run routes, and only the queue's service account may call it.
+
 ## Open questions
 
 The schema picture lacks an answer to each.

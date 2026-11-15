@@ -123,6 +123,24 @@ The assignment asks for two features of my own.
 - If that same task is still running or still waiting for you, the next one is skipped.
 - A different task can run at the same time.
 
+**How a schedule runs**
+
+- A clock calls the worker once a minute. The worker finds the schedules that are due.
+- For each one the model works out the next time. The result is stored, and one run is queued.
+- The queue calls the worker, which runs the task and writes one message in the thread.
+- A failed run is tried four times in all. Then it is marked dead, the thread shows one line, and the failure is logged.
+- A run stuck for 3 hours, or still queued after 30 minutes, is marked dead by the next minute's call. A run that never reached the queue is queued again.
+
+**Why a schedule is built this way**
+
+- The model works out the next time, because "every other Friday" or "the first working day of the month" is a question of meaning. Code would need a grammar for every way of saying it. Code only fires at a stored time.
+- If that call fails, the thread says so and the failure is logged. A schedule never stops quietly.
+- There is a tick every minute, and not one queued task per schedule, because the database is then the only place that knows what is due. A lost task cannot end a schedule for ever.
+- There is a queue, because the tick must finish in seconds and a run can take minutes. The queue also gives retries with waits, a limit on runs at once, and a second delivery if a worker dies.
+- The worker is a separate service that is not public. The API is public, and a route that starts work for any account must not be reachable from the internet. Google's access control closes it, and it can have a long timeout.
+- A run cannot create, change, or delete a schedule, so a scheduled task cannot multiply itself and spend the cap overnight.
+- One result is guaranteed by the run row. Its id is the queued task's name. The result message and `delivered_at` are saved in one transaction, and a second delivery sees `delivered_at` and stops.
+
 **Beyond the assignment**
 
 - A remembered way of working, taught in the chat, removed when you say so.

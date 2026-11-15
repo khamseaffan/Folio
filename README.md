@@ -26,8 +26,8 @@ Live at https://folio.khamseaffan.com.
 
 | Present | Not built |
 | --- | --- |
-| Sign-in with an email allowlist, sessions, a display name, and a settings screen with the sessions, the token totals, and account deletion | Research, files, schedules |
-| Threads with create, rename, and delete by a control or by the agent, and a streamed chat turn with usage rows, and memory: knowledge files, abilities, and the profile panel | Drive, the browser, voice |
+| Sign-in with an email allowlist, sessions, a display name, and a settings screen with the sessions, the token totals, and account deletion | Research, files |
+| Threads with create, rename, and delete by a control or by the agent, and a streamed chat turn with usage rows, and memory: knowledge files, abilities, and the profile panel, and schedules: the agent sets them, a worker runs them, and the result is a message in the thread | Drive, the browser, voice |
 | Deployment: Terraform on Google Cloud, Vercel, and CI/CD | Admin limits, and the provider and model selection |
 
 ## Deploy
@@ -47,6 +47,13 @@ uv run python -m app.migrate
 uv run uvicorn app.main:app --reload
 uv run ruff check .
 uv run pytest
+```
+
+Worker, from `backend/`. It serves the minute tick and the run route. Locally a run starts in the same process.
+
+```bash
+uv run uvicorn app.worker:app --port 8001
+curl -X POST localhost:8001/tick
 ```
 
 Web, from `frontend/`:

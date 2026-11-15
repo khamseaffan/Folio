@@ -1,12 +1,13 @@
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 import psycopg
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from app import ability, knowledge_file, live, thread
+from app import ability, knowledge_file, live, schedule, thread
 from app.model import ToolSpec
 
 NOT_FOUND = "Thread not found."
@@ -17,6 +18,9 @@ NO_FILE = "File not found."
 NO_ABILITY = "Ability not found."
 BAD_FILE_NAME = "A file name is 1 to 80 characters."
 BAD_TEXT = "That text cannot be stored."
+NO_SCHEDULE = "Schedule not found."
+BAD_TIME = "Give the next time as a date and time with a time zone, in the future."
+BAD_TASK = "A schedule needs a task and the words for when."
 TOO_MANY = "This turn has already opened five files."
 PROFILE_TOO_LONG = (
     "profile.md can hold at most 20,000 characters. Shorten it, or move facts into another file."
@@ -25,6 +29,7 @@ READ_LIMIT = 5
 PROFILE_LIMIT = 20_000
 
 _NAME_LIMIT = 80
+_SCHEDULE_TEXT_LIMIT = 2_000
 
 Result = dict[str, Any]
 
@@ -49,6 +54,8 @@ class Operation:
     input: type[BaseModel]
     run: Callable[[psycopg.Connection, uuid.UUID, Context, Any], Result]
     agent: bool
+    # Left out of a scheduled run, so a task cannot make more schedules.
+    chat_only: bool = False
 
 
 class _Input(BaseModel):
@@ -104,6 +111,17 @@ class _WriteAbility(_Input):
 
 class _DeleteAbility(_Input):
     ability_id: uuid.UUID
+
+
+class _WriteSchedule(_Input):
+    schedule_id: uuid.UUID | None = None
+    task: str
+    when_text: str
+    next_run_at: str
+
+
+class _DeleteSchedule(_Input):
+    schedule_id: uuid.UUID
 
 
 def _refused(code: str, error: str) -> Result:
@@ -380,6 +398,88 @@ def _delete_ability(
     return {"ok": True, "ability_id": str(given.ability_id)}
 
 
+def _schedule_text(raw: str) -> str | None:
+    text = raw.strip()
+    if len(text) < 1 or len(text) > _SCHEDULE_TEXT_LIMIT or not _clean(text):
+        return None
+    return text
+
+
+def _future_time(raw: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(raw.strip())
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    if parsed <= datetime.now(UTC):
+        return None
+    return parsed
+
+
+def _schedule_item(row: schedule.ScheduleRow) -> dict[str, str | None]:
+    return {
+        "id": str(row[0]),
+        "task": row[3],
+        "when_text": row[4],
+        "next_run_at": row[5].isoformat() if row[5] is not None else None,
+    }
+
+
+def _list_schedules(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _NoInput,
+) -> Result:
+    rows = schedule.list_schedules(connection, account_id)
+    return {
+        "ok": True,
+        "schedules": [{**_schedule_item(row), "thread_id": str(row[2])} for row in rows],
+    }
+
+
+def _write_schedule(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _WriteSchedule,
+) -> Result:
+    task = _schedule_text(given.task)
+    when_text = _schedule_text(given.when_text)
+    if task is None or when_text is None:
+        return _refused("invalid", BAD_TASK)
+    next_run_at = _future_time(given.next_run_at)
+    if next_run_at is None:
+        return _refused("invalid", BAD_TIME)
+    if given.schedule_id is None:
+        if context.thread_id is None:
+            return _refused("not_found", NOT_FOUND)
+        row = schedule.create_schedule(
+            connection, account_id, context.thread_id, task, when_text, next_run_at
+        )
+        if row is None:
+            return _refused("not_found", NOT_FOUND)
+    else:
+        row = schedule.update_schedule(
+            connection, account_id, given.schedule_id, task, when_text, next_run_at
+        )
+        if row is None:
+            return _refused("not_found", NO_SCHEDULE)
+    return {"ok": True, "schedule": _schedule_item(row)}
+
+
+def _delete_schedule(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _DeleteSchedule,
+) -> Result:
+    if not schedule.delete_schedule(connection, account_id, given.schedule_id):
+        return _refused("not_found", NO_SCHEDULE)
+    return {"ok": True, "schedule_id": str(given.schedule_id)}
+
+
 OPERATIONS: dict[str, Operation] = {
     operation.name: operation
     for operation in (
@@ -497,6 +597,35 @@ OPERATIONS: dict[str, Operation] = {
             _delete_ability,
             True,
         ),
+        Operation(
+            "list_schedules",
+            "List the person's schedules with their ids, tasks, the words for when, the next "
+            "time, and the thread each belongs to.",
+            _NoInput,
+            _list_schedules,
+            True,
+        ),
+        Operation(
+            "write_schedule",
+            "Create a schedule, or replace the one with the given id. A schedule is work Folio "
+            "does by itself at a time the person names, and it writes the result in a thread. "
+            "A new schedule belongs to the thread of this conversation. Put the person's time "
+            "zone into when_text, for example 'every weekday at 09:00, America/New_York'. "
+            "Give next_run_at as the next time it should run, in ISO 8601 with an offset, "
+            "in the future.",
+            _WriteSchedule,
+            _write_schedule,
+            True,
+            True,
+        ),
+        Operation(
+            "delete_schedule",
+            "Delete one schedule by its id. It cannot be restored.",
+            _DeleteSchedule,
+            _delete_schedule,
+            True,
+            True,
+        ),
     )
 }
 
@@ -507,9 +636,10 @@ def call(
     context: Context,
     name: str,
     arguments: dict[str, object],
+    in_run: bool = False,
 ) -> Result:
     operation = OPERATIONS.get(name)
-    if operation is None:
+    if operation is None or (in_run and operation.chat_only):
         return _refused("unknown", UNKNOWN)
     try:
         given = operation.input.model_validate(arguments)
@@ -518,9 +648,9 @@ def call(
     return operation.run(connection, account_id, context, given)
 
 
-def agent_tools() -> list[ToolSpec]:
+def agent_tools(in_run: bool = False) -> list[ToolSpec]:
     return [
         ToolSpec(operation.name, operation.description, operation.input.model_json_schema())
         for operation in OPERATIONS.values()
-        if operation.agent
+        if operation.agent and not (in_run and operation.chat_only)
     ]

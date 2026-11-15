@@ -492,6 +492,8 @@ def test_create_and_list_only_the_callers_threads(monkeypatch: pytest.MonkeyPatc
         rows = listed.json()
         assert [item["id"] for item in rows] == [first_id, second_id]
         for item in rows:
+            assert item.pop("working") is False
+            assert item.pop("latest_message_at") is None
             _assert_item(item)
             assert item["name"] == "New thread"
         assert their_id not in {item["id"] for item in rows}
@@ -1037,7 +1039,16 @@ def test_mid_stream_model_error_keeps_the_arrived_text_and_hides_the_cause(
         _remove(email)
 
 
-HARM = f"A task that would cause physical harm stops and asks.\n{MEMORY}"
+NOW = datetime(2026, 11, 14, 9, 30, 41, tzinfo=UTC)
+TIME_LINE = "The time now is 2026-11-14T09:30+00:00. The person's time zone is UTC."
+HARM = f"A task that would cause physical harm stops and asks.\n{MEMORY}\n{TIME_LINE}"
+
+
+@pytest.fixture(autouse=True)
+def _fixed_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The prompt carries the time, so the exact-prompt checks need a clock that does not move.
+    monkeypatch.setattr("app.turn._now", lambda: NOW)
+
 NO_FAILURE = "There is no failed reply."
 
 
@@ -2427,5 +2438,334 @@ def test_a_refused_memory_call_is_logged(
             "read_knowledge" in record.getMessage() and "not_found" in record.getMessage()
             for record in caplog.records
         )
+    finally:
+        _remove(email)
+
+
+def _prompt_time_line(prompt: str) -> str:
+    lines = [line for line in prompt.split("\n") if line.startswith("The time now is ")]
+    assert len(lines) == 1
+    return lines[0]
+
+
+def test_the_prompt_carries_the_time_in_the_zone_the_browser_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Tokyo")
+    _remove(email)
+    model = _PromptModel(reply="Fine.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(
+            f"/threads/{thread_id}/messages",
+            json={"text": "hello", "time_zone": "Asia/Tokyo"},
+        )
+        assert _events(posted.text)[-1] == {"done": True}
+        assert _prompt_time_line(model.prompts[0]) == (
+            "The time now is 2026-11-14T18:30+09:00. The person's time zone is Asia/Tokyo."
+        )
+        # The line sits after the memory instruction.
+        assert model.prompts[0].index(MEMORY) < model.prompts[0].index("The time now is ")
+    finally:
+        _remove(email)
+
+
+@pytest.mark.parametrize("sent", ["Not/AZone", "", "../etc/passwd", 7, None, ["UTC"]])
+def test_a_bad_zone_gives_utc_and_no_error(monkeypatch: pytest.MonkeyPatch, sent: object) -> None:
+    email = _email("BadZone")
+    _remove(email)
+    model = _PromptModel(reply="Fine.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(
+            f"/threads/{thread_id}/messages", json={"text": "hello", "time_zone": sent}
+        )
+        assert posted.status_code == 200
+        assert _events(posted.text)[-1] == {"done": True}
+        assert _prompt_time_line(model.prompts[0]) == TIME_LINE
+    finally:
+        _remove(email)
+
+
+def test_a_message_without_a_zone_uses_utc(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("NoZone")
+    _remove(email)
+    model = _PromptModel(reply="Fine.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert _prompt_time_line(model.prompts[0]) == TIME_LINE
+    finally:
+        _remove(email)
+
+
+def test_a_retry_takes_the_zone_and_the_zone_is_not_stored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("RetryZone")
+    _remove(email)
+    failing = FakeModel(error=RuntimeError(CAUSE))
+    retrying = _PromptModel(reply="Fine.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, failing)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        _use_model(monkeypatch, retrying)
+        retried = client.post(f"/threads/{thread_id}/retry", json={"time_zone": "Asia/Tokyo"})
+        assert _events(retried.text)[-1] == {"done": True}
+        assert "2026-11-14T18:30+09:00" in _prompt_time_line(retrying.prompts[0])
+        with connect() as connection:
+            stored = connection.execute(
+                "SELECT count(*) FROM message WHERE thread_id = %s AND body LIKE %s",
+                (thread_id, "%Asia/Tokyo%"),
+            ).fetchone()
+        assert stored == (0,)
+    finally:
+        _remove(email)
+
+
+def test_the_prompt_time_moves_with_the_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Clock")
+    _remove(email)
+    first = _PromptModel(reply="One.")
+    second = _PromptModel(reply="Two.")
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, first)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "one"})
+        monkeypatch.setattr("app.turn._now", lambda: NOW + timedelta(days=1, minutes=5))
+        _use_model(monkeypatch, second)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "two"})
+        assert "2026-11-14T09:30+00:00" in _prompt_time_line(first.prompts[0])
+        assert "2026-11-15T09:35+00:00" in _prompt_time_line(second.prompts[0])
+    finally:
+        _remove(email)
+
+
+def test_the_agent_creates_a_schedule_in_this_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    email = _email("Schedule")
+    _remove(email)
+    when = (datetime.now(UTC) + timedelta(days=1)).isoformat()
+    model = ScriptedModel(
+        script=(
+            _tool(
+                "write_schedule",
+                {
+                    "task": "Three things to focus on",
+                    "when_text": "every weekday at 09:00, UTC",
+                    "next_run_at": when,
+                },
+            ),
+            Reply("Done.", 7, 2, 9),
+        )
+    )
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, model)
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "every weekday"})
+        assert _events(posted.text)[-1] == {"done": True}
+        with connect() as connection:
+            rows = connection.execute(
+                "SELECT thread_id::text, task, when_text FROM schedule WHERE account_id = %s",
+                (_account_id(email),),
+            ).fetchall()
+        assert rows == [(thread_id, "Three things to focus on", "every weekday at 09:00, UTC")]
+    finally:
+        _remove(email)
+
+
+def _make_dead_run(email: str, thread_id: str) -> None:
+    from app import scheduled
+    from app.run import create_run
+    from app.schedule import create_schedule
+
+    account_id = _account_id(email)
+    with connect() as connection:
+        made = create_schedule(
+            connection,
+            account_id,
+            uuid.UUID(thread_id),
+            "task",
+            "daily",
+            datetime.now(UTC) + timedelta(hours=1),
+        )
+        assert made is not None
+        run = create_run(connection, account_id, uuid.UUID(thread_id), made[0], "schedule", "task")
+    assert run is not None
+    outcomes = [
+        scheduled.execute(run[0], FakeModel(error=RuntimeError(CAUSE)))
+        for _ in range(scheduled.MAX_ATTEMPTS)
+    ]
+    assert outcomes[-1] == "dead"
+
+
+def _make_no_next_time_line(email: str, thread_id: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app import scheduled
+    from app.schedule import create_schedule
+
+    monkeypatch.setattr("app.scheduled.enqueue", lambda run_id: None)
+    account_id = _account_id(email)
+    with connect() as connection:
+        made = create_schedule(
+            connection,
+            account_id,
+            uuid.UUID(thread_id),
+            "task",
+            "daily",
+            datetime.now(UTC) + timedelta(hours=1),
+        )
+        assert made is not None
+        connection.execute(
+            "UPDATE schedule SET next_run_at = now() - interval '1 minute' WHERE id = %s",
+            (made[0],),
+        )
+    scheduled.tick(FakeModel(complete_error=RuntimeError(CAUSE)))
+
+
+@pytest.mark.parametrize("line", ["dead", "no_next_time"])
+def test_a_schedule_line_does_not_offer_a_retry(
+    monkeypatch: pytest.MonkeyPatch, line: str
+) -> None:
+    from app.scheduled import FAILED_LINE, NO_NEXT_LINE
+
+    email = _email("LineRetry")
+    _remove(email)
+    after = FakeModel(reply=Reply("never", 1, 1, 2))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        if line == "dead":
+            _make_dead_run(email, thread_id)
+        else:
+            _make_no_next_time_line(email, thread_id, monkeypatch)
+        loaded = client.get(f"/threads/{thread_id}").json()["messages"]
+        assert [m["body"] for m in loaded] == [FAILED_LINE if line == "dead" else NO_NEXT_LINE]
+        assert loaded[0]["kind"] == "result"
+        _use_model(monkeypatch, after)
+        again = client.post(f"/threads/{thread_id}/retry")
+        assert again.status_code == 400
+        assert again.json() == {"error": NO_FAILURE}
+        assert after.calls == 0 and after.completed == 0
+    finally:
+        _remove(email)
+
+
+def test_a_real_failed_reply_still_retries_after_a_schedule_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("LineThenRetry")
+    _remove(email)
+    failing = FakeModel(error=RuntimeError(CAUSE))
+    retrying = FakeModel(reply=Reply("Fine.", 1, 1, 2))
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        _use_model(monkeypatch, failing)
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        _make_dead_run(email, thread_id)
+        _use_model(monkeypatch, retrying)
+        retried = client.post(f"/threads/{thread_id}/retry")
+        assert retried.status_code == 200
+        assert _events(retried.text)[-1] == {"done": True}
+        assert retrying.calls == 1
+    finally:
+        _remove(email)
+
+
+def _latest_of(client: TestClient, thread_id: str) -> object:
+    listed = client.get("/threads")
+    assert listed.status_code == 200
+    items = [item for item in listed.json() if item["id"] == thread_id]
+    assert len(items) == 1
+    assert set(items[0]) == {"id", "name", "created_at", "working", "latest_message_at"}
+    return items[0]["latest_message_at"]
+
+
+def test_the_thread_list_says_when_a_thread_last_received_a_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.run import create_run
+    from app.schedule import create_schedule
+    from app.scheduled import execute
+
+    email = _email("Latest")
+    _remove(email)
+    try:
+        client, thread_id = _open_thread(monkeypatch, email)
+        assert _latest_of(client, thread_id) is None
+
+        _use_model(monkeypatch, FakeModel(reply=Reply("Hi.", 1, 1, 2)))
+        client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        with connect() as connection:
+            newest = connection.execute(
+                "SELECT max(created_at) FROM message WHERE thread_id = %s", (thread_id,)
+            ).fetchone()
+        assert newest is not None
+        first = _latest_of(client, thread_id)
+        assert first == newest[0].isoformat()
+
+        account_id = _account_id(email)
+        with connect() as connection:
+            made = create_schedule(
+                connection,
+                account_id,
+                uuid.UUID(thread_id),
+                "task",
+                "daily",
+                datetime.now(UTC) + timedelta(hours=1),
+            )
+            assert made is not None
+            run = create_run(
+                connection, account_id, uuid.UUID(thread_id), made[0], "schedule", "task"
+            )
+        assert run is not None
+        assert execute(run[0], ScriptedModel(reply="Result.")) == "ready"
+        second = _latest_of(client, thread_id)
+        assert isinstance(first, str) and isinstance(second, str)
+        assert datetime.fromisoformat(second) > datetime.fromisoformat(first)
+        # The other routes keep their shape.
+        assert set(client.get(f"/threads/{thread_id}").json()) == {
+            "id",
+            "name",
+            "created_at",
+            "messages",
+        }
+    finally:
+        _remove(email)
+
+
+def test_the_latest_message_time_never_shows_another_accounts_threads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mine = _email("LatestMine")
+    theirs = _email("LatestTheirs")
+    _remove(mine)
+    _remove(theirs)
+    try:
+        client, my_thread = _open_thread(monkeypatch, mine)
+        other, their_thread = _open_thread(monkeypatch, theirs)
+        _use_model(monkeypatch, FakeModel(reply=Reply("Hi.", 1, 1, 2)))
+        other.post(f"/threads/{their_thread}/messages", json={"text": "hello"})
+        ids = {item["id"] for item in client.get("/threads").json()}
+        assert ids == {my_thread}
+        assert _latest_of(client, my_thread) is None
+    finally:
+        _remove(mine)
+        _remove(theirs)
+
+
+def test_the_agent_list_threads_result_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.operations import Context, call
+
+    email = _email("AgentList")
+    _remove(email)
+    try:
+        _, thread_id = _open_thread(monkeypatch, email)
+        with connect() as connection:
+            result = call(connection, _account_id(email), Context(None), "list_threads", {})
+        assert result["ok"] is True
+        assert [set(item) for item in result["threads"]] == [{"id", "name", "created_at"}]
+        assert result["threads"][0]["id"] == thread_id
     finally:
         _remove(email)

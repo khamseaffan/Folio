@@ -134,12 +134,14 @@ def test_chat_messages_keep_a_null_run_id(accounts) -> None:
     assert [row[0] for row in listed] == [assistant[0], person[0]]
 
 
-def test_run_id_can_be_stored_without_a_run_table(accounts) -> None:
+def test_run_id_must_name_a_real_run_of_the_account(accounts) -> None:
+    from app.run import create_run
+
     owner_id, _allowed_id = accounts
-    run_id = uuid.uuid4()
     with connect() as connection:
         thread = create_thread(connection, owner_id)
-        run_table = connection.execute("SELECT to_regclass('public.run')").fetchone()
+        run = create_run(connection, owner_id, thread[0], None, "research", "look")
+        assert run is not None
         stored = insert_message(
             connection,
             owner_id,
@@ -147,11 +149,20 @@ def test_run_id_can_be_stored_without_a_run_table(accounts) -> None:
             "assistant",
             "result",
             "done",
-            run_id,
+            run[0],
         )
-    assert run_table == (None,)
+        with pytest.raises(psycopg.errors.ForeignKeyViolation):
+            insert_message(
+                connection,
+                owner_id,
+                thread[0],
+                "assistant",
+                "result",
+                "done",
+                uuid.uuid4(),
+            )
     assert stored is not None
-    assert stored[3] == run_id
+    assert stored[3] == run[0]
     assert stored[5] == "result"
 
 
@@ -289,5 +300,9 @@ def test_apply_is_idempotent() -> None:
     assert "FOREIGN KEY (thread_id, account_id)" in thread_fk[0]
     assert "REFERENCES thread" in thread_fk[0]
     assert "ON DELETE CASCADE" in thread_fk[0]
-    assert all("run_id" not in definition[0] for definition in foreign_keys)
+    run_fk = [definition[0] for definition in foreign_keys if "run_id" in definition[0]]
+    assert len(run_fk) == 1
+    assert "FOREIGN KEY (run_id, account_id)" in run_fk[0]
+    assert "REFERENCES run" in run_fk[0]
+    assert "ON DELETE SET NULL (run_id)" in run_fk[0]
     assert index == ("message_thread_id_created_at",)
