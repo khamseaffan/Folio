@@ -14,7 +14,7 @@ A scheduled run is tried up to four times, and each try adds one to `attempt_cou
 
 A run that fails because the account is stopped or at its limit is marked `cancelled` and is not tried again. A run whose thread was deleted is cancelled, or finishes with no message when the thread goes during the run.
 
-A run that has been `working` for more than 3 hours is marked `dead` by the next tick and told in the thread. This frees its schedule to fire again. A run that is still `queued` after 30 minutes is marked `dead` the same way. A `queued` run older than 2 minutes is put on the queue again by the tick, so a run that never reached the queue is not lost.
+A run that has been `working` for more than 90 minutes since its latest attempt began is marked `dead` by the next tick and told in the thread. This frees its schedule to fire again. A run that is still `queued` after 30 minutes is marked `dead` the same way. A `queued` run older than 2 minutes is put on the queue again by the tick, so a run that never reached the queue is not lost.
 
 The lines "A scheduled run failed." and the no-next-time line are plain assistant messages of kind `result`. They do not offer Try again, which belongs to a failed chat reply only.
 

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS run (
     attempt_count integer NOT NULL DEFAULT 0,
     delivered_at timestamptz,
     created_at timestamptz NOT NULL DEFAULT now(),
+    started_at timestamptz,
     UNIQUE (id, account_id),
     CONSTRAINT run_kind_allowed CHECK (kind IN ('research', 'schedule', 'browser', 'web')),
     CONSTRAINT run_status_allowed CHECK (
@@ -21,6 +22,9 @@ CREATE TABLE IF NOT EXISTS run (
     CONSTRAINT run_schedule_account_fkey FOREIGN KEY (schedule_id, account_id)
         REFERENCES schedule (id, account_id) ON DELETE SET NULL (schedule_id)
 );
+
+-- A table made before this column existed gets it here.
+ALTER TABLE run ADD COLUMN IF NOT EXISTS started_at timestamptz;
 
 CREATE INDEX IF NOT EXISTS run_status_queued
     ON run (status)

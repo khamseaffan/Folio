@@ -46,13 +46,14 @@ None of these is chosen yet.
 
 - D28. `run` has a `created_at` column that the picture did not show. The rule for a stuck run needs to know when the run started.
 - D29. A run cannot create, change, or delete a schedule. Those three tools are left out of a run.
-- D30. A run that has been `working` for more than 3 hours is marked dead by the next tick, and a run that never left the queue is marked dead after 30 minutes. Both are measured from `created_at`, because `run` has no `started_at`. A queued run older than 2 minutes is put on the queue again.
+- D30. A run that has been `working` for more than 90 minutes since its latest attempt began is marked dead by the next tick. A run that never left the queue is marked dead after 30 minutes from `created_at`. A queued run older than 2 minutes is put on the queue again.
 - D31. The queue runs at most 3 runs at once.
 - D32. The thread list is asked for again every 20 seconds while a run is working.
 - D33. The line written in the thread for a dead run is "A scheduled run failed."
 - D34. A one-time schedule stays listed with no next time after it has run. The agent deletes it when asked.
 - D35. `message.run_id` and `usage.run_id` now have keys to `run`, as the picture draws. They clear when the run is deleted.
 - D36. The worker is a second Cloud Run service made from the same image. It serves only the tick and the run routes, and only the queue's service account may call it.
+- D37. `run` has a `started_at` column. It is set each time an attempt begins. Time spent waiting in the queue is not counted against a working run.
 
 ## Open questions
 
