@@ -1,3 +1,4 @@
+import base64
 import uuid
 from collections.abc import Sequence
 
@@ -10,6 +11,7 @@ from app.model import (
     THINKING,
     Block,
     FakeModel,
+    Image,
     Model,
     ModelError,
     Reply,
@@ -105,7 +107,12 @@ class LangChainBrain:
         blocks: list[Block],
     ) -> list[_Message]:
         messages: list[_Message] = [SystemMessage(content=prompt)]
+        pending: list[Image] = []
         for block in blocks:
+            if block.role != "tool":
+                # Every tool result must stay directly after the call that asked for it, so
+                # images wait until the run of tool results ends.
+                _flush_images(messages, pending)
             if block.role == "person":
                 messages.append(HumanMessage(content=block.text))
             elif block.role == "assistant":
@@ -127,9 +134,29 @@ class LangChainBrain:
                 messages.append(
                     ToolMessage(content=block.text, tool_call_id=block.call_id or "")
                 )
+                pending.extend(block.images)
             else:
                 raise ValueError("block role is not allowed")
+        _flush_images(messages, pending)
         return messages
+
+
+def _flush_images(messages: list[_Message], pending: list[Image]) -> None:
+    if not pending:
+        return
+    content: list[str | dict] = [
+        {"type": "text", "text": "The image from the file that was just read:"}
+    ]
+    content.extend(
+        {
+            "type": "image",
+            "base64": base64.b64encode(image.data).decode("ascii"),
+            "mime_type": image.media_type,
+        }
+        for image in pending
+    )
+    messages.append(HumanMessage(content=content))
+    pending.clear()
 
 
 class _ChatStream:

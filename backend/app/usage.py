@@ -138,6 +138,7 @@ def record_search(
     account_id: uuid.UUID | None,
     email: str,
     run_id: uuid.UUID | None,
+    operation: str = "research",
 ) -> UsageRow:
     apply(connection)
     # A search has no tokens by nature, so it is not "missing" usage.
@@ -147,7 +148,7 @@ def record_search(
             account_id, email, provider, model, expected_cost, usage_missing,
             run_id, operation, estimated
         )
-        VALUES (%s, %s, 'tavily', 'search', %s, false, %s, 'research', false)
+        VALUES (%s, %s, 'tavily', 'search', %s, false, %s, %s, false)
         RETURNING
             id,
             account_id,
@@ -164,7 +165,7 @@ def record_search(
             run_id,
             operation
         """,
-        (account_id, email.lower(), SEARCH_PRICE, run_id),
+        (account_id, email.lower(), SEARCH_PRICE, run_id, operation),
     ).fetchone()
     if stored is None:
         raise RuntimeError("usage was not stored")

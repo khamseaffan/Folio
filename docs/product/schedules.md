@@ -20,6 +20,8 @@ For a due schedule the model works out the next time from the person's own words
 
 The tick then makes one run and puts it on a queue. The queue calls the worker with the run id. The worker runs the task with the same agent loop as chat, and writes the result as one message in the thread. A second delivery of the same run writes nothing.
 
+A run can use the web with a small budget: at most 6 searches, 8 pages, and 5 minutes of reading. The worker has no browser, so a page is fetched with a plain request that goes through the same proxy as research, which refuses private and metadata addresses. A page that only shows its text after a script runs is read as the text it has. The model may open only an address it was shown in a search result or on a page it opened, and page text goes only to a separate call with no tools. Each search and each model call is recorded as usage of the run. A task that needs many sources starts research instead.
+
 A run has the same tools as chat, except the three that create, change, and delete a schedule. A run is limited to 8 tool rounds.
 
 The person's time zone comes from the browser with each message. It is written into the schedule's words, so the schedule does not move when the person travels.
