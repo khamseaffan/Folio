@@ -245,6 +245,36 @@ def test_delete_account_removes_rows_and_keeps_usage_and_limit(monkeypatch, emai
     assert limit == (42, True)
 
 
+def test_delete_account_removes_the_whole_file_folder_and_unfinished_uploads(
+    monkeypatch, email
+) -> None:
+    from app.storage import FakeStorage
+
+    storage = FakeStorage()
+    monkeypatch.setattr("app.main.open_storage", lambda: storage)
+    monkeypatch.setattr("app.main.delete_firebase_user", lambda uid: None)
+    client = _sign_in(monkeypatch, email)
+    account_id = _account_id(email)
+    assert account_id is not None
+    with connect() as connection:
+        pending = connection.execute(
+            """
+            INSERT INTO file (account_id, kind, name, content_type, byte_size, status)
+            VALUES (%s, 'upload', 'p.pdf', 'application/pdf', 5, 'pending') RETURNING id
+            """,
+            (account_id,),
+        ).fetchone()
+    assert pending is not None
+    storage.put(f"pending/{pending[0]}", b"12345")
+    storage.put(f"accounts/{account_id}/files/{uuid.uuid4()}/a.pdf", b"x")
+    storage.put(f"accounts/{uuid.uuid4()}/files/{uuid.uuid4()}/other.pdf", b"x")
+
+    assert client.delete("/account").status_code == 204
+
+    assert sorted(storage.objects) == [path for path in storage.objects if "other.pdf" in path]
+    assert len(storage.objects) == 1
+
+
 def test_delete_account_with_a_second_session_open(monkeypatch, email) -> None:
     monkeypatch.setattr("app.main.delete_firebase_user", lambda uid: None)
     first = _sign_in(monkeypatch, email)

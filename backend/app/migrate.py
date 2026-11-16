@@ -1,5 +1,6 @@
 from app import (
     ability,
+    file,
     knowledge_file,
     report,
     report_source,
@@ -23,6 +24,7 @@ def run() -> None:
         run_table.apply(connection, force=True)
         report.apply(connection, force=True)
         report_source.apply(connection, force=True)
+        file.apply(connection, force=True)
         run_activity.apply(connection, force=True)
 
 
