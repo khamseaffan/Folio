@@ -19,6 +19,8 @@ class Storage(Protocol):
 
     def download_url(self, path: str, filename: str) -> str: ...
 
+    def write(self, path: str, data: bytes, content_type: str) -> None: ...
+
 
 class FakeStorage:
     """Bytes in memory, for tests and for running without a bucket."""
@@ -52,6 +54,9 @@ class FakeStorage:
 
     def download_url(self, path: str, filename: str) -> str:
         return f"https://storage.invalid/download/{path}?name={filename}"
+
+    def write(self, path: str, data: bytes, content_type: str) -> None:
+        self.objects[path] = data
 
 
 class GcsStorage:
@@ -115,6 +120,9 @@ class GcsStorage:
             response_disposition=f'attachment; filename="{safe}"',
             **self._signing(),
         )
+
+    def write(self, path: str, data: bytes, content_type: str) -> None:
+        self._bucket.blob(path).upload_from_string(data, content_type=content_type)
 
 
 _LOCAL = FakeStorage()
