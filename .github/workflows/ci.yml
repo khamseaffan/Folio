@@ -6,7 +6,50 @@ on:
     branches: [main]
 
 jobs:
+  # Decides which checks have anything to check. A job that is skipped reports as passed, so the
+  # required checks still come back for a pull request that touches only the README.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # A change to this file runs everything. If the changed files cannot be listed, so does
+          # a failure here: running too much is safe, and skipping a check is not.
+          workflow='^\.github/workflows/ci\.yml$'
+          set +e
+          files=$(git diff --name-only "$BASE...$HEAD" 2>/dev/null)
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ] || [ -z "$files" ]; then
+            echo "The changed files could not be listed, so every check runs."
+            backend=true; frontend=true; infra=true
+          else
+            echo "Changed files:"
+            echo "$files"
+            backend=false; frontend=false; infra=false
+            echo "$files" | grep -Eq "^backend/|$workflow" && backend=true
+            echo "$files" | grep -Eq "^frontend/|$workflow" && frontend=true
+            echo "$files" | grep -Eq "^infra/|$workflow" && infra=true
+          fi
+          {
+            echo "backend=$backend"
+            echo "frontend=$frontend"
+            echo "infra=$infra"
+          } >> "$GITHUB_OUTPUT"
+
   backend:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.backend != 'false' }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -47,6 +90,8 @@ jobs:
         run: uv run pytest
 
   frontend:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.frontend != 'false' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -83,6 +128,8 @@ jobs:
         run: npm run build
 
   terraform:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.infra != 'false' }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -98,6 +145,8 @@ jobs:
           terraform validate
 
   docker:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.backend != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -107,6 +156,8 @@ jobs:
         run: docker build -f backend/Dockerfile.research backend
 
   browser:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.backend != 'false' }}
     runs-on: ubuntu-latest
     # The test setup creates the tables for every test, so even the browser tests need a database.
     services:

@@ -208,16 +208,15 @@
       },
       {
         id: "integration", name: "integration", x: 250, y: 148, pk: "id", group: "Identity",
-        blurb: "One connection for this account and one provider. Drive is the provider google_drive. The secret is wrapped.",
+        blurb: "One connection for this account and one provider. Drive is the provider google_drive. The secret is the refresh token, encrypted with Cloud KMS. Disconnecting deletes the row.",
         indexes: "Unique on account_id and provider.",
         attrs: [
           attr("id", "uuid", "yes", "PK"),
           attr("account_id", "uuid", "yes", "FK"),
-          attr("provider", "text", "yes", "", "google_drive for Drive."),
-          attr("external_account", "text", "no", "", "For Drive, the Google email. Empty when the provider has no account name."),
-          attr("secret_wrapped", "bytea", "yes", "", "Envelope-encrypted. A local key stands in for Cloud KMS."),
-          attr("key_version", "text", "yes", "", "local on this machine."),
-          attr("connected_at", "timestamptz", "yes")
+          attr("provider", "text", "yes", "", "google_drive."),
+          attr("secret", "bytea", "yes", "", "The Google refresh token, encrypted with Cloud KMS."),
+          attr("label", "text", "no", "", "For Drive, the Google account's email."),
+          attr("created_at", "timestamptz", "yes")
         ]
       },
       {
@@ -397,19 +396,31 @@
       },
       {
         id: "file", name: "file", x: 250, y: 468, pk: "id", group: "Files",
-        blurb: "An upload, a task file, or a Drive copy. The account row is locked while the byte sum is checked. Knowledge files are a separate table.",
-        indexes: "Unique on id and account_id. Index on account_id and kind.",
+        blurb: "An upload, a task file, or a Drive copy. The bytes are in the files bucket. A row is pending while its upload is on the way. The account row is locked while the byte sum is checked. Knowledge files are a separate table.",
+        indexes: "Unique on id and account_id. Index on account_id and created_at, newest first. Index on created_at where status is pending.",
         attrs: [
           attr("id", "uuid", "yes", "PK"),
           attr("account_id", "uuid", "yes", "FK"),
-          attr("kind", "text", "yes", "", "upload, task, or drive."),
+          attr("kind", "text", "yes", "", "upload, task, or drive_copy."),
           attr("name", "text", "yes"),
           attr("content_type", "text", "yes"),
-          attr("byte_size", "bigint", "yes", "", "Uploads and task files count toward 5 GB. Drive copies do not."),
-          attr("storage_key", "text", "yes", "", "accounts/{account_id}/files/{id}/..."),
-          attr("status", "text", "yes", "", "pending or stored."),
-          attr("pending_expires_at", "timestamptz", "no", "", "An unfinished upload is discarded after 24 hours."),
+          attr("byte_size", "bigint", "yes", "", "Greater than zero. Uploads and task files count toward 5 GB. Drive copies do not."),
+          attr("status", "text", "yes", "", "pending or ready."),
           attr("created_at", "timestamptz", "yes")
+        ]
+      },
+      {
+        id: "run_activity", name: "run_activity", x: 970, y: 420, pk: "id", group: "Research",
+        blurb: "One line for each search or page read of a research run, so the person can follow the run while it works. Deleting the run deletes these rows.",
+        indexes: "Index on run_id and id.",
+        attrs: [
+          attr("id", "bigint", "yes", "PK", "Generated in order."),
+          attr("account_id", "uuid", "yes", "FK"),
+          attr("run_id", "uuid", "yes", "FK"),
+          attr("at", "timestamptz", "yes"),
+          attr("kind", "text", "yes", "", "search, read, or skipped."),
+          attr("text", "text", "yes", "", "What the run searched or read."),
+          attr("url", "text", "no", "", "The page address, when the line is about a page.")
         ]
       }
     ];
@@ -430,6 +441,7 @@
       { from: "account", to: "usage", column: "account_id", card: "many", onDelete: "set null", draw: "none" },
       { from: "account", to: "report", column: "account_id", card: "many", onDelete: "cascade", draw: "none" },
       { from: "account", to: "report_source", column: "account_id", card: "many", onDelete: "cascade", draw: "none" },
+      { from: "account", to: "run_activity", column: "account_id", card: "many", onDelete: "cascade", draw: "none" },
       { from: "thread", to: "message", column: "thread_id, account_id", card: "many", onDelete: "cascade", draw: "fan" },
       { from: "thread", to: "schedule", column: "thread_id, account_id", card: "many", onDelete: "cascade", draw: "fan" },
       { from: "thread", to: "confirmation", column: "thread_id, account_id", card: "many", onDelete: "cascade", draw: "fan" },
@@ -440,6 +452,7 @@
       { from: "run", to: "message", column: "run_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
       { from: "run", to: "confirmation", column: "run_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
       { from: "run", to: "usage", column: "run_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
+      { from: "run", to: "run_activity", column: "run_id, account_id", card: "many", onDelete: "cascade", draw: "fan" },
       { from: "message", to: "usage", column: "message_id, account_id", card: "many", onDelete: "set null", draw: "fan" },
       { from: "report", to: "report_source", column: "report_id, account_id", card: "many", onDelete: "cascade", draw: "fan" },
       { from: "knowledge_file", to: "report_source", column: "knowledge_file_id, account_id", card: "many", onDelete: "set null", draw: "bus" }
@@ -496,7 +509,8 @@
       { from: "schedule", to: "run", card: "n", axis: "h" },
       { from: "run", to: "report", card: "01", axis: "h" },
       { from: "run", to: "usage", card: "n", axis: "v" },
-      { from: "report", to: "report_source", card: "n", axis: "v" }
+      { from: "report", to: "report_source", card: "n", axis: "v" },
+      { from: "run", to: "run_activity", card: "n", axis: "h" }
     ];
 
     function boxHeight(entity) {
@@ -552,7 +566,7 @@
       run.y = schedule.y + schedule.h / 2 - run.h / 2;
       usage.y = run.y + run.h + 16;
 
-      ["report", "report_source"].forEach(function (id) {
+      ["report", "report_source", "run_activity"].forEach(function (id) {
         const entity = byId(id);
         entity.w = BOX_W;
         entity.h = boxHeight(entity);
@@ -562,6 +576,8 @@
       const source = byId("report_source");
       report.y = run.y + run.h / 2 - report.h / 2;
       source.y = report.y + report.h + 16;
+      const activity = byId("run_activity");
+      activity.y = source.y + source.h + 16;
 
       let minY = 0;
       entities.forEach(function (entity) {

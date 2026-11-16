@@ -25,7 +25,6 @@ locals {
   secret_env = {
     DATABASE_URL   = google_secret_manager_secret.database_url.secret_id
     OPENAI_API_KEY = google_secret_manager_secret.openai_api_key.secret_id
-    GEMINI_API_KEY = google_secret_manager_secret.gemini_api_key.secret_id
   }
   # Only the API connects Google Drive, so the worker and research services do not get these.
   drive_env = {
@@ -34,7 +33,10 @@ locals {
     DRIVE_APP_ID         = var.drive_app_id
     KMS_KEY              = google_kms_crypto_key.integrations.id
   }
-  drive_secret_env = {
+  # Only the API turns speech into text and connects Drive, and only its account may read these
+  # secrets. A service that is given one without the permission cannot start.
+  api_secret_env = {
+    GEMINI_API_KEY      = google_secret_manager_secret.gemini_api_key.secret_id
     DRIVE_CLIENT_SECRET = google_secret_manager_secret.drive_client_secret.secret_id
   }
 }
@@ -73,7 +75,7 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       dynamic "env" {
-        for_each = merge(local.secret_env, local.drive_secret_env)
+        for_each = merge(local.secret_env, local.api_secret_env)
         content {
           name = env.key
           value_source {
