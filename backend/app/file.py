@@ -153,6 +153,8 @@ def complete_upload(
             # Bytes of another size are not the file that was announced.
             storage.delete(_pending_path(file_id))
             connection.execute("DELETE FROM file WHERE id = %s", (file_id,))
+            # The refusal below ends the request, and the row must not come back with it.
+            connection.commit()
         raise FileRefused(NOT_UPLOADED)
     storage.move(_pending_path(file_id), _final_path(account_id, file_id, row[3]))
     connection.execute("UPDATE file SET status = 'ready' WHERE id = %s", (file_id,))

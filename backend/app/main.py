@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 import psycopg
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from app import ability, knowledge_file, operations, report, report_source, run, schedule
@@ -18,7 +18,16 @@ from app.account import (
     set_display_name,
 )
 from app.db import connect, database_ready
-from app.file import delete_account_bytes
+from app.file import (
+    ACCOUNT_LIMIT_BYTES,
+    FileRefused,
+    begin_upload,
+    byte_count,
+    complete_upload,
+    delete_account_bytes,
+    get_file,
+    list_files,
+)
 from app.live import stop_account, stop_reply
 from app.message import MessageRow, list_messages
 from app.model import open_model
@@ -628,6 +637,117 @@ def get_schedules(request: Request) -> Response:
             for row in rows
         ]
     )
+
+
+_FILE_BAD = "Choose a file to upload."
+
+
+def _file_item(row: tuple) -> dict[str, object]:
+    return {
+        "id": str(row[0]),
+        "name": row[3],
+        "kind": row[2],
+        "content_type": row[4],
+        "byte_size": row[5],
+        "created_at": row[7].isoformat(),
+    }
+
+
+@app.get("/files")
+def get_files(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        with connect() as connection:
+            rows = list_files(connection, account_id)
+            used = byte_count(connection, account_id)
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content={
+            "files": [_file_item(row) for row in rows],
+            "used_bytes": used,
+            "limit_bytes": ACCOUNT_LIMIT_BYTES,
+        }
+    )
+
+
+@app.post("/files")
+async def post_file(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        body = await request.json()
+    except Exception:
+        return _error(400, _FILE_BAD)
+    name = body.get("name") if isinstance(body, dict) else None
+    size = body.get("size") if isinstance(body, dict) else None
+    if not isinstance(name, str) or isinstance(size, bool) or not isinstance(size, int):
+        return _error(400, _FILE_BAD)
+    try:
+        with connect() as connection:
+            begun = begin_upload(connection, open_storage(), account_id, name, size)
+    except FileRefused as refused:
+        return _error(400, str(refused))
+    except Exception:
+        return _down()
+    return JSONResponse(
+        status_code=201,
+        content={
+            "id": str(begun.file_id),
+            "upload": {
+                "url": begun.url,
+                "method": "PUT",
+                "headers": {"Content-Type": begun.content_type},
+            },
+        },
+    )
+
+
+@app.post("/files/{file_id}/complete")
+def post_file_complete(request: Request, file_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    parsed = _parse_thread_id(file_id)
+    if parsed is None:
+        return _error(404, _NOT_FOUND)
+    try:
+        with connect() as connection:
+            row = complete_upload(connection, open_storage(), account_id, parsed)
+    except FileRefused as refused:
+        return _error(400, str(refused))
+    except Exception:
+        return _down()
+    if row is None:
+        return _error(404, _NOT_FOUND)
+    return JSONResponse(content=_file_item(row))
+
+
+@app.get("/files/{file_id}/download")
+def download_file(request: Request, file_id: str) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    parsed = _parse_thread_id(file_id)
+    if parsed is None:
+        return _error(404, _NOT_FOUND)
+    try:
+        with connect() as connection:
+            row = get_file(connection, account_id, parsed)
+        if row is None:
+            return _error(404, _NOT_FOUND)
+        path = f"accounts/{account_id}/files/{row[0]}/{row[3]}"
+        address = open_storage().download_url(path, row[3])
+    except Exception:
+        return _down()
+    return RedirectResponse(address, status_code=302)
 
 
 @app.get("/reports")
