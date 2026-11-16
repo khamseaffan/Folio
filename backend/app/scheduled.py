@@ -1,4 +1,3 @@
-import json
 import logging
 import threading
 import time
@@ -13,7 +12,7 @@ from app.db import connect
 from app.knowledge_file import PROFILE, get_file
 from app.loop import stream_turn
 from app.message import insert_message
-from app.model import Block, Model, Reply, ToolCall, open_model
+from app.model import Block, Model, Reply, ToolCall, ToolOutput, open_model
 from app.queue import enqueue
 from app.research import FAILED_LINE as RESEARCH_FAILED_LINE
 from app.research import execute_research
@@ -274,7 +273,7 @@ def _answer(
 
     web = ScheduledWeb(run[6], model, replies, record_one_search, search, opener)
 
-    def call_tool(call: ToolCall) -> str:
+    def call_tool(call: ToolCall) -> str | ToolOutput:
         if web.handles(call.name):
             return web.call(call)
         if call.unreadable:
@@ -289,7 +288,7 @@ def _answer(
                     call.arguments,
                     in_run=True,
                 )
-        return json.dumps(result)
+        return operations.encode(result)
 
     failed = False
     try:
