@@ -11,6 +11,8 @@ class Storage(Protocol):
 
     def size(self, path: str) -> int | None: ...
 
+    def write(self, path: str, data: bytes, content_type: str) -> None: ...
+
     def move(self, source: str, target: str) -> None: ...
 
     def delete(self, path: str) -> None: ...
@@ -31,6 +33,9 @@ class FakeStorage:
 
     def put(self, path: str, data: bytes) -> None:
         # What the browser does with the signed address.
+        self.objects[path] = data
+
+    def write(self, path: str, data: bytes, content_type: str) -> None:
         self.objects[path] = data
 
     def has(self, path: str) -> bool:
@@ -89,8 +94,11 @@ class GcsStorage:
         blob = self._bucket.get_blob(path)
         return int(blob.size) if blob is not None and blob.size is not None else None
 
+    def write(self, path: str, data: bytes, content_type: str) -> None:
+        self._bucket.blob(path).upload_from_string(data, content_type=content_type)
+
     def move(self, source: str, target: str) -> None:
-        blob = self._bucket.blob(source)
+        blob =self._bucket.blob(source)
         self._bucket.copy_blob(blob, self._bucket, target)
         blob.delete()
 

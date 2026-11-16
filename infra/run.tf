@@ -26,6 +26,16 @@ locals {
     DATABASE_URL   = google_secret_manager_secret.database_url.secret_id
     OPENAI_API_KEY = google_secret_manager_secret.openai_api_key.secret_id
   }
+  # Only the API connects Google Drive, so the worker and research services do not get these.
+  drive_env = {
+    DRIVE_CLIENT_ID      = var.drive_client_id
+    DRIVE_PICKER_API_KEY = var.drive_picker_api_key
+    DRIVE_APP_ID         = var.drive_app_id
+    KMS_KEY              = google_kms_crypto_key.integrations.id
+  }
+  drive_secret_env = {
+    DRIVE_CLIENT_SECRET = google_secret_manager_secret.drive_client_secret.secret_id
+  }
 }
 
 resource "google_cloud_run_v2_service" "api" {
@@ -54,7 +64,7 @@ resource "google_cloud_run_v2_service" "api" {
       image = var.api_image
 
       dynamic "env" {
-        for_each = merge(local.plain_env, local.research_env)
+        for_each = merge(local.plain_env, local.research_env, local.drive_env)
         content {
           name  = env.key
           value = env.value
@@ -62,7 +72,7 @@ resource "google_cloud_run_v2_service" "api" {
       }
 
       dynamic "env" {
-        for_each = local.secret_env
+        for_each = merge(local.secret_env, local.drive_secret_env)
         content {
           name = env.key
           value_source {
@@ -84,6 +94,8 @@ resource "google_cloud_run_v2_service" "api" {
     google_project_service.enabled,
     google_secret_manager_secret_iam_member.api_database_url,
     google_secret_manager_secret_iam_member.api_openai,
+    google_secret_manager_secret_iam_member.api_drive_client_secret,
+    google_kms_crypto_key_iam_member.api_integrations,
     google_secret_manager_secret_version.database_url,
   ]
 }

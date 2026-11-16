@@ -161,6 +161,39 @@ def complete_upload(
     return (*row[:6], "ready", row[7])
 
 
+def add_drive_copy(
+    connection: psycopg.Connection,
+    storage: Storage,
+    account_id: uuid.UUID,
+    name: str,
+    content_type: str,
+    data: bytes,
+) -> FileRow:
+    """Store bytes already read from Drive. A copy is outside the account's byte count."""
+    if len(data) < 1:
+        raise FileRefused(EMPTY_FILE)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise FileRefused(TOO_BIG)
+    apply(connection)
+    file_id = uuid.uuid4()
+    path = _final_path(account_id, file_id, name)
+    storage.write(path, data, content_type)
+    try:
+        row = connection.execute(
+            f"""
+            INSERT INTO file (id, account_id, kind, name, content_type, byte_size, status)
+            VALUES (%s, %s, 'drive_copy', %s, %s, %s, 'ready')
+            RETURNING {_COLUMNS}
+            """,
+            (file_id, account_id, name, content_type, len(data)),
+        ).fetchone()
+    except Exception:
+        storage.delete(path)
+        raise
+    assert row is not None
+    return row
+
+
 def list_files(connection: psycopg.Connection, account_id: uuid.UUID) -> list[FileRow]:
     apply(connection)
     rows = connection.execute(

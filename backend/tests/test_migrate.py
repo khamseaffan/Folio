@@ -14,6 +14,7 @@ TABLES = {
     "run",
     "report",
     "report_source",
+    "integration",
 }
 
 
