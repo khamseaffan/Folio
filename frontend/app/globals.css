@@ -1664,3 +1664,10 @@ a svg {
   color: var(--accent);
   text-underline-offset: 3px;
 }
+
+.integration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}

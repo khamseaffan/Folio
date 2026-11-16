@@ -7,6 +7,7 @@ import {
   ChevronDownIcon,
   Cog6ToothIcon,
   DocumentTextIcon,
+  PuzzlePieceIcon,
   PaperAirplaneIcon,
   StopIcon,
   UserCircleIcon,
@@ -45,6 +46,7 @@ import {
   signInWithGoogle,
   signOutFirebase,
 } from "../lib/firebase-auth";
+import { Integrations, type DriveReturn } from "./integrations";
 import { Markdown } from "./markdown";
 import { ProfilePanel } from "./profile-panel";
 import { Reports } from "./reports";
@@ -403,6 +405,12 @@ function WorkBanner({
   );
 }
 
+function readDriveReturn(): DriveReturn | null {
+  if (typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get("drive");
+  return value === "connected" || value === "failed" ? value : null;
+}
+
 export function FolioApp() {
   const [view, setView] = useState<View>("checking");
   const [down, setDown] = useState(false);
@@ -424,6 +432,8 @@ export function FolioApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [reportsOpen, setReportsOpen] = useState(false);
+  const [driveReturn] = useState<DriveReturn | null>(readDriveReturn);
+  const [integrationsOpen, setIntegrationsOpen] = useState(driveReturn !== null);
   // Only used below 900 px, where the sidebar is a menu that covers the page.
   const [railOpen, setRailOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -440,6 +450,20 @@ export function FolioApp() {
   // What the page last knew about the open thread, to tell when something changed without it.
   const knownOpen = useRef<{ id: string; latest: string | null; working: boolean } | null>(null);
   const threadsRef = useRef<Thread[]>([]);
+
+  // Google sends the person back to /?drive=connected or /?drive=failed. The shell shows the page that
+  // explains it, then removes the value so a reload does not repeat the line.
+  useEffect(() => {
+    if (driveReturn === null) return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete("drive");
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query === "" ? "" : `?${query}`}${window.location.hash}`,
+    );
+  }, [driveReturn]);
   const messagesRef = useRef<ThreadMessage[]>([]);
   const openIdRef = useRef<string | null>(null);
   // Set when messages are reloaded while the person has scrolled up, so the view stays put.
@@ -475,6 +499,7 @@ export function FolioApp() {
     setSettingsOpen(false);
     setProfileOpen(false);
     setReportsOpen(false);
+    setIntegrationsOpen(false);
     setView("signed-out");
   }, []);
 
@@ -1135,13 +1160,14 @@ export function FolioApp() {
     if (event.key === "Tab") event.preventDefault();
   }
 
-  type Page = "chat" | "reports" | "profile" | "settings";
+  type Page = "chat" | "reports" | "profile" | "integrations" | "settings";
 
   // One page at a time. Leaving a page is choosing another one in the sidebar.
   function go(next: Page) {
     setSettingsOpen(next === "settings");
     setReportsOpen(next === "reports");
     setProfileOpen(next === "profile");
+    setIntegrationsOpen(next === "integrations");
     setRailOpen(false);
   }
 
@@ -1149,7 +1175,15 @@ export function FolioApp() {
   const landing = view === "signed-out" || view === "link-email";
   const visibleThreads = threadsNewestFirst(threads);
   const openThread = visibleThreads.find((thread) => thread.id === openId) ?? null;
-  const page: Page = settingsOpen ? "settings" : reportsOpen ? "reports" : profileOpen ? "profile" : "chat";
+  const page: Page = settingsOpen
+    ? "settings"
+    : reportsOpen
+      ? "reports"
+      : profileOpen
+        ? "profile"
+        : integrationsOpen
+          ? "integrations"
+          : "chat";
   const initials =
     (displayName ?? "")
       .split(/\s+/)
@@ -1160,6 +1194,7 @@ export function FolioApp() {
   const navItems: { id: Exclude<Page, "chat">; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
     { id: "reports", label: "Reports", icon: DocumentTextIcon },
     { id: "profile", label: "Profile", icon: UserCircleIcon },
+    { id: "integrations", label: "Integrations", icon: PuzzlePieceIcon },
     { id: "settings", label: "Settings", icon: Cog6ToothIcon },
   ];
 
@@ -1358,6 +1393,13 @@ export function FolioApp() {
               ) : null}
               {threadsLoaded && page === "profile" ? (
                 <ProfilePanel reloadKey={reloadKey} onSignedOut={settingsSignedOut} onDown={settingsDown} />
+              ) : null}
+              {threadsLoaded && page === "integrations" ? (
+                <Integrations
+                  returned={driveReturn}
+                  onSignedOut={settingsSignedOut}
+                  onDown={settingsDown}
+                />
               ) : null}
               {threadsLoaded && page === "chat" ? (
                 openThread ? (
