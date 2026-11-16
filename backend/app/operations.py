@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import psycopg
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -16,6 +16,7 @@ from app import run as run_table
 from app.file_reader import ReadRefused, open_stored
 from app.model import Image, ToolOutput, ToolSpec
 from app.storage import open_storage
+from app.text_pdf import make_pdf
 
 NOT_FOUND = "Thread not found."
 BAD_NAME = "A thread name is 1 to 80 characters."
@@ -715,6 +716,44 @@ def encode(result: Result) -> ToolOutput:
     return ToolOutput(json.dumps(text), images)
 
 
+class _WriteFile(_Input):
+    name: str
+    content: str
+    format: Literal["md", "txt", "csv", "pdf"]
+
+
+_FILE_TYPES = {
+    "md": "text/markdown",
+    "txt": "text/plain",
+    "csv": "text/csv",
+    "pdf": "application/pdf",
+}
+
+
+def _write_file(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _WriteFile,
+) -> Result:
+    name = _name(given.name)
+    if name is None:
+        return _refused("invalid", BAD_FILE_NAME)
+    if not _clean(given.content):
+        return _refused("invalid", BAD_TEXT)
+    if not name.lower().endswith(f".{given.format}"):
+        name = f"{name}.{given.format}"
+    data = make_pdf(given.content) if given.format == "pdf" else given.content.encode("utf-8")
+    try:
+        row = stored_file.create_task_file(
+            connection, open_storage(), account_id, name, _FILE_TYPES[given.format], data
+        )
+    except stored_file.FileRefused as refused:
+        limit = str(refused) in (stored_file.TOO_BIG, stored_file.FILES_FULL)
+        return _refused("limit" if limit else "invalid", str(refused))
+    return {"ok": True, "file_id": str(row[0]), "name": row[3]}
+
+
 OPERATIONS: dict[str, Operation] = {
     operation.name: operation
     for operation in (
@@ -940,6 +979,20 @@ OPERATIONS: dict[str, Operation] = {
             _delete_stored_file,
             True,
             True,
+        ),
+        Operation(
+            "write_file",
+            "Write a file for the person to download from the Files page. Use it ONLY when the "
+            "person's task needs a file as its result, such as a document, a table, or a PDF. "
+            "A reply that stays in the thread writes no file, so answer in the thread when a "
+            "message is enough. The format is md (Markdown), txt (plain text), csv, or pdf. "
+            "For pdf, give plain or Markdown-like text and it is laid out for you. The name gets "
+            "the right extension if it has none. A file is at most 50 MB, and all files of the "
+            "person together at most 5 GB. Returns the file id and name.",
+            _WriteFile,
+            _write_file,
+            True,
+            False,
         ),
     )
 }

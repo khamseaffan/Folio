@@ -227,6 +227,7 @@ def test_agent_tools_never_expose_an_account_id() -> None:
         "list_files",
         "read_file",
         "delete_file",
+        "write_file",
     }
     assert set(OPERATIONS) == {spec.name for spec in specs}
 
