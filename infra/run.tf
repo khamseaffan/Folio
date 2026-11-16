@@ -20,6 +20,7 @@ locals {
     FRONTEND_ORIGIN      = var.frontend_origin
     FIREBASE_USE_ADC     = "1"
     GOOGLE_CLOUD_PROJECT = var.project_id
+    FILES_BUCKET         = google_storage_bucket.files.name
   }
   secret_env = {
     DATABASE_URL   = google_secret_manager_secret.database_url.secret_id
