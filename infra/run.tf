@@ -25,6 +25,7 @@ locals {
   secret_env = {
     DATABASE_URL   = google_secret_manager_secret.database_url.secret_id
     OPENAI_API_KEY = google_secret_manager_secret.openai_api_key.secret_id
+    GEMINI_API_KEY = google_secret_manager_secret.gemini_api_key.secret_id
   }
 }
 
@@ -84,6 +85,7 @@ resource "google_cloud_run_v2_service" "api" {
     google_project_service.enabled,
     google_secret_manager_secret_iam_member.api_database_url,
     google_secret_manager_secret_iam_member.api_openai,
+    google_secret_manager_secret_iam_member.api_gemini,
     google_secret_manager_secret_version.database_url,
   ]
 }
