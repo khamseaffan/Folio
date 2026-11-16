@@ -796,6 +796,85 @@ export function reportDownloadUrl(id: string): string {
   return `${apiBase()}/reports/${encodeURIComponent(id)}/download`;
 }
 
+export type DriveIntegration = {
+  connected: boolean;
+  label: string | null;
+  picker_api_key: string;
+  app_id: string;
+};
+
+export type DriveToken = {
+  access_token: string;
+  expires_in: number;
+};
+
+export type ImportedFile = {
+  id: string;
+  name: string;
+};
+
+function driveIntegrationFrom(body: unknown): DriveIntegration | null {
+  if (!isRecord(body) || !isRecord(body.drive)) return null;
+  const drive = body.drive;
+  const label = drive.label;
+  const key = textField(drive, "picker_api_key");
+  const appId = textField(drive, "app_id");
+  if (typeof drive.connected !== "boolean") return null;
+  if (label !== null && typeof label !== "string") return null;
+  if (key === null || appId === null) return null;
+  return { connected: drive.connected, label, picker_api_key: key, app_id: appId };
+}
+
+function driveTokenFrom(body: unknown): DriveToken | null {
+  if (!isRecord(body)) return null;
+  const token = textField(body, "access_token");
+  const expires = countField(body, "expires_in");
+  if (token === null || token === "" || expires === null) return null;
+  return { access_token: token, expires_in: expires };
+}
+
+function importedFileFrom(body: unknown): ImportedFile | null {
+  if (!isRecord(body)) return null;
+  const id = textField(body, "id");
+  const name = textField(body, "name");
+  if (id === null || id === "" || name === null) return null;
+  return { id, name };
+}
+
+export async function getIntegrations(): Promise<ApiResult<DriveIntegration>> {
+  const result = await call("/integrations", "GET");
+  if ("kind" in result) return result;
+  return classify(result, driveIntegrationFrom);
+}
+
+export async function getDriveToken(): Promise<ApiResult<DriveToken>> {
+  const result = await call("/integrations/drive/token", "GET");
+  if ("kind" in result) return result;
+  return classify(result, driveTokenFrom);
+}
+
+export async function importDriveFile(fileId: string): Promise<ApiResult<ImportedFile>> {
+  const result = await call(
+    "/integrations/drive/import",
+    "POST",
+    JSON.stringify({ file_id: fileId }),
+  );
+  if ("kind" in result) return result;
+  return classify(result, importedFileFrom);
+}
+
+export async function disconnectDrive(): Promise<ApiResult<true>> {
+  const result = await call("/integrations/drive", "DELETE");
+  if ("kind" in result) return result;
+  if (result.status === 204) return { kind: "value", value: true };
+  return classify(result, () => true);
+}
+
+// A full-page navigation, not a fetch: the API redirects to Google and back to the site.
+export function driveConnectUrl(): string {
+  return `${apiBase()}/integrations/drive/connect`;
+}
+
 export type FileItem = {
   id: string;
   name: string;
