@@ -796,6 +796,119 @@ export function reportDownloadUrl(id: string): string {
   return `${apiBase()}/reports/${encodeURIComponent(id)}/download`;
 }
 
+export type FileItem = {
+  id: string;
+  name: string;
+  kind: string;
+  content_type: string;
+  byte_size: number;
+  created_at: string;
+};
+
+export type FileList = {
+  files: FileItem[];
+  used_bytes: number;
+  limit_bytes: number;
+};
+
+export type UploadStart = {
+  id: string;
+  url: string;
+  headers: Record<string, string>;
+};
+
+function fileFrom(body: unknown): FileItem | null {
+  if (!isRecord(body)) return null;
+  const id = textField(body, "id");
+  const name = textField(body, "name");
+  const kind = textField(body, "kind");
+  const contentType = textField(body, "content_type");
+  const size = countField(body, "byte_size");
+  const createdAt = textField(body, "created_at");
+  if (id === null || id === "" || name === null || kind === null) return null;
+  if (contentType === null || size === null || createdAt === null) return null;
+  return { id, name, kind, content_type: contentType, byte_size: size, created_at: createdAt };
+}
+
+function fileListFrom(body: unknown): FileList | null {
+  if (!isRecord(body) || !Array.isArray(body.files)) return null;
+  const used = countField(body, "used_bytes");
+  const limit = countField(body, "limit_bytes");
+  if (used === null || limit === null) return null;
+  const files: FileItem[] = [];
+  for (const item of body.files) {
+    const file = fileFrom(item);
+    if (file === null) return null;
+    files.push(file);
+  }
+  return { files, used_bytes: used, limit_bytes: limit };
+}
+
+function uploadStartFrom(body: unknown): UploadStart | null {
+  if (!isRecord(body)) return null;
+  const id = textField(body, "id");
+  const upload = body.upload;
+  if (id === null || id === "" || !isRecord(upload)) return null;
+  const url = textField(upload, "url");
+  const headers = upload.headers;
+  if (url === null || url === "" || upload.method !== "PUT" || !isRecord(headers)) return null;
+  const copied: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value !== "string") return null;
+    copied[key] = value;
+  }
+  return { id, url, headers: copied };
+}
+
+export async function getFiles(): Promise<ApiResult<FileList>> {
+  const result = await call("/files", "GET");
+  if ("kind" in result) return result;
+  return classify(result, fileListFrom);
+}
+
+export async function startUpload(name: string, size: number): Promise<ApiResult<UploadStart>> {
+  const result = await call("/files", "POST", JSON.stringify({ name, size }));
+  if ("kind" in result) return result;
+  return classify(result, uploadStartFrom);
+}
+
+// The bytes go straight to storage with the headers the API chose. A request object is used
+// because fetch cannot report how much has been sent.
+export function uploadBytes(
+  start: UploadStart,
+  file: File,
+  onProgress: (sent: number) => void,
+): Promise<ApiResult<true>> {
+  return new Promise((resolve) => {
+    const failed: ApiMessage = {
+      kind: "message",
+      message: "The file did not arrive in full. Try again.",
+      unauthorized: false,
+      refused: false,
+    };
+    const request = new XMLHttpRequest();
+    request.open("PUT", start.url);
+    for (const [key, value] of Object.entries(start.headers)) request.setRequestHeader(key, value);
+    request.upload.onprogress = (event) => onProgress(event.loaded);
+    request.onload = () =>
+      resolve(request.status >= 200 && request.status < 300 ? { kind: "value", value: true } : failed);
+    request.onerror = () => resolve(failed);
+    request.onabort = () => resolve(failed);
+    request.send(file);
+  });
+}
+
+export async function completeUpload(id: string): Promise<ApiResult<FileItem>> {
+  const result = await call(`/files/${encodeURIComponent(id)}/complete`, "POST");
+  if ("kind" in result) return result;
+  return classify(result, fileFrom);
+}
+
+// A plain link, not a fetch: the API answers with a redirect to a signed address.
+export function fileDownloadUrl(id: string): string {
+  return `${apiBase()}/files/${encodeURIComponent(id)}/download`;
+}
+
 export async function deleteAccount(): Promise<ApiResult<true>> {
   const result = await call("/account", "DELETE");
   if ("kind" in result) return result;

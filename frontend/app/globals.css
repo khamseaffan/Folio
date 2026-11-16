@@ -1171,6 +1171,7 @@ a svg {
 
 .settings,
 .reports,
+.files,
 .profile {
   flex: 1;
   min-height: 0;
@@ -1186,7 +1187,8 @@ a svg {
 
 .settings > :not(.settings-head):not(.down-layer),
 .profile > :not(.settings-head),
-.reports > :not(.settings-head):not(.reports-body) {
+.reports > :not(.settings-head):not(.reports-body),
+.files > :not(.settings-head) {
   width: min(44rem, calc(100% - 3rem));
   margin-inline: auto;
 }
@@ -1201,7 +1203,9 @@ a svg {
 }
 
 .settings > .settings-section:first-of-type,
-.reports > .settings-note {
+.reports > .settings-note,
+.files > .settings-note,
+.files > .files-upload {
   margin-top: 1.5rem;
 }
 
@@ -1755,4 +1759,94 @@ a svg {
 .landing-foot a {
   color: var(--accent);
   text-underline-offset: 3px;
+}
+
+/* ---------- Files ---------- */
+
+.files {
+  position: relative;
+}
+
+.files-dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: -6px;
+  background: var(--accent-wash);
+}
+
+.files-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.files-upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+}
+
+.files-usage {
+  margin-top: 1.5rem;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+}
+
+.files-bar {
+  height: 8px;
+  margin-top: 0.4rem;
+  border-radius: 99px;
+  background: var(--wash);
+  overflow: hidden;
+}
+
+.files-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.files-uploads,
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1.5rem;
+}
+
+.files-uploads + .files-list {
+  margin-top: 0.4rem;
+}
+
+.files-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.files-name {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.files-bar.files-progress {
+  flex: 0 1 10rem;
+  margin-top: 0;
+}
+
+.files-delete-note {
+  margin-top: 1.5rem;
+}
+
+.usage-files {
+  margin-top: 0.8rem;
 }
