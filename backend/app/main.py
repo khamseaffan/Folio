@@ -18,6 +18,7 @@ from app.account import (
     set_display_name,
 )
 from app.db import connect, database_ready
+from app.file import delete_account_bytes
 from app.live import stop_account, stop_reply
 from app.message import MessageRow, list_messages
 from app.model import open_model
@@ -37,6 +38,7 @@ from app.sign_in_proof import (
     delete_firebase_user,
     verify_allowed_sign_in,
 )
+from app.storage import open_storage
 from app.thread import ThreadRow, get_thread, list_threads, list_threads_with_latest
 from app.turn import NO_FAILURE, start_reply, start_retry
 from app.usage import token_totals_for_email
@@ -373,6 +375,13 @@ def remove_account(request: Request) -> Response:
         firebase_uid = load_firebase_uid(account_id)
     except Exception:
         return _down()
+    try:
+        # The bytes go first: once the account row is gone nothing says whose they were.
+        with connect() as connection:
+            delete_account_bytes(open_storage(), account_id, connection)
+    except Exception as error:
+        _log.error("account %s files could not be removed: %s", account_id, type(error).__name__)
+        return _error(502, _NOT_DELETED)
     if firebase_uid is not None:
         try:
             delete_firebase_user(firebase_uid)

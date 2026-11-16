@@ -61,6 +61,43 @@ def test_tick_returns_the_counts(client, monkeypatch: pytest.MonkeyPatch) -> Non
     assert response.json() == counts
 
 
+def test_tick_also_discards_uploads_unfinished_for_a_day(
+    client, account, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.storage import FakeStorage
+
+    account_id, _ = account
+    storage = FakeStorage()
+    monkeypatch.setattr("app.worker.open_storage", lambda: storage)
+    monkeypatch.setattr("app.scheduled.tick", lambda model: {"due": 0})
+    with connect() as connection:
+        old = connection.execute(
+            """
+            INSERT INTO file (account_id, kind, name, content_type, byte_size, status, created_at)
+            VALUES (%s, 'upload', 'old.pdf', 'application/pdf', 5, 'pending',
+                    now() - interval '25 hours')
+            RETURNING id
+            """,
+            (account_id,),
+        ).fetchone()
+        fresh = connection.execute(
+            """
+            INSERT INTO file (account_id, kind, name, content_type, byte_size, status)
+            VALUES (%s, 'upload', 'new.pdf', 'application/pdf', 5, 'pending')
+            RETURNING id
+            """,
+            (account_id,),
+        ).fetchone()
+    assert old is not None and fresh is not None
+    storage.put(f"pending/{old[0]}", b"12345")
+    storage.put(f"pending/{fresh[0]}", b"12345")
+
+    response = client.post("/tick")
+
+    assert response.status_code == 200 and response.json() == {"due": 0}
+    assert sorted(storage.objects) == [f"pending/{fresh[0]}"]
+
+
 @pytest.mark.parametrize(
     ("outcome", "status"),
     [("ready", 200), ("duplicate", 200), ("cancelled", 200), ("dead", 200), ("retry", 503)],
