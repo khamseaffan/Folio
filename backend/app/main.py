@@ -1,15 +1,26 @@
 import logging
 import os
+import secrets
 import uuid
 from urllib.parse import urlsplit
 
 import psycopg
 from fastapi import FastAPI, Request, Response
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import ability, knowledge_file, operations, report, report_source, run, schedule
+from app import (
+    ability,
+    knowledge_file,
+    operations,
+    report,
+    report_source,
+    run,
+    schedule,
+    transcribe,
+)
 from app.account import (
     delete_account,
     ensure_account,
@@ -20,7 +31,10 @@ from app.account import (
 from app.db import connect, database_ready
 from app.file import (
     ACCOUNT_LIMIT_BYTES,
+    MAX_UPLOAD_BYTES,
+    TOO_BIG,
     FileRefused,
+    add_drive_copy,
     begin_upload,
     byte_count,
     complete_upload,
@@ -28,6 +42,26 @@ from app.file import (
     get_file,
     list_files,
 )
+from app.google_drive import (
+    CANNOT_OPEN,
+    DRIVE_DOWN,
+    NOT_CONNECTED,
+    DriveError,
+    DriveMissing,
+    DriveReconnect,
+    DriveTooBig,
+    GoogleDrive,
+    open_drive,
+    plan_copy,
+    valid_file_id,
+)
+from app.integration import (
+    GOOGLE_DRIVE,
+    load_integration,
+    remove_integration,
+    save_integration,
+)
+from app.kms import open_kms
 from app.live import stop_account, stop_reply
 from app.message import MessageRow, list_messages
 from app.model import open_model
@@ -49,6 +83,7 @@ from app.sign_in_proof import (
 )
 from app.storage import open_storage
 from app.thread import ThreadRow, get_thread, list_threads, list_threads_with_latest
+from app.transcribe import open_transcriber
 from app.turn import NO_FAILURE, start_reply, start_retry
 from app.usage import token_totals_for_email
 
@@ -1021,4 +1056,249 @@ def stop_message(request: Request, thread_id: str) -> Response:
     if thread is None:
         return _error(404, _NOT_FOUND)
     stop_reply(account_id, parsed)
+    return Response(status_code=204)
+
+
+async def _audio_bytes(request: Request) -> bytes | None:
+    declared = request.headers.get("content-length")
+    if declared is not None and declared.isdigit() and int(declared) > transcribe.MAX_AUDIO_BYTES:
+        return None
+    audio = bytearray()
+    async for chunk in request.stream():
+        audio.extend(chunk)
+        if len(audio) > transcribe.MAX_AUDIO_BYTES:
+            return None
+    return bytes(audio)
+
+
+@app.post("/voice/transcribe")
+async def post_transcribe(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    content_type = transcribe.base_type(request.headers.get("content-type"))
+    if content_type is None:
+        return _error(400, transcribe.BAD_AUDIO_TYPE)
+    audio = await _audio_bytes(request)
+    if audio is None:
+        return _error(413, transcribe.TOO_LONG)
+    if audio == b"":
+        return _error(400, transcribe.NO_AUDIO)
+    try:
+        email, _ = load_account(account_id)
+        with connect() as connection:
+            refused = transcribe.gate(connection, email)
+    except Exception:
+        return _down()
+    if refused is not None:
+        return _error(refused.status, refused.message)
+    transcriber = open_transcriber()
+    result = None
+    try:
+        result = await run_in_threadpool(transcriber.transcribe, audio, content_type)
+    except Exception:
+        _log.warning("transcription failed")
+    try:
+        with connect() as connection:
+            transcribe.record(connection, account_id, email, transcriber, result)
+    except Exception:
+        return _down()
+    if result is None:
+        return _error(502, transcribe.FAILED)
+    return JSONResponse(content={"text": result.text})
+
+
+_DRIVE_STATE = "drive_state"
+_DRIVE_STATE_SECONDS = 600
+_DRIVE_PICK = "Choose a file in Google Drive."
+
+
+def _frontend() -> str:
+    return os.environ.get("FRONTEND_ORIGIN", "").strip().rstrip("/")
+
+
+def _drive_done(request: Request, outcome: str) -> Response:
+    response = RedirectResponse(f"{_frontend()}/?drive={outcome}", status_code=302)
+    response.delete_cookie(
+        key=_DRIVE_STATE, path="/", httponly=True, samesite="lax", secure=_https(request)
+    )
+    return response
+
+
+@app.get("/integrations")
+def get_integrations(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        with connect() as connection:
+            saved = load_integration(connection, account_id, GOOGLE_DRIVE)
+    except Exception:
+        return _down()
+    return JSONResponse(
+        content={
+            "drive": {
+                "connected": saved is not None,
+                "label": saved[1] if saved is not None else None,
+                "picker_api_key": os.environ.get("DRIVE_PICKER_API_KEY", ""),
+                "app_id": os.environ.get("DRIVE_APP_ID", ""),
+            }
+        }
+    )
+
+
+@app.get("/integrations/drive/connect")
+def drive_connect(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    try:
+        state = secrets.token_urlsafe(32)
+        address = open_drive().consent_url(state)
+    except Exception:
+        return _drive_done(request, "failed")
+    response = RedirectResponse(address, status_code=302)
+    response.set_cookie(
+        key=_DRIVE_STATE,
+        value=state,
+        max_age=_DRIVE_STATE_SECONDS,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=_https(request),
+    )
+    return response
+
+
+@app.get("/integrations/drive/callback")
+def drive_callback(
+    request: Request, code: str = "", state: str = "", error: str = ""
+) -> Response:
+    # Google sends the browser here, so the person is known by the session cookie alone.
+    expected = request.cookies.get(_DRIVE_STATE, "")
+    session_id = _session_id(request)
+    if (
+        error != ""
+        or code == ""
+        or expected == ""
+        or not secrets.compare_digest(expected.encode(), state.encode())
+        or session_id is None
+    ):
+        return _drive_done(request, "failed")
+    try:
+        account_id = open_session(session_id)
+        if account_id is None:
+            return _drive_done(request, "failed")
+        granted = open_drive().exchange_code(code)
+        secret = open_kms().encrypt(granted.refresh_token.encode(), account_id.bytes)
+        with connect() as connection:
+            save_integration(connection, account_id, GOOGLE_DRIVE, secret, granted.email)
+    except Exception as failure:
+        _log.warning("drive connect failed: %s", type(failure).__name__)
+        return _drive_done(request, "failed")
+    return _drive_done(request, "connected")
+
+
+def _drive_access(account_id: uuid.UUID) -> tuple[GoogleDrive, str, int] | JSONResponse:
+    """A short-lived access token minted from the stored refresh token."""
+    try:
+        with connect() as connection:
+            saved = load_integration(connection, account_id, GOOGLE_DRIVE)
+        if saved is None:
+            return _error(409, NOT_CONNECTED)
+        drive = open_drive()
+        refresh = open_kms().decrypt(saved[0], account_id.bytes).decode()
+        token, expires = drive.refresh(refresh)
+    except DriveReconnect:
+        return _error(409, NOT_CONNECTED)
+    except DriveError:
+        return _error(502, DRIVE_DOWN)
+    except Exception as failure:
+        _log.warning("drive token failed: %s", type(failure).__name__)
+        return _down()
+    return drive, token, expires
+
+
+@app.get("/integrations/drive/token")
+def drive_token(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    access = _drive_access(account_id)
+    if isinstance(access, JSONResponse):
+        return access
+    return JSONResponse(
+        content={"access_token": access[1], "expires_in": access[2]},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def _import_drive_file(account_id: uuid.UUID, drive_file_id: str) -> Response:
+    access = _drive_access(account_id)
+    if isinstance(access, JSONResponse):
+        return access
+    drive, token, _ = access
+    try:
+        meta = drive.metadata(token, drive_file_id)
+        name, content_type, export_as = plan_copy(meta, MAX_UPLOAD_BYTES)
+        data = drive.fetch(token, drive_file_id, export_as, MAX_UPLOAD_BYTES)
+        with connect() as connection:
+            row = add_drive_copy(connection, open_storage(), account_id, name, content_type, data)
+    except FileRefused as refused:
+        return _error(400, str(refused))
+    except DriveTooBig:
+        return _error(400, TOO_BIG)
+    except DriveMissing:
+        return _error(400, CANNOT_OPEN)
+    except DriveReconnect:
+        return _error(409, NOT_CONNECTED)
+    except DriveError:
+        return _error(502, DRIVE_DOWN)
+    except Exception:
+        return _down()
+    return JSONResponse(status_code=201, content=_file_item(row))
+
+
+@app.post("/integrations/drive/import")
+async def post_drive_import(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        body = await request.json()
+    except Exception:
+        return _error(400, _DRIVE_PICK)
+    drive_file_id = body.get("file_id") if isinstance(body, dict) else None
+    if not isinstance(drive_file_id, str) or not valid_file_id(drive_file_id):
+        return _error(400, _DRIVE_PICK)
+    return await run_in_threadpool(_import_drive_file, account_id, drive_file_id)
+
+
+@app.delete("/integrations/drive", status_code=204)
+def drive_disconnect(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    try:
+        with connect() as connection:
+            saved = load_integration(connection, account_id, GOOGLE_DRIVE)
+    except Exception:
+        return _down()
+    if saved is not None:
+        try:
+            refresh = open_kms().decrypt(saved[0], account_id.bytes).decode()
+            open_drive().revoke(refresh)
+        except Exception as failure:
+            # The person asked to disconnect. A token Google would not revoke is still dropped.
+            _log.warning("drive revoke failed: %s", type(failure).__name__)
+    try:
+        with connect() as connection:
+            remove_integration(connection, account_id, GOOGLE_DRIVE)
+    except Exception:
+        return _down()
     return Response(status_code=204)

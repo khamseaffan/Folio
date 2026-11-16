@@ -401,6 +401,13 @@ def test_record_search_stores_one_priced_row_without_tokens(account) -> None:
     assert flags == (False, False)
 
 
+def test_a_search_row_can_be_named_for_a_scheduled_run(account) -> None:
+    account_id, email = account
+    with connect() as connection:
+        row = record_search(connection, account_id, email, _run_id(account_id), "schedule")
+    assert (row[4], row[5], row[13]) == ("tavily", "search", "schedule")
+
+
 def test_a_search_row_adds_no_tokens(account) -> None:
     account_id, email = account
     with connect() as connection:
