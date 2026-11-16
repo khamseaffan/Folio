@@ -52,6 +52,7 @@ import { Files } from "./files";
 import { Reports } from "./reports";
 import { Settings } from "./settings";
 import { ThreadList } from "./thread-list";
+import { VoiceButton } from "./voice-button";
 
 function GoogleMark() {
   return (
@@ -434,6 +435,7 @@ export function FolioApp() {
   const streamAbort = useRef<AbortController | null>(null);
   const stopping = useRef(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const composerText = useRef<HTMLTextAreaElement>(null);
   const messagePane = useRef<HTMLDivElement>(null);
   const requestGeneration = useRef(0);
   const acting = useRef(false);
@@ -1119,6 +1121,11 @@ export function FolioApp() {
     }
   }
 
+  function addTranscript(text: string) {
+    setDraft((current) => (current.trim() === "" ? text : `${current.trimEnd()} ${text}`));
+    composerText.current?.focus();
+  }
+
   function onComposerKey(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
     // Safari reports the IME confirm as Enter.
@@ -1449,7 +1456,9 @@ export function FolioApp() {
                         disabled={pending}
                         onChange={(event) => setDraft(event.target.value)}
                         onKeyDown={onComposerKey}
+                        ref={composerText}
                       />
+                      <VoiceButton disabled={pending} onText={addTranscript} />
                       {streaming ? (
                         <button type="button" className="primary send" onClick={() => void onStop()}>
                           <StopIcon aria-hidden="true" />

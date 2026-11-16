@@ -6,7 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from app.model import Block, Model, Reply, ToolCall, ToolSpec
+from app.model import Block, Model, Reply, ToolCall, ToolOutput, ToolSpec
 
 MAX_TOOL_ROUNDS = 8
 ROUNDS_REACHED = "I stopped after 8 tool steps."
@@ -112,7 +112,7 @@ def _tools_node(state: _State, config: RunnableConfig) -> dict[str, object]:
 
     writer = get_stream_writer()
     configurable = config.get("configurable") or {}
-    call_tool: Callable[[ToolCall], str] = configurable["call_tool"]
+    call_tool: Callable[[ToolCall], str | ToolOutput] = configurable["call_tool"]
     stop = _stop(config)
     blocks = list(state["blocks"])
     halted = False
@@ -121,7 +121,12 @@ def _tools_node(state: _State, config: RunnableConfig) -> dict[str, object]:
             halted = True
             break
         writer({"tool": call.name})
-        blocks.append(Block(role="tool", text=call_tool(call), call_id=call.id))
+        output = call_tool(call)
+        if isinstance(output, str):
+            output = ToolOutput(output)
+        blocks.append(
+            Block(role="tool", text=output.text, call_id=call.id, images=output.images)
+        )
     if stop is not None and stop.is_set():
         halted = True
     return {
@@ -172,7 +177,7 @@ def stream_turn(
     blocks: list[Block],
     stop: threading.Event,
     tools: Sequence[ToolSpec] = (),
-    call_tool: Callable[[ToolCall], str] | None = None,
+    call_tool: Callable[[ToolCall], str | ToolOutput] | None = None,
 ):
     configurable: dict[str, object] = {"model": model, "stop": stop}
     if call_tool is not None and tools:

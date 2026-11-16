@@ -1,4 +1,3 @@
-import json
 import logging
 import threading
 import uuid
@@ -21,7 +20,7 @@ from app.message import (
     list_messages,
     update_message_body,
 )
-from app.model import CONTEXT_TOKENS, MODEL_ID, Block, Model, Reply, ToolCall
+from app.model import CONTEXT_TOKENS, MODEL_ID, Block, Model, Reply, ToolCall, ToolOutput
 from app.session import set_last_active_at
 from app.thread import ThreadRow, get_thread, set_summary
 from app.usage import record_usage, tokens_for_email
@@ -691,7 +690,7 @@ def _write_reply(
     replies: list[Reply] = []
     turn = operations.Turn(opened=set())
 
-    def call_tool(call: ToolCall) -> str:
+    def call_tool(call: ToolCall) -> ToolOutput:
         if call.unreadable:
             result = {"ok": False, "code": "invalid", "error": operations.BAD_INPUT}
         else:
@@ -711,7 +710,7 @@ def _write_reply(
                 ", arguments unreadable" if call.unreadable else "",
                 prepared.thread_id,
             )
-        return json.dumps(result)
+        return operations.encode(result)
 
     try:
         for event in stream_turn(

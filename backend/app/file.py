@@ -39,6 +39,8 @@ TYPES = {
     ".heic": "image/heic",
 }
 
+TASK_TYPES = (".md", ".txt", ".csv", ".pdf")
+
 # id, account_id, kind, name, content_type, byte_size, status, created_at
 FileRow = tuple[uuid.UUID, uuid.UUID, str, str, str, int, str, datetime]
 
@@ -71,6 +73,10 @@ def _pending_path(file_id: uuid.UUID) -> str:
 
 def _final_path(account_id: uuid.UUID, file_id: uuid.UUID, name: str) -> str:
     return f"accounts/{account_id}/files/{file_id}/{name}"
+
+
+def stored_path(row: FileRow) -> str:
+    return _final_path(row[1], row[0], row[3])
 
 
 def _clean_name(name: str) -> str:
@@ -132,6 +138,41 @@ def begin_upload(
     return Begun(file_id, storage.upload_url(_pending_path(file_id), content_type), content_type)
 
 
+def create_task_file(
+    connection: psycopg.Connection,
+    storage: Storage,
+    account_id: uuid.UUID,
+    name: str,
+    content_type: str,
+    data: bytes,
+) -> FileRow:
+    clean = _clean_name(name)
+    # The type comes from the name, and what the caller says must agree with it.
+    if clean == "" or Path(clean).suffix.lower() not in TASK_TYPES:
+        raise FileRefused(BAD_FILE_TYPE)
+    if _content_type(clean) != content_type:
+        raise FileRefused(BAD_FILE_TYPE)
+    if len(data) < 1:
+        raise FileRefused(EMPTY_FILE)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise FileRefused(TOO_BIG)
+    apply(connection)
+    connection.execute("SELECT 1 FROM account WHERE id = %s FOR UPDATE", (account_id,))
+    if byte_count(connection, account_id) + len(data) > ACCOUNT_LIMIT_BYTES:
+        raise FileRefused(FILES_FULL)
+    row = connection.execute(
+        f"""
+        INSERT INTO file (account_id, kind, name, content_type, byte_size, status)
+        VALUES (%s, 'task', %s, %s, %s, 'ready')
+        RETURNING {_COLUMNS}
+        """,
+        (account_id, clean, content_type, len(data)),
+    ).fetchone()
+    assert row is not None
+    storage.write(_final_path(account_id, row[0], clean), data, content_type)
+    return row
+
+
 def complete_upload(
     connection: psycopg.Connection,
     storage: Storage,
@@ -159,6 +200,39 @@ def complete_upload(
     storage.move(_pending_path(file_id), _final_path(account_id, file_id, row[3]))
     connection.execute("UPDATE file SET status = 'ready' WHERE id = %s", (file_id,))
     return (*row[:6], "ready", row[7])
+
+
+def add_drive_copy(
+    connection: psycopg.Connection,
+    storage: Storage,
+    account_id: uuid.UUID,
+    name: str,
+    content_type: str,
+    data: bytes,
+) -> FileRow:
+    """Store bytes already read from Drive. A copy is outside the account's byte count."""
+    if len(data) < 1:
+        raise FileRefused(EMPTY_FILE)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise FileRefused(TOO_BIG)
+    apply(connection)
+    file_id = uuid.uuid4()
+    path = _final_path(account_id, file_id, name)
+    storage.write(path, data, content_type)
+    try:
+        row = connection.execute(
+            f"""
+            INSERT INTO file (id, account_id, kind, name, content_type, byte_size, status)
+            VALUES (%s, %s, 'drive_copy', %s, %s, %s, 'ready')
+            RETURNING {_COLUMNS}
+            """,
+            (file_id, account_id, name, content_type, len(data)),
+        ).fetchone()
+    except Exception:
+        storage.delete(path)
+        raise
+    assert row is not None
+    return row
 
 
 def list_files(connection: psycopg.Connection, account_id: uuid.UUID) -> list[FileRow]:
