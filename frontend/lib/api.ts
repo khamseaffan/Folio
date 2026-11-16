@@ -498,6 +498,26 @@ export async function postStop(id: string): Promise<ApiResult<true>> {
   return threadCall(result, () => true);
 }
 
+export async function transcribeAudio(audio: Blob): Promise<ApiResult<string>> {
+  let http: HttpResult;
+  try {
+    const response = await fetch(`${apiBase()}/voice/transcribe`, {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+      headers: { "Content-Type": audio.type },
+      body: audio,
+    });
+    http = { status: response.status, payload: await readBody(response) };
+  } catch {
+    return { kind: "message", message: FALLBACK, unauthorized: false, refused: false };
+  }
+  return classify(http, (body) => {
+    if (!isRecord(body) || typeof body.text !== "string") return null;
+    return body.text;
+  });
+}
+
 export type SessionItem = {
   id: string;
   created_at: string;

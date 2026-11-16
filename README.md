@@ -1,100 +1,141 @@
 # Folio
 
-[![Vercel](https://img.shields.io/github/deployments/khamseaffan/Folio/Production?label=vercel&logo=vercel)](https://folio.khamseaffan.com)
 [![CI](https://github.com/khamseaffan/Folio/actions/workflows/ci.yml/badge.svg)](https://github.com/khamseaffan/Folio/actions/workflows/ci.yml)
+[![Vercel](https://img.shields.io/github/deployments/khamseaffan/Folio/Production?label=vercel&logo=vercel)](https://folio.khamseaffan.com)
 
-Personal AI agent. Each person has a private account, and their own memory, files, research, and scheduled runs. The platform holds the model keys.
+A private AI assistant. Talk to it in chat, ask for a researched report with cited sources, let it remember how you like to work, and have it do tasks on a schedule while you are away.
 
-The product rules are in [docs/product](docs/product). The record picture is [docs/diagrams/schema.html](docs/diagrams/schema.html).
+**Live:** https://folio.khamseaffan.com (invite only) · [Privacy policy](https://folio.khamseaffan.com/privacy)
 
-## Stack
+The agent is written from scratch for this project: its own loop, tools, memory, and limits. It does not host an existing agent.
 
-| Layer | Choice |
-| --- | --- |
-| Web | Next.js on Vercel |
-| API and worker | Python 3.13, FastAPI, Cloud Run |
-| Data | Cloud SQL for PostgreSQL 18, Cloud Storage |
-| Sign-in | Firebase Authentication |
-| Jobs | Cloud Tasks, Cloud Scheduler |
-| Secrets | Cloud KMS for model keys and integration secrets. Secret Manager for app secrets. |
-| Infrastructure | Terraform for Google Cloud, `us-central1`. The website is on Vercel. |
-| CI | GitHub Actions |
+## What it does
+
+- **Chat.** Threads, replies that stream as they are written, a stop button, and no limit on message length.
+- **Deep research.** Ask for a report. Folio searches the web, opens up to 20 pages in its own browser, and writes a report with a numbered source list. A banner in the thread shows what it is reading while it works.
+- **Memory.** It keeps notes about you as Markdown and reads your profile on every message. You read them on the Profile page and change them by telling Folio.
+- **Schedules.** Say when, in the chat. A worker runs the task while you are away and the result lands in the thread. A schedule can start research.
+- **Private accounts.** Sign in with Google or an email link. Only approved addresses can join. Each account has a token limit, and deleting an account removes its data at once.
 
 ## Status
 
-Live at https://folio.khamseaffan.com.
-
-| Present | Not built |
+| Area | State |
 | --- | --- |
-| Sign-in with an email allowlist, sessions, a display name, and a settings screen with the sessions, the token totals, and account deletion | Files |
-| Threads with create, rename, and delete by a control or by the agent, and a streamed chat turn with usage rows, and memory: knowledge files, abilities, and the profile panel, and schedules: the agent sets them, a worker runs them, and the result is a message in the thread, and research: a report with its sources, read and downloaded on the Reports screen | Drive, the browser, voice |
-| Deployment: Terraform on Google Cloud, Vercel, and CI/CD | Admin limits, and the provider and model selection |
+| Accounts, chat, memory, schedules | Live |
+| Deep research and reports | Live |
+| Files: upload, read, download | In progress. The bucket and the upload API are built and in review. |
+| Voice input, Google Drive import | Planned |
+| Web access for scheduled tasks, confirmed website sends | Planned |
+| Choosing the model from settings | Planned |
 
-## Deploy
+The full requirement list is in [docs/product/mvp-mlp.md](docs/product/mvp-mlp.md).
 
-- **Pull request:** GitHub Actions runs `backend`, `frontend`, `terraform` and `docker`. All four must pass to merge into `main`.
-- **Merge to `main`:** Vercel builds the website from its GitHub connection. `deploy.yml` then builds the API image tagged with the commit, runs the migration job, deploys Cloud Run, and checks that `https://folio.khamseaffan.com/api/ready` answers. Only the newest commit on `main` is deployed.
-- **Infrastructure:** `infra/` is applied by a person after reading the plan. See `infra/README.md`.
-- **Same origin:** the site forwards `/api/*` to the API, so the session cookie works.
+## How it fits together
 
-## Run
+```mermaid
+flowchart LR
+  person[Person] --> web["Website<br/>Next.js on Vercel"]
+  web -->|"/api/*"| api["API<br/>FastAPI on Cloud Run"]
+  api --> sql[("Cloud SQL<br/>PostgreSQL")]
+  api --> bucket[("Cloud Storage<br/>files")]
+  api --> tasks["Cloud Tasks"]
+  clock["Cloud Scheduler<br/>every minute"] --> worker
+  tasks --> worker["Worker<br/>schedules"]
+  tasks --> research["Research service<br/>with Chrome"]
+  worker --> sql
+  research --> sql
+  api --> model["Model provider"]
+  worker --> model
+  research --> model
+```
 
-API, from `backend/`:
+A short chat is answered on the request. Research and scheduled runs go on a queue, and a worker picks them up, so a half-hour report does not hold a connection open. The database is on a private address and only the services reach it. [docs/architecture.md](docs/architecture.md) has the full diagram.
+
+## Repository
+
+| Folder | What is in it |
+| --- | --- |
+| `backend/` | Python 3.13 API, worker, and research service (FastAPI) |
+| `frontend/` | The Next.js website |
+| `infra/` | Terraform for Google Cloud. See [infra/README.md](infra/README.md). |
+| `docs/` | Product rules, decisions, diagrams, and the hand-in report |
+
+## Run it locally
+
+You need [uv](https://docs.astral.sh/uv/), Node 20 or newer, and a PostgreSQL database. The API looks for `postgresql://folio:folio@localhost:5432/folio` unless `DATABASE_URL` says otherwise. For example, with Docker:
+
+```bash
+docker run --name folio-db -e POSTGRES_USER=folio -e POSTGRES_PASSWORD=folio -e POSTGRES_DB=folio -p 5432:5432 -d postgres:18
+```
+
+**API**, from `backend/`:
 
 ```bash
 uv sync --all-groups
 uv run python -m app.migrate
 uv run uvicorn app.main:app --reload
-uv run ruff check .
-uv run pytest
 ```
 
-Worker, from `backend/`. It serves the minute tick and the run route. Locally a run starts in the same process.
+**Worker**, from `backend/`. It serves the one-minute tick and the run route.
 
 ```bash
 uv run uvicorn app.worker:app --port 8001
 curl -X POST localhost:8001/tick
 ```
 
-Web, from `frontend/`:
+**Website**, from `frontend/`:
 
 ```bash
 npm ci
 npm run dev
-npm run lint
-npm run typecheck
-npm run build
 ```
 
-`app.migrate` creates and updates the tables. A request creates a table only when it is missing, so run `app.migrate` after a change to a file in `backend/migrations`.
+**Settings.** The code reads these from the environment.
 
-Health check: `GET /health` returns `{"status":"ok"}`.
+| Variable | Used for |
+| --- | --- |
+| `OPENAI_API_KEY` | The chat model. Without it the API gives a fixed placeholder reply. |
+| `TAVILY_API_KEY` | Web search for research |
+| `DATABASE_URL` | The database, if it is not the default above |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | Sign-in on the API side |
+| `NEXT_PUBLIC_FIREBASE_*` | Sign-in on the website side, in `frontend/.env.local` |
 
-Install the commit hook once: `uvx pre-commit install`.
+`app.migrate` creates and updates the tables. A request creates a table only when it is missing, so run `app.migrate` again after a change to a file in `backend/migrations`.
+
+## Checks
+
+```bash
+uv run ruff check .     # backend, from backend/
+uv run pytest           # backend, from backend/
+npm run lint            # frontend, from frontend/
+npm run typecheck       # frontend, from frontend/
+```
+
+Install the commit hook once with `uvx pre-commit install`. It runs the same checks before a commit.
+
+## Deploy
+
+- **Pull request:** GitHub Actions runs `backend`, `frontend`, `terraform`, and `docker`. All four must pass before a merge into `main`.
+- **Merge to `main`:** Vercel builds the website. `deploy.yml` builds the images tagged with the commit, runs the migration job, deploys the Cloud Run services, and checks that the live site answers. Only the newest commit is deployed.
+- **Infrastructure:** `infra/` is applied by a person after reading the plan. CI only checks the formatting and the syntax.
+- **Same origin:** the website forwards `/api/*` to the API, so the session cookie is first-party.
 
 ## Docs
 
+**Start here**
+- [Goal](Goal.md), the requirement list
 - [Decisions](docs/decisions.md)
-- [Architecture](docs/architecture.md)
-- [System map](docs/diagrams/system-map.html)
-- [Access](docs/product/access.md)
-- [Control](docs/product/control.md)
-- [Screens](docs/product/screens.md)
-- [Failure](docs/product/failure.md)
-- [Records](docs/product/records.md)
-- [Schema picture](docs/diagrams/schema.html)
-- [Models](docs/product/models.md)
-- [Conversations](docs/product/conversations.md)
-- [Profile](docs/product/profile.md)
-- [Abilities](docs/product/abilities.md)
-- [Files](docs/product/files.md)
-- [Drive](docs/product/drive.md)
-- [Research](docs/product/research.md)
-- [Schedules](docs/product/schedules.md)
-- [Browser](docs/product/browser.md)
-- [Voice](docs/product/voice.md)
-- [Submit confirmations](docs/product/confirmations.md)
-- [Later](docs/product/later.md)
-- [MVP and MLP](docs/product/mvp-mlp.md)
-- [Hand-in report, draft 1](docs/hand-in/report.md)
+- [Architecture](docs/architecture.md) and the [system map](docs/diagrams/system-map.html)
+- [Hand-in report](docs/hand-in/report.md)
+
+**Product rules**
+- Accounts and control: [Access](docs/product/access.md), [Control](docs/product/control.md), [Models](docs/product/models.md)
+- Using Folio: [Screens](docs/product/screens.md), [Conversations](docs/product/conversations.md), [Profile](docs/product/profile.md), [Abilities](docs/product/abilities.md)
+- Work it does: [Research](docs/product/research.md), [Schedules](docs/product/schedules.md), [Files](docs/product/files.md), [Drive](docs/product/drive.md), [Browser](docs/product/browser.md), [Voice](docs/product/voice.md), [Submit confirmations](docs/product/confirmations.md)
+- When things go wrong: [Failure](docs/product/failure.md)
+- Data: [Records](docs/product/records.md) and the [schema picture](docs/diagrams/schema.html)
+- What is next: [MVP and MLP](docs/product/mvp-mlp.md), [Later](docs/product/later.md)
+
+**Working on the code**
+- [Working rules](AGENTS.md)
 - [How docs are written](docs/conventions.md)

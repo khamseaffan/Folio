@@ -1,6 +1,7 @@
 from app import (
     ability,
     file,
+    integration,
     knowledge_file,
     report,
     report_source,
@@ -26,6 +27,7 @@ def run() -> None:
         report_source.apply(connection, force=True)
         file.apply(connection, force=True)
         run_activity.apply(connection, force=True)
+        integration.apply(connection, force=True)
 
 
 if __name__ == "__main__":
