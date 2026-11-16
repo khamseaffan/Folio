@@ -45,3 +45,11 @@ output "research_service" {
 output "research_queue" {
   value = google_cloud_tasks_queue.research.name
 }
+
+output "files_bucket" {
+  value = google_storage_bucket.files.name
+}
+
+output "integrations_key" {
+  value = google_kms_crypto_key.integrations.id
+}

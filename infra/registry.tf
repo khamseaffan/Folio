@@ -10,6 +10,10 @@ locals {
     "sts.googleapis.com",
     "cloudtasks.googleapis.com",
     "cloudscheduler.googleapis.com",
+    "storage.googleapis.com",
+    "cloudkms.googleapis.com",
+    "drive.googleapis.com",
+    "picker.googleapis.com",
   ]
 }
 
