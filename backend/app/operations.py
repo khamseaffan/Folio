@@ -1,23 +1,29 @@
+import json
 import logging
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import psycopg
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app import ability, knowledge_file, live, report, schedule, thread
+from app import file as stored_file
 from app import queue as run_queue
 from app import run as run_table
-from app.model import ToolSpec
+from app.file_reader import ReadRefused, open_stored
+from app.model import Image, ToolOutput, ToolSpec
+from app.storage import open_storage
+from app.text_pdf import make_pdf
 
 NOT_FOUND = "Thread not found."
 BAD_NAME = "A thread name is 1 to 80 characters."
 BAD_INPUT = "That input is not valid."
 UNKNOWN = "Unknown operation."
 NO_FILE = "File not found."
+NO_STORED_FILE = "That uploaded file was not found."
 NO_ABILITY = "Ability not found."
 BAD_FILE_NAME = "A file name is 1 to 80 characters."
 BAD_TEXT = "That text cannot be stored."
@@ -152,6 +158,15 @@ class _RenameReport(_Input):
 
 class _DeleteReport(_Input):
     report_id: uuid.UUID
+
+
+class _FileId(_Input):
+    file_id: uuid.UUID
+
+
+class _ReadFile(_Input):
+    file_id: uuid.UUID
+    part: int = Field(default=1, ge=1)
 
 
 def _refused(code: str, error: str) -> Result:
@@ -635,6 +650,110 @@ def _delete_report(
     return {"ok": True, "report_id": str(given.report_id)}
 
 
+def _list_files(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _NoInput,
+) -> Result:
+    rows = stored_file.list_files(connection, account_id)
+    return {
+        "ok": True,
+        "files": [
+            {
+                "id": str(row[0]),
+                "name": row[3],
+                "kind": row[2],
+                "type": row[4],
+                "size": row[5],
+            }
+            for row in rows
+        ],
+    }
+
+
+def _read_file(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _ReadFile,
+) -> Result:
+    row = stored_file.get_file(connection, account_id, given.file_id)
+    if row is None:
+        return _refused("not_found", NO_STORED_FILE)
+    try:
+        opened = open_stored(open_storage(), stored_file.stored_path(row), row[4], given.part)
+    except ReadRefused as refused:
+        return _refused(refused.code, str(refused))
+    result: Result = {"ok": True, "name": row[3], "part": opened.part, "parts": opened.parts}
+    if opened.images:
+        result["note"] = "The image follows in the next message."
+        result["images"] = list(opened.images)
+    else:
+        result["text"] = opened.text
+    if opened.note is not None:
+        result["note"] = opened.note
+    return result
+
+
+def _delete_stored_file(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _FileId,
+) -> Result:
+    if not stored_file.delete_file(connection, open_storage(), account_id, given.file_id):
+        return _refused("not_found", NO_STORED_FILE)
+    return {"ok": True, "file_id": str(given.file_id)}
+
+
+def encode(result: Result) -> ToolOutput:
+    # Images cannot be written as JSON, so they travel beside the text the model reads.
+    images = tuple(
+        image for image in result.get("images", []) if isinstance(image, Image)
+    )
+    text = {key: value for key, value in result.items() if key != "images"}
+    return ToolOutput(json.dumps(text), images)
+
+
+class _WriteFile(_Input):
+    name: str
+    content: str
+    format: Literal["md", "txt", "csv", "pdf"]
+
+
+_FILE_TYPES = {
+    "md": "text/markdown",
+    "txt": "text/plain",
+    "csv": "text/csv",
+    "pdf": "application/pdf",
+}
+
+
+def _write_file(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    context: Context,
+    given: _WriteFile,
+) -> Result:
+    name = _name(given.name)
+    if name is None:
+        return _refused("invalid", BAD_FILE_NAME)
+    if not _clean(given.content):
+        return _refused("invalid", BAD_TEXT)
+    if not name.lower().endswith(f".{given.format}"):
+        name = f"{name}.{given.format}"
+    data = make_pdf(given.content) if given.format == "pdf" else given.content.encode("utf-8")
+    try:
+        row = stored_file.create_task_file(
+            connection, open_storage(), account_id, name, _FILE_TYPES[given.format], data
+        )
+    except stored_file.FileRefused as refused:
+        limit = str(refused) in (stored_file.TOO_BIG, stored_file.FILES_FULL)
+        return _refused("limit" if limit else "invalid", str(refused))
+    return {"ok": True, "file_id": str(row[0]), "name": row[3]}
+
+
 OPERATIONS: dict[str, Operation] = {
     operation.name: operation
     for operation in (
@@ -831,6 +950,49 @@ OPERATIONS: dict[str, Operation] = {
             _delete_report,
             True,
             True,
+        ),
+        Operation(
+            "list_files",
+            "List the files the person uploaded or that Folio saved for them. Each has an id, a "
+            "name, a kind (upload, task, or drive_copy), a type, and a size in bytes. Use it to "
+            "find the id of a file before reading or deleting it.",
+            _NoInput,
+            _list_files,
+            True,
+        ),
+        Operation(
+            "read_file",
+            "Open one of the person's files by its id. A text, Markdown, CSV, spreadsheet, or "
+            "PDF file comes back as text, and a photo or picture comes back as the image. A "
+            "long file comes back in parts of equal size: the answer says which part you "
+            "have and how many parts there are, so ask for part 2, 3, and so on until you "
+            "have read what you need. The first part is the default.",
+            _ReadFile,
+            _read_file,
+            True,
+        ),
+        Operation(
+            "delete_file",
+            "Delete one of the person's files by its id, so it is gone for good. Messages that "
+            "mention the file stay. Only delete a file when the person asks you to.",
+            _FileId,
+            _delete_stored_file,
+            True,
+            True,
+        ),
+        Operation(
+            "write_file",
+            "Write a file for the person to download from the Files page. Use it ONLY when the "
+            "person's task needs a file as its result, such as a document, a table, or a PDF. "
+            "A reply that stays in the thread writes no file, so answer in the thread when a "
+            "message is enough. The format is md (Markdown), txt (plain text), csv, or pdf. "
+            "For pdf, give plain or Markdown-like text and it is laid out for you. The name gets "
+            "the right extension if it has none. A file is at most 50 MB, and all files of the "
+            "person together at most 5 GB. Returns the file id and name.",
+            _WriteFile,
+            _write_file,
+            True,
+            False,
         ),
     )
 }

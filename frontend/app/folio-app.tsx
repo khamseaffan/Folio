@@ -8,6 +8,7 @@ import {
   Cog6ToothIcon,
   DocumentTextIcon,
   PuzzlePieceIcon,
+  FolderIcon,
   PaperAirplaneIcon,
   StopIcon,
   UserCircleIcon,
@@ -49,9 +50,11 @@ import {
 import { Integrations, type DriveReturn } from "./integrations";
 import { Markdown } from "./markdown";
 import { ProfilePanel } from "./profile-panel";
+import { Files } from "./files";
 import { Reports } from "./reports";
 import { Settings } from "./settings";
 import { ThreadList } from "./thread-list";
+import { VoiceButton } from "./voice-button";
 
 function GoogleMark() {
   return (
@@ -434,6 +437,7 @@ export function FolioApp() {
   const [reportsOpen, setReportsOpen] = useState(false);
   const [driveReturn] = useState<DriveReturn | null>(readDriveReturn);
   const [integrationsOpen, setIntegrationsOpen] = useState(driveReturn !== null);
+  const [filesOpen, setFilesOpen] = useState(false);
   // Only used below 900 px, where the sidebar is a menu that covers the page.
   const [railOpen, setRailOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -441,6 +445,7 @@ export function FolioApp() {
   const streamAbort = useRef<AbortController | null>(null);
   const stopping = useRef(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const composerText = useRef<HTMLTextAreaElement>(null);
   const messagePane = useRef<HTMLDivElement>(null);
   const requestGeneration = useRef(0);
   const acting = useRef(false);
@@ -500,6 +505,7 @@ export function FolioApp() {
     setProfileOpen(false);
     setReportsOpen(false);
     setIntegrationsOpen(false);
+    setFilesOpen(false);
     setView("signed-out");
   }, []);
 
@@ -733,6 +739,7 @@ export function FolioApp() {
         linkHref.current = null;
         setProfileOpen(false);
         setReportsOpen(false);
+    setFilesOpen(false);
         setView("signed-out");
         if (finished.kind === "cancel") return;
         setNotice(finished.kind === "unavailable" ? UNAVAILABLE : finished.message);
@@ -1139,6 +1146,11 @@ export function FolioApp() {
     }
   }
 
+  function addTranscript(text: string) {
+    setDraft((current) => (current.trim() === "" ? text : `${current.trimEnd()} ${text}`));
+    composerText.current?.focus();
+  }
+
   function onComposerKey(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey) return;
     // Safari reports the IME confirm as Enter.
@@ -1153,6 +1165,7 @@ export function FolioApp() {
     setNotice(null);
     setProfileOpen(false);
     setReportsOpen(false);
+    setFilesOpen(false);
     setView("signed-out");
   }
 
@@ -1160,12 +1173,13 @@ export function FolioApp() {
     if (event.key === "Tab") event.preventDefault();
   }
 
-  type Page = "chat" | "reports" | "profile" | "integrations" | "settings";
+  type Page = "chat" | "reports" | "files" | "profile" | "integrations" | "settings";
 
   // One page at a time. Leaving a page is choosing another one in the sidebar.
   function go(next: Page) {
     setSettingsOpen(next === "settings");
     setReportsOpen(next === "reports");
+    setFilesOpen(next === "files");
     setProfileOpen(next === "profile");
     setIntegrationsOpen(next === "integrations");
     setRailOpen(false);
@@ -1179,11 +1193,13 @@ export function FolioApp() {
     ? "settings"
     : reportsOpen
       ? "reports"
-      : profileOpen
-        ? "profile"
-        : integrationsOpen
-          ? "integrations"
-          : "chat";
+      : filesOpen
+        ? "files"
+        : profileOpen
+          ? "profile"
+          : integrationsOpen
+            ? "integrations"
+            : "chat";
   const initials =
     (displayName ?? "")
       .split(/\s+/)
@@ -1193,6 +1209,7 @@ export function FolioApp() {
       .join("") || "F";
   const navItems: { id: Exclude<Page, "chat">; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
     { id: "reports", label: "Reports", icon: DocumentTextIcon },
+    { id: "files", label: "Files", icon: FolderIcon },
     { id: "profile", label: "Profile", icon: UserCircleIcon },
     { id: "integrations", label: "Integrations", icon: PuzzlePieceIcon },
     { id: "settings", label: "Settings", icon: Cog6ToothIcon },
@@ -1391,6 +1408,9 @@ export function FolioApp() {
               {threadsLoaded && page === "reports" ? (
                 <Reports reloadKey={reloadKey} onSignedOut={settingsSignedOut} onDown={settingsDown} />
               ) : null}
+              {threadsLoaded && page === "files" ? (
+                <Files reloadKey={reloadKey} onSignedOut={settingsSignedOut} onDown={settingsDown} />
+              ) : null}
               {threadsLoaded && page === "profile" ? (
                 <ProfilePanel reloadKey={reloadKey} onSignedOut={settingsSignedOut} onDown={settingsDown} />
               ) : null}
@@ -1480,7 +1500,9 @@ export function FolioApp() {
                         disabled={pending}
                         onChange={(event) => setDraft(event.target.value)}
                         onKeyDown={onComposerKey}
+                        ref={composerText}
                       />
+                      <VoiceButton disabled={pending} onText={addTranscript} />
                       {streaming ? (
                         <button type="button" className="primary send" onClick={() => void onStop()}>
                           <StopIcon aria-hidden="true" />

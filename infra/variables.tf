@@ -13,6 +13,22 @@ variable "frontend_origin" {
   default = "https://folio.khamseaffan.com"
 }
 
+# The Google Drive pieces below are public values. The client secret is a Secret Manager secret.
+variable "drive_client_id" {
+  type    = string
+  default = ""
+}
+
+variable "drive_picker_api_key" {
+  type    = string
+  default = ""
+}
+
+variable "drive_app_id" {
+  type    = string
+  default = ""
+}
+
 variable "github_repo" {
   type    = string
   default = "khamseaffan/Folio"

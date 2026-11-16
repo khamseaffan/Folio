@@ -981,6 +981,98 @@ a svg {
   min-height: 40px;
 }
 
+.composer {
+  position: relative;
+}
+
+.voice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.voice svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.voice:hover:not(:disabled) {
+  background: var(--wash);
+}
+
+.voice-recording,
+.voice-recording:hover:not(:disabled) {
+  border-color: var(--alert);
+  background: var(--alert);
+  color: var(--paper);
+  animation: voice-pulse 1.4s ease-in-out infinite;
+}
+
+.voice-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.92rem;
+}
+
+.voice-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: voice-spin 0.8s linear infinite;
+}
+
+.voice-note {
+  position: absolute;
+  left: 0.25rem;
+  bottom: calc(100% + 0.3rem);
+  color: var(--ink-2);
+  font-size: 0.9rem;
+}
+
+@keyframes voice-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--alert-line);
+  }
+  50% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@keyframes voice-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-recording,
+  .voice-spinner {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .composer {
+    gap: 0.35rem;
+    padding-left: 0.6rem;
+  }
+
+  .voice-time {
+    display: none;
+  }
+}
+
 .work-banner {
   display: flex;
   align-items: flex-start;
@@ -1079,6 +1171,7 @@ a svg {
 
 .settings,
 .reports,
+.files,
 .profile {
   flex: 1;
   min-height: 0;
@@ -1094,7 +1187,8 @@ a svg {
 
 .settings > :not(.settings-head):not(.down-layer),
 .profile > :not(.settings-head),
-.reports > :not(.settings-head):not(.reports-body) {
+.reports > :not(.settings-head):not(.reports-body),
+.files > :not(.settings-head) {
   width: min(44rem, calc(100% - 3rem));
   margin-inline: auto;
 }
@@ -1109,7 +1203,9 @@ a svg {
 }
 
 .settings > .settings-section:first-of-type,
-.reports > .settings-note {
+.reports > .settings-note,
+.files > .settings-note,
+.files > .files-upload {
   margin-top: 1.5rem;
 }
 
@@ -1670,4 +1766,94 @@ a svg {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* ---------- Files ---------- */
+
+.files {
+  position: relative;
+}
+
+.files-dragging {
+  outline: 2px dashed var(--accent);
+  outline-offset: -6px;
+  background: var(--accent-wash);
+}
+
+.files-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.files-upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+}
+
+.files-usage {
+  margin-top: 1.5rem;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+}
+
+.files-bar {
+  height: 8px;
+  margin-top: 0.4rem;
+  border-radius: 99px;
+  background: var(--wash);
+  overflow: hidden;
+}
+
+.files-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.files-uploads,
+.files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1.5rem;
+}
+
+.files-uploads + .files-list {
+  margin-top: 0.4rem;
+}
+
+.files-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem 1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.files-name {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.files-bar.files-progress {
+  flex: 0 1 10rem;
+  margin-top: 0;
+}
+
+.files-delete-note {
+  margin-top: 1.5rem;
+}
+
+.usage-files {
+  margin-top: 0.8rem;
 }

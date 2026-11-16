@@ -4,16 +4,19 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   deleteAccount,
   endSession,
+  getFiles,
   getUsage,
   listSessions,
   postDisplayName,
   type Account,
   type ApiDown,
   type ApiMessage,
+  type FileList,
   type SessionItem,
   type TokenTotals,
 } from "../lib/api";
 import { ConfirmDialog } from "./confirm-dialog";
+import { formatBytes } from "./file-size";
 
 type Props = {
   account: Account;
@@ -38,6 +41,7 @@ export function Settings({ account, onAccountChange, onSignedOut, onDown }: Prop
   const [endingId, setEndingId] = useState<string | null>(null);
   const [usage, setUsage] = useState<TokenTotals | null>(null);
   const [usageError, setUsageError] = useState<string | null>(null);
+  const [filesUsage, setFilesUsage] = useState<FileList | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -59,7 +63,7 @@ export function Settings({ account, onAccountChange, onSignedOut, onDown }: Prop
   useEffect(() => {
     let active = true;
     void (async () => {
-      const [listed, totals] = await Promise.all([listSessions(), getUsage()]);
+      const [listed, totals, stored] = await Promise.all([listSessions(), getUsage(), getFiles()]);
       if (!active) return;
       // Both requests can fail the same way, but the screen is told once.
       let reportedDown = false;
@@ -85,6 +89,10 @@ export function Settings({ account, onAccountChange, onSignedOut, onDown }: Prop
       else if (totals.kind === "down") down();
       else if (totals.unauthorized) signedOut(totals.message);
       else setUsageError(totals.message);
+      // The file count is a small extra line, so a failure to load it shows nothing.
+      if (stored.kind === "value") setFilesUsage(stored.value);
+      else if (stored.kind === "down") down();
+      else if (stored.unauthorized) signedOut(stored.message);
     })();
     return () => {
       active = false;
@@ -241,6 +249,11 @@ export function Settings({ account, onAccountChange, onSignedOut, onDown }: Prop
               <dd>{usage.total_tokens.toLocaleString()}</dd>
             </div>
           </dl>
+        ) : null}
+        {filesUsage !== null ? (
+          <p className="settings-note usage-files">
+            Files use {formatBytes(filesUsage.used_bytes)} of {formatBytes(filesUsage.limit_bytes)}.
+          </p>
         ) : null}
         {usageError ? (
           <p role="alert" className="rename-error">

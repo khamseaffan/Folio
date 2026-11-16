@@ -32,6 +32,12 @@ resource "google_secret_manager_secret_iam_member" "worker_openai" {
   member    = "serviceAccount:${google_service_account.worker.email}"
 }
 
+resource "google_secret_manager_secret_iam_member" "worker_tavily" {
+  secret_id = google_secret_manager_secret.tavily_api_key.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.worker.email}"
+}
+
 resource "google_cloud_tasks_queue" "runs" {
   name     = "folio-runs"
   location = var.region
@@ -115,7 +121,9 @@ resource "google_cloud_run_v2_service" "worker" {
       }
 
       dynamic "env" {
-        for_each = local.secret_env
+        for_each = merge(local.secret_env, {
+          TAVILY_API_KEY = google_secret_manager_secret.tavily_api_key.secret_id
+        })
         content {
           name = env.key
           value_source {
@@ -137,6 +145,7 @@ resource "google_cloud_run_v2_service" "worker" {
     google_project_service.enabled,
     google_secret_manager_secret_iam_member.worker_database_url,
     google_secret_manager_secret_iam_member.worker_openai,
+    google_secret_manager_secret_iam_member.worker_tavily,
     google_secret_manager_secret_version.database_url,
   ]
 }
