@@ -73,6 +73,10 @@ def _final_path(account_id: uuid.UUID, file_id: uuid.UUID, name: str) -> str:
     return f"accounts/{account_id}/files/{file_id}/{name}"
 
 
+def stored_path(row: FileRow) -> str:
+    return _final_path(row[1], row[0], row[3])
+
+
 def _clean_name(name: str) -> str:
     last = name.replace("\\", "/").split("/")[-1]
     cleaned = "".join(char for char in last if ord(char) >= 32 and char != "\x7f").strip()

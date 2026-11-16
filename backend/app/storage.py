@@ -11,6 +11,8 @@ class Storage(Protocol):
 
     def size(self, path: str) -> int | None: ...
 
+    def read(self, path: str) -> bytes: ...
+
     def move(self, source: str, target: str) -> None: ...
 
     def delete(self, path: str) -> None: ...
@@ -39,6 +41,12 @@ class FakeStorage:
     def size(self, path: str) -> int | None:
         data = self.objects.get(path)
         return len(data) if data is not None else None
+
+    def read(self, path: str) -> bytes:
+        data = self.objects.get(path)
+        if data is None:
+            raise FileNotFoundError(path)
+        return data
 
     def move(self, source: str, target: str) -> None:
         self.objects[target] = self.objects.pop(source)
@@ -89,8 +97,16 @@ class GcsStorage:
         blob = self._bucket.get_blob(path)
         return int(blob.size) if blob is not None and blob.size is not None else None
 
+    def read(self, path: str) -> bytes:
+        from google.api_core.exceptions import NotFound
+
+        try:
+            return self._bucket.blob(path).download_as_bytes()
+        except NotFound:
+            raise FileNotFoundError(path) from None
+
     def move(self, source: str, target: str) -> None:
-        blob = self._bucket.blob(source)
+        blob =self._bucket.blob(source)
         self._bucket.copy_blob(blob, self._bucket, target)
         blob.delete()
 

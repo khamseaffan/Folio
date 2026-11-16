@@ -1,4 +1,3 @@
-import json
 import logging
 import threading
 import time
@@ -12,7 +11,7 @@ from app.db import connect
 from app.knowledge_file import PROFILE, get_file
 from app.loop import stream_turn
 from app.message import insert_message
-from app.model import Block, Model, Reply, ToolCall, open_model
+from app.model import Block, Model, Reply, ToolCall, ToolOutput, open_model
 from app.queue import enqueue
 from app.research import FAILED_LINE as RESEARCH_FAILED_LINE
 from app.research import execute_research
@@ -252,7 +251,7 @@ def _answer(
     parts: list[str] = []
     replies: list[Reply] = []
 
-    def call_tool(call: ToolCall) -> str:
+    def call_tool(call: ToolCall) -> ToolOutput:
         if call.unreadable:
             result = {"ok": False, "code": "invalid", "error": operations.BAD_INPUT}
         else:
@@ -265,7 +264,7 @@ def _answer(
                     call.arguments,
                     in_run=True,
                 )
-        return json.dumps(result)
+        return operations.encode(result)
 
     failed = False
     try:
