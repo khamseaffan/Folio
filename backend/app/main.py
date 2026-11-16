@@ -11,7 +11,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app import ability, knowledge_file, operations, report, report_source, run, schedule
+from app import (
+    ability,
+    knowledge_file,
+    operations,
+    report,
+    report_source,
+    run,
+    schedule,
+    transcribe,
+)
 from app.account import (
     delete_account,
     ensure_account,
@@ -74,6 +83,7 @@ from app.sign_in_proof import (
 )
 from app.storage import open_storage
 from app.thread import ThreadRow, get_thread, list_threads, list_threads_with_latest
+from app.transcribe import open_transcriber
 from app.turn import NO_FAILURE, start_reply, start_retry
 from app.usage import token_totals_for_email
 
@@ -1047,6 +1057,56 @@ def stop_message(request: Request, thread_id: str) -> Response:
         return _error(404, _NOT_FOUND)
     stop_reply(account_id, parsed)
     return Response(status_code=204)
+
+
+async def _audio_bytes(request: Request) -> bytes | None:
+    declared = request.headers.get("content-length")
+    if declared is not None and declared.isdigit() and int(declared) > transcribe.MAX_AUDIO_BYTES:
+        return None
+    audio = bytearray()
+    async for chunk in request.stream():
+        audio.extend(chunk)
+        if len(audio) > transcribe.MAX_AUDIO_BYTES:
+            return None
+    return bytes(audio)
+
+
+@app.post("/voice/transcribe")
+async def post_transcribe(request: Request) -> Response:
+    opened = _open_account(request)
+    if isinstance(opened, JSONResponse):
+        return opened
+    _, account_id = opened
+    content_type = transcribe.base_type(request.headers.get("content-type"))
+    if content_type is None:
+        return _error(400, transcribe.BAD_AUDIO_TYPE)
+    audio = await _audio_bytes(request)
+    if audio is None:
+        return _error(413, transcribe.TOO_LONG)
+    if audio == b"":
+        return _error(400, transcribe.NO_AUDIO)
+    try:
+        email, _ = load_account(account_id)
+        with connect() as connection:
+            refused = transcribe.gate(connection, email)
+    except Exception:
+        return _down()
+    if refused is not None:
+        return _error(refused.status, refused.message)
+    transcriber = open_transcriber()
+    result = None
+    try:
+        result = await run_in_threadpool(transcriber.transcribe, audio, content_type)
+    except Exception:
+        _log.warning("transcription failed")
+    try:
+        with connect() as connection:
+            transcribe.record(connection, account_id, email, transcriber, result)
+    except Exception:
+        return _down()
+    if result is None:
+        return _error(502, transcribe.FAILED)
+    return JSONResponse(content={"text": result.text})
 
 
 _DRIVE_STATE = "drive_state"

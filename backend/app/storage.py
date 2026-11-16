@@ -11,7 +11,7 @@ class Storage(Protocol):
 
     def size(self, path: str) -> int | None: ...
 
-    def write(self, path: str, data: bytes, content_type: str) -> None: ...
+    def read(self, path: str) -> bytes: ...
 
     def move(self, source: str, target: str) -> None: ...
 
@@ -20,6 +20,8 @@ class Storage(Protocol):
     def delete_prefix(self, prefix: str) -> None: ...
 
     def download_url(self, path: str, filename: str) -> str: ...
+
+    def write(self, path: str, data: bytes, content_type: str) -> None: ...
 
 
 class FakeStorage:
@@ -35,15 +37,18 @@ class FakeStorage:
         # What the browser does with the signed address.
         self.objects[path] = data
 
-    def write(self, path: str, data: bytes, content_type: str) -> None:
-        self.objects[path] = data
-
     def has(self, path: str) -> bool:
         return path in self.objects
 
     def size(self, path: str) -> int | None:
         data = self.objects.get(path)
         return len(data) if data is not None else None
+
+    def read(self, path: str) -> bytes:
+        data = self.objects.get(path)
+        if data is None:
+            raise FileNotFoundError(path)
+        return data
 
     def move(self, source: str, target: str) -> None:
         self.objects[target] = self.objects.pop(source)
@@ -57,6 +62,9 @@ class FakeStorage:
 
     def download_url(self, path: str, filename: str) -> str:
         return f"https://storage.invalid/download/{path}?name={filename}"
+
+    def write(self, path: str, data: bytes, content_type: str) -> None:
+        self.objects[path] = data
 
 
 class GcsStorage:
@@ -94,8 +102,13 @@ class GcsStorage:
         blob = self._bucket.get_blob(path)
         return int(blob.size) if blob is not None and blob.size is not None else None
 
-    def write(self, path: str, data: bytes, content_type: str) -> None:
-        self._bucket.blob(path).upload_from_string(data, content_type=content_type)
+    def read(self, path: str) -> bytes:
+        from google.api_core.exceptions import NotFound
+
+        try:
+            return self._bucket.blob(path).download_as_bytes()
+        except NotFound:
+            raise FileNotFoundError(path) from None
 
     def move(self, source: str, target: str) -> None:
         blob =self._bucket.blob(source)
@@ -123,6 +136,9 @@ class GcsStorage:
             response_disposition=f'attachment; filename="{safe}"',
             **self._signing(),
         )
+
+    def write(self, path: str, data: bytes, content_type: str) -> None:
+        self._bucket.blob(path).upload_from_string(data, content_type=content_type)
 
 
 _LOCAL = FakeStorage()

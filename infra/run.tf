@@ -25,6 +25,7 @@ locals {
   secret_env = {
     DATABASE_URL   = google_secret_manager_secret.database_url.secret_id
     OPENAI_API_KEY = google_secret_manager_secret.openai_api_key.secret_id
+    GEMINI_API_KEY = google_secret_manager_secret.gemini_api_key.secret_id
   }
   # Only the API connects Google Drive, so the worker and research services do not get these.
   drive_env = {
@@ -96,6 +97,7 @@ resource "google_cloud_run_v2_service" "api" {
     google_secret_manager_secret_iam_member.api_openai,
     google_secret_manager_secret_iam_member.api_drive_client_secret,
     google_kms_crypto_key_iam_member.api_integrations,
+    google_secret_manager_secret_iam_member.api_gemini,
     google_secret_manager_secret_version.database_url,
   ]
 }

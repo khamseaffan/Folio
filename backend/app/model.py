@@ -60,11 +60,25 @@ class ToolCall:
 
 
 @dataclass(frozen=True)
+class Image:
+    media_type: str
+    data: bytes
+
+
+@dataclass(frozen=True)
+class ToolOutput:
+    text: str
+    images: tuple[Image, ...] = ()
+
+
+@dataclass(frozen=True)
 class Block:
     role: Literal["person", "assistant", "tool"]
     text: str
     tool_calls: tuple[ToolCall, ...] = ()
     call_id: str | None = None
+    # Shown to the model after a tool result. A tool message carries text only on some providers.
+    images: tuple[Image, ...] = ()
 
     def __post_init__(self) -> None:
         if self.role not in ("person", "assistant", "tool"):
