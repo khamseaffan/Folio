@@ -12,6 +12,7 @@ import {
   type ApiMessage,
   type FileList,
 } from "../lib/api";
+import { ACCEPT, refusal } from "./file-rules";
 import { formatBytes } from "./file-size";
 
 type Props = {
@@ -22,15 +23,7 @@ type Props = {
   reloadKey: number;
 };
 
-// These sentences are the same ones the API gives, so a file is refused the same way everywhere.
-const BAD_FILE_TYPE =
-  "That file type is not supported. Use a PDF, text, Markdown, CSV, XLSX, JPEG, PNG, WebP, or HEIC file.";
-const EMPTY_FILE = "That file is empty.";
-const TOO_BIG = "A file can be at most 50 MB.";
 const FALLBACK = "This could not be completed.";
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
-const EXTENSIONS = ["pdf", "txt", "md", "csv", "xlsx", "jpg", "jpeg", "png", "webp", "heic"];
-const ACCEPT = EXTENSIONS.map((extension) => `.${extension}`).join(",");
 const NO_FILES = "No files yet. Upload your first file above.";
 
 type Upload = {
@@ -40,15 +33,6 @@ type Upload = {
   // A sentence when the upload failed, otherwise null.
   error: string | null;
 };
-
-function refusal(file: File): string | null {
-  const dot = file.name.lastIndexOf(".");
-  const extension = dot < 0 ? "" : file.name.slice(dot + 1).toLowerCase();
-  if (!EXTENSIONS.includes(extension)) return BAD_FILE_TYPE;
-  if (file.size === 0) return EMPTY_FILE;
-  if (file.size > MAX_UPLOAD_BYTES) return TOO_BIG;
-  return null;
-}
 
 function whenText(value: string): string {
   const date = new Date(value);

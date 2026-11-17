@@ -6,6 +6,8 @@ Plain text is read as text, a spreadsheet as cells, a PDF as a document, and an 
 
 The assistant writes a task file when the person's task needs that file as its result. That file is Markdown, PDF, or another type the task needs. A reply that stays in the thread writes no task file. Knowledge files are specified in `docs/product/profile.md`.
 
+A person can also attach a file in the chat with the paperclip beside the message box. It is stored like any other upload, so it is counted, listed on the Files page, and available to every thread. The message names the file by its id, and the page shows the message without the id.
+
 The person can download one uploaded file, one task file, or one report. The person tells the agent to delete one file, and the agent deletes it. Deleting a file leaves the messages that mentioned it.
 
 An upload is a file after its bytes are stored and its ownership row commits. Its path is `accounts/{account_id}/files/{file id}/...`. An unfinished upload is discarded after 24 hours.
