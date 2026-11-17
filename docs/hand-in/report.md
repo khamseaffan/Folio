@@ -1,283 +1,423 @@
-# Hand-in report
+# Folio: hand-in report
 
-Draft version 2. The site is deployed at https://folio.khamseaffan.com with sign-in and chat working. Research, memory, schedules, files, Drive, voice and monitoring are not built yet, and the test run on the finished site is filled in when they are.
+Live site: https://folio.khamseaffan.com (invite only). Report date: 2026-11-16.
 
-## Service overview
+Folio is a private AI assistant that I built from scratch. This report follows the seven sections in `Goal.md`. Each section says what I chose, why, and when I would change it. Extra highlights are in the Appendix.
 
-Folio is a private assistant for one person.
+## How to read the states
 
-**Conversation**
+I use three states and no others.
 
-- You talk in threads.
-- A reply appears as it is written, and you can stop it.
-- A message has no length limit.
-- Older messages stay saved. The model sees a short summary of them. You do not.
-
-**Model**
-
-- I select the provider and the model in settings. The starting model is `gpt-6.1-sol`. I pay for it.
-- You do not pick another model, and you do not paste in a key. The tools, the memory, and the loop stay the same when I change the model.
-
-**Who can join**
-
-- The site opens on one public page. You sign in from that page.
-- My email is the first account.
-- An account is `khamseaffan@gmail.com` or `@sakana.ai`. Any other email is refused at sign-in.
-- Sign-in is Google, or a magic link that works once and lasts six hours.
-- You can end your session. A third sign-in ends the oldest one.
-- Deleting an account is immediate, and the account cannot be restored. The token rows for that email stay, so a new account does not start from zero.
-
-**Size**
-
-- About 25 people, with room for a few hundred, in one region.
-
-**Why this shape**
-
-The assistant is code written for this project, in the API and in a background worker. The assignment asks for an original agent, and a service this small should be readable from the message to the reply.
-
-## Deep research
-
-A research report is separate from a chat reply. You can leave the page. The finished report is there to open and download.
-
-**How a run starts**
-
-- You ask for it in the thread. The agent asks one short question first if yours is unclear, then starts it.
-- A scheduled task can start one in its own thread. It cannot start a second while one is queued or working there, so a schedule that fires often cannot pile runs up. The token cap still applies to every run.
-
-**What it may read**
-
-- Public pages, found through a web search and opened in Chrome.
-- Your knowledge files. Uploads and Google Drive copies come later.
-
-**When it stops**
-
-- After 20 opened sources, 25 searches, 60 steps, or 25 minutes of reading. The whole run is 30 minutes of work, so the last minutes are for writing.
-- Or when new pages mostly repeat the ones already opened. The model decides that, and says so.
-- A page that cannot be opened does not count. A page that disagrees is kept.
-- If you reach your usage limit, it stops reading and writes the report from what it has. If an admin stops your account, it stops at once and writes nothing.
-- If it opened no source, there is no report and the thread says so.
-
-**What you get**
-
-- One report per run. You can keep several.
-- A message in the thread when it is ready, and the report on the Reports screen. You download it as Markdown.
-- The file contains the question, the writing, a few lines on how the run stopped, and the sources. Each source has a title, an address or a file name, and one line on what it was used for.
-- If you cancel, the unfinished writing is discarded. The last finished report stays.
-
-**Why**
-
-- Our own search and our own Chrome, not the model provider's built-in search. With our own, Folio counts the pages, enforces the limits, and knows what was opened. A provider's search would decide that itself, and would tie research to one provider.
-- The source list is a promise: a page that was not opened is not a source. Folio fetches each page itself, so it can keep that promise. The titles and addresses come from the pages, not from the model.
-- The model can open only addresses it was shown. A page can contain text that gives orders, such as "open this address with the person's notes in it". If the model could open any address, that would work. Code enforces the rule, because a rule that only the model is asked to keep is not a limit.
-- Chrome sits behind a proxy. A check made before Chrome connects can be fooled by a name that answers differently the second time, or by a redirect to a private address. The proxy resolves the name itself and connects to the address it checked. The cloud metadata service holds tokens that reach our secrets, so it must never be reachable from a page.
-- Each page becomes a digest of about 300 words, written by a separate call. The loop sends everything it has seen on every step, so twenty whole pages would make every later step heavy. The price is that a fact the digest left out is not in the report.
-- At most 20 sources, as a ceiling and not a target. It was set in the original design. One real run with 20 sources used about 650,000 tokens, about $1.60 with search, and 7.5 minutes of the 30. More sources cost a little more than in proportion, and one call cannot last longer than 30 minutes. In that run, pages from one site repeated each other and one gave nothing usable, so the later sources add less. Every opened page is also a request to someone else's website and text that could give orders. No test has compared 10, 20, and 40 sources, so the number is a reasoned start. It is one constant and can be changed.
-- A second service and a second queue, because Chrome makes the image large and needs more memory, and a browser that opens addresses chosen by strangers should be away from the service that runs schedules.
-- What leaves Folio: the search words go to the search service, and they can include words from your question. Page requests carry no account name, email, or id.
-- Reading stops at 25 minutes because Cloud Tasks cannot wait for one call longer than 30 minutes, and the report must be saved inside that call.
-
-## Technology and architecture
-
-You use a website. Longer work runs in the background.
-
-| Piece | Choice |
+| State | Meaning |
 | --- | --- |
-| Website | Next.js on Vercel |
-| API and worker | Python 3.13 on Cloud Run |
-| Account record | PostgreSQL 18 on Cloud SQL |
-| Files | Cloud Storage, one folder per person |
-| Sign-in | Firebase, sign-in only |
-| Queue | Cloud Tasks and Cloud Scheduler |
-| Keys | Cloud KMS for model keys, integration secrets, and browser cookies |
-| App secrets | Secret Manager |
-| Region | `us-central1`, described in Terraform |
-| Checks | GitHub Actions |
+| **Live** | Built, and I have used it on the live site. |
+| **Tested only** | Built, and covered by automated tests that use fakes for outside services. I have not yet tried it on the live site. The live check is listed in Appendix A. |
+| **Not built** | Not in the product. Section 4 says why. |
 
-**How a request moves**
+Facts used in this report:
 
-- A short chat is answered on the API request.
-- Research and a scheduled run go on a queue. A worker picks them up.
-- The worker calls the selected model, reads public pages, and can drive Chrome.
-- Google Drive is the first integration. It is one file you pick. Folio keeps a private copy from that moment. A later integration is another row, with its own secret and tools.
-- If that provider is down, the job tries again three times, then stops. You see one line in the thread. I can inspect the failed job.
+- 819 backend tests pass. 17 are skipped in my local run, because they need Chrome, which the CI browser job provides.
+- The frontend has lint, a type check and a build. It has no unit tests and no end to end tests. This is a known gap.
 
-**Why**
+## 1. Service overview
 
-The assignment asks for a React app and for Google Cloud. The website sits on Vercel. The records and the jobs stay in one region, and the database is on a private IP. Chat stays on the request so a reply feels immediate. Research uses a queue because it can take half an hour.
+Folio is an assistant for one person at a time. Each account is private. You sign in, talk to it, and it keeps notes about you and can work while you are away.
 
-## Additional features
+### What it does
 
-The assignment asks for two features of my own.
+| Feature | State |
+| --- | --- |
+| Accounts: sign in with Google or an email link, sign out, delete the account | Live |
+| Chat in threads, replies that stream, a stop button, no limit on message length | Live |
+| Memory: a profile and knowledge notes in Markdown, and "abilities" (ways of working the assistant remembers) | Live |
+| Deep research: a report with a numbered source list, and a banner showing what it is reading | Live (the banner is in Appendix A) |
+| Schedules: you say when, in the chat, and a worker runs the task | Live |
+| A scheduled task can start a research run (one at a time per thread) | Tested only |
+| Files: upload, download, and the model reads them | Tested only |
+| Voice input: microphone to text | Tested only |
+| Google Drive import: one file you pick, stored as a read-only copy | Tested only |
+| The web for scheduled tasks, with a small budget | Tested only |
+| An Integrations page and a Files page | Tested only |
+| A privacy page | Live |
 
-**1. Memory**
+### Who can use it
 
-- Notes in English, kept as Markdown.
-- Your profile, how you like to work, is read on every call.
-- The profile holds at most 20,000 characters, about 5,000 tokens. The assistant is told when it is full and shortens it or moves facts to another note.
-- The cap exists because the profile is paid for on every message. Without it, a very long profile could stop every reply.
+- Only `khamseaffan@gmail.com` and any `@sakana.ai` address can create an account. Any other email is refused at sign-in.
+- Sign-in is Google or a one-time email link. There are no passwords.
+- A session ends after 24 hours of no activity. An account has at most two sessions. A third sign-in ends the oldest.
+- Deleting an account is immediate and cannot be undone. It removes your files, threads, notes, schedules, sessions and sign-in record. It keeps the usage rows and the token cap for that email, so deleting and re-creating an account does not give a fresh allowance.
+
+### Expected users and how the system is sized
+
+I expect **about 25 users, with room for a few hundred**, in one region (`us-central1`). These are estimates, not load test results.
+
+| Part | Setting (from `infra/`) | Why |
+| --- | --- | --- |
+| API | 0 to 3 instances | Chat is short. Three is far more than 25 people need. |
+| Worker (schedules) | 0 to 2 instances. The queue runs at most 3 tasks at once. | Scheduled runs are rare and short. |
+| Research service | 0 to 3 instances, one run per instance, 2 CPUs and 4 GiB each. The queue runs at most 3 at once. | Chrome needs memory. One run per instance keeps runs from fighting for it. |
+| Database | PostgreSQL 18, smallest shared size (`db-f1-micro`), one zone, backups on | Cheap, and enough for 25 people. It is the first part to grow. |
+| Files | 50 MB per file, 5 GB per account | A hard limit on storage per person. |
+| Tokens | 10 million per email, by default | A hard limit on spend per person. |
+
+In practice:
+
+- Idle services cost nothing, because they scale to zero.
+- One research run used about 650,000 tokens (about $1.60) and 7.5 minutes in the one run I measured. At that size one email can run roughly 15 research reports before reaching 10 million tokens. This is an estimate from one run.
+- So heavy use is stopped by the token cap, not by running out of capacity. I can raise one email's cap by hand.
+
+| Choice | Why | When I would change it |
+| --- | --- | --- |
+| Scale to zero, no warm instance | A warm instance costs money all month for 25 people. | Keep one instance warm once people complain about the slow first request. |
+| One database zone, no failover | Failover roughly doubles the database cost. | Turn on high availability when users cannot lose an hour of work. |
+| One region | Latency and cost are fine for this group. | Add a region only if users are far away or the service must survive a region outage. |
+
+### Where I was creative
+
+- **A small product with a hard budget.** Every limit (files, tokens, sources, pages, minutes) is a number in code or Terraform that a person can read and change. A personal assistant that browses the web and calls a paid model can spend money by accident. A visible limit is easier to trust than a promise.
+
+## 2. Technology and architecture
+
+### Pieces and reasons
+
+| Piece | Choice | Why | When I would change it |
+| --- | --- | --- | --- |
+| Website | Next.js (React) on **Vercel** | Vercel is built for Next.js and gives a preview for every pull request. | Move it to Cloud Run if I need everything in one cloud or one bill. The change is small, because the website only calls `/api/*`. |
+| API | Python 3.13, FastAPI, on Cloud Run | `Goal.md` asks for Python. Cloud Run scales to zero. | Add a warm instance when the first request is too slow. |
+| Worker | Same image as the API, a second Cloud Run service, not public | The API is public. A route that starts work for any account must not be reachable from the internet. | Not needed at this size. |
+| Research service | Own image (API plus Chrome), a third Cloud Run service, not public | A browser that opens addresses chosen by strangers should be apart from the service that runs schedules. Chrome also needs more memory. | Raise memory or instances after measuring more runs. |
+| Database | Cloud SQL, PostgreSQL 18, private address | One place for accounts, messages, runs and usage. No public address. | Add failover (Section 1). |
+| Files | Cloud Storage, one private bucket, a folder per account | Files do not belong in a database. | None expected. |
+| Queues and clock | Cloud Tasks (two queues), Cloud Scheduler (every minute) | Retries, a limit on runs at once, and a second delivery if a worker dies. | None expected. |
+| Sign-in | Firebase Authentication, sign-in only | I did not want to write or store passwords. Accounts, sessions and limits stay in my own database. | Replace it only if the allowlist model changes. |
+| Keys and secrets | Cloud KMS for integration tokens, Secret Manager for app secrets | Each fits a different job (Section 7). | None expected. |
+| Model | LangChain chat model called from a LangGraph loop | LangChain hides the provider. LangGraph runs the tool loop. | See "Any LLM" below. |
+| Search | Tavily | A simple search API that returns titles and addresses. | Swap it behind the same function if cost or quality changes. |
+| Infrastructure | Terraform in `infra/` | `Goal.md` asks for IaC. | None. |
+| CI and CD | GitHub Actions, Vercel | Section 5. | None. |
+
+### Everything on Google Cloud except the website
+
+The API, worker, research service, database, file storage, queues, scheduler, secrets and encryption keys all run on Google Cloud and are created with Terraform. Only the website runs on Vercel. This was deliberate.
+
+- **Why:** Vercel suits Next.js and gives previews. The website holds no data and no secrets. It forwards `/api/*` to the API.
+- **Trade-off:** One piece lives outside Google Cloud, so there are two places to look when something breaks and one more account to manage.
+- **Trigger to move it:** If a reviewer or customer needs the whole service in one cloud, or if Vercel's cost passes what a small Cloud Run service would cost, I would move it to Cloud Run.
+
+### How a request moves
+
+```mermaid
+flowchart LR
+  person[Person] --> web["Website: Next.js on Vercel"]
+  web -->|"/api/*"| api["API: Cloud Run"]
+  api --> sql[("Cloud SQL")]
+  api --> bucket[("Cloud Storage")]
+  api --> kms["Cloud KMS"]
+  api --> tasks["Cloud Tasks"]
+  clock["Cloud Scheduler, every minute"] --> worker["Worker: Cloud Run"]
+  tasks --> worker
+  tasks --> research["Research service with Chrome"]
+  worker --> sql
+  research --> sql
+  api --> model["Model provider"]
+  worker --> model
+  research --> model
+```
+
+- A short chat is answered on the API request, so a reply feels immediate.
+- Research and scheduled runs go on a queue and a worker picks them up. A report can take half an hour, and a request cannot wait that long.
+- If a run fails, the queue tries again, up to 4 tries in all (`infra/worker.tf`, `infra/research.tf`). Then the run is marked dead in the database and the thread shows one line.
+- Files go from the browser straight to the bucket with a signed address. The API never carries the bytes.
+
+### "Any LLM" (`Goal.md`, functional requirement 1)
+
+I want to be exact here.
+
+- The model is reached through LangChain. The OpenAI, Anthropic and Google packages are installed (`backend/pyproject.toml`).
+- The provider and model id are set in one place: `backend/app/model.py` and `backend/app/brain.py`. Today that is OpenAI and `gpt-6.1-sol`. Voice uses a second model, `gemini-3.5-flash`, set in `transcribe.py`.
+- Changing the provider is a one-line configuration change plus a deploy. **There is no model picker in the app.** Users cannot choose a model.
+- The agent loop, the tools and the memory do not depend on the provider.
+
+| Choice | Why | When I would change it |
+| --- | --- | --- |
+| One platform model that I pay for | Cost and behaviour stay predictable for 25 people. No one has to paste in a key. | Build a picker when users ask for other models, or want to pay with their own key. |
+| Provider set in code, not in settings | A settings screen needs storage, permissions and a test for each model, and adds little for 25 people. | Same trigger. |
+
+### Where I was creative
+
+- **A harness where code sets limits and the model chooses words and tools.** The model decides what to say and which tool to call. Code decides what is allowed: which account, which addresses, how many pages, how many tokens. The model never decides that a limit has passed. A rule that only the model is asked to keep is not a limit.
+- **The database is the only place that knows what is due.** Schedules are rows with a next time (Section 3).
+- **Direct to bucket uploads.** A Cloud Run request body is limited to 32 MiB, and I allow 50 MB files. The API signs a short-lived address and the browser sends the file straight to the bucket. Unfinished uploads sit under `pending/` and the bucket deletes them after a day.
+- **Path filtered CI that still keeps required checks green** (Section 5).
+
+## 3. Additional features and ingenuity
+
+`Goal.md` asks for two or more original features. I built two and added more.
+
+### Feature 1: long-term memory (Live)
+
+- Notes are Markdown files. Your profile is read on every model call.
+- The profile has a cap of 20,000 characters (about 5,000 tokens). The assistant is told when it is full and shortens it.
 - Other notes are found by their words. One call opens at most five.
-- The assistant writes a short fact into the note where it belongs.
-- You read them in a panel beside the chat, and you change them by saying so.
+- You read notes in the Profile page and change them by telling the assistant.
+- **Abilities** are ways of working that you teach in the chat and can remove in the chat.
 
-**2. Work while you are away**
+| Choice | Why | When I would change it |
+| --- | --- | --- |
+| Plain Markdown notes, word search | Easy to read, edit and delete. No extra service. | Add an embedding index when people have hundreds of notes and word search misses them. |
+| Profile cap of 20,000 characters | The profile is paid for on every message. Without a cap a huge profile could make every reply expensive or fail. | Raise it if people hit it often. |
 
-- You say when, in the chat. There is no form.
-- The assistant creates the schedule, changes it, and removes it.
-- It belongs to that thread. Deleting the thread deletes the schedule.
-- The run can use your files, imported Drive copies, the web, and a way of working it has learned.
-- The result is a message in the thread, or a report.
-- If that same task is still running or still waiting for you, the next one is skipped.
-- A different task can run at the same time.
+### Feature 2: periodic autonomous execution (Live)
 
-**How a schedule runs**
+You say when, in the chat. There is no form. The assistant creates, changes and removes the schedule. It belongs to the thread, so deleting the thread deletes the schedule.
 
-- A clock calls the worker once a minute. The worker finds the schedules that are due.
-- For each one the model works out the next time. The result is stored, and one run is queued.
-- The queue calls the worker, which runs the task and writes one message in the thread.
-- A failed run is tried four times in all. Then it is marked dead, the thread shows one line, and the failure is logged.
-- A run still working 90 minutes after its latest attempt began, or still queued after 30 minutes, is marked dead by the next minute's call. The run records when each attempt began, so time spent waiting in the queue is not counted as work. A run that never reached the queue is queued again.
+How a run happens:
 
-**Why a schedule is built this way**
+1. Cloud Scheduler calls the worker once a minute (the "tick").
+2. The worker finds schedules whose next time has come.
+3. For each one, the model works out the next time from the person's own words, their time zone and the time now. Code stores it.
+4. One run is queued. The queue calls the worker, which does the task and writes one message in the thread.
+5. A failed run is tried 4 times in all, then marked dead. The thread shows one line.
+6. A run stuck as working for 90 minutes, or queued for 30 minutes, is marked dead by a later tick.
 
-- The model works out the next time, because "every other Friday" or "the first working day of the month" is a question of meaning. Code would need a grammar for every way of saying it. Code only fires at a stored time.
-- If that call fails, the thread says so and the failure is logged. A schedule never stops quietly.
-- There is a tick every minute, and not one queued task per schedule, because the database is then the only place that knows what is due. A lost task cannot end a schedule for ever.
-- There is a queue, because the tick must finish in seconds and a run can take minutes. The queue also gives retries with waits, a limit on runs at once, and a second delivery if a worker dies.
-- The worker is a separate service that is not public. The API is public, and a route that starts work for any account must not be reachable from the internet. Google's access control closes it, and it can have a long timeout.
-- A run cannot create, change, or delete a schedule, so a scheduled task cannot multiply itself and spend the cap overnight.
-- One result is guaranteed by the run row. Its id is the queued task's name. The result message and `delivered_at` are saved in one transaction, and a second delivery sees `delivered_at` and stops.
+| Choice | Why | When I would change it |
+| --- | --- | --- |
+| The model works out the next time, code fires it | "Every other Friday" and "the first working day of the month" are questions of meaning. Code would need a grammar for each phrase. | Use a fixed cron form if the model gets times wrong in real use. |
+| A one-minute tick, not one queued task per schedule | The database is then the only place that knows what is due. A lost queue task cannot end a schedule for ever. | Change the interval if one minute is too coarse or too busy. |
+| A queue between the tick and the run | The tick must finish in seconds and a run can take minutes. The queue also gives retries and a limit on runs at once. | None expected. |
+| A scheduled run cannot create, change or delete schedules | A task cannot multiply itself and spend the token cap overnight. | Allow it only with a clear count limit. |
+| One result per run | The run row id is the queued task name. The result message and `delivered_at` are saved in one transaction, so a second delivery sees it and stops. | None expected. |
 
-**Beyond the assignment**
+### More features beyond the mandatory list
 
-- A remembered way of working, taught in the chat, removed when you say so.
-- Chrome on the server. Reading a page does not ask. A form, a post, or a payment shows a card and sends only if you confirm it. The card lasts 24 hours.
-- A file written when the result of the task is a file, which you can download.
-- Token totals and file space in settings. The email stops at 10 million tokens unless I raise it. Deleting the account leaves that total, the raised cap, and a stop. Files stop at 5 GB. One upload stops at 50 MB.
-- The site opens on one public page. After sign-in: chat, reports, files, a profile panel, and settings.
+| Feature | State | Reason |
+| --- | --- | --- |
+| Research progress banner (shows what Folio is reading) | Live (confirm in Appendix A) | A 7 minute job needs a sign of life. |
+| The web for scheduled tasks: 6 searches, 8 pages, 5 minutes, fetched through the safe proxy without Chrome | Tested only | A "morning briefing" task needs the web, but a scheduled task should stay cheap. A task that needs many sources starts research instead. |
+| The assistant can write Markdown, text, CSV and PDF files | Tested only | A task result is often a file. |
+| Files the model can read: text, CSV, spreadsheets, PDF, images | Tested only | Reading is what makes uploads useful. |
+| Token totals and file space in settings, a per-email cap and a stop | Tokens live. Files tested only. | Control of spend. |
+| Integrations page (connect, disconnect) | Tested only | A later integration is another row with its own secret and tools. |
 
-**Why these extras**
+### Where I was creative
 
-Some tasks finish on a website, and that send should be a specific yes. The caps give a small service a limit I can see and raise. Ways of working stay in the conversation, which is where you already explain the job.
+- **The research source list is a promise.** A page that was not opened is not a source. Titles and addresses come from the pages, not from the model, so a reader can trust every source.
+- **A schedule's next time is worked out by the model but fired by code.**
+- **The token cap also counts stopped replies.** A provider sends token counts only at the end of a reply, so a stopped reply has none. Folio counts what it sent and what arrived, and marks the row as estimated. Without this, someone could stop every reply and never reach the cap. Letting the reply finish unseen would give exact counts but spend tokens on text nobody reads.
+- **Usage rows store missing as missing.** If the provider gives no count, the row says so. Zero looks like a fact, and it is not one.
+- **Page digests.** Each opened page becomes a short digest written by a separate call with no tools. The loop sends everything it has seen on every step, so twenty whole pages would make every later step heavy. The cost is that a fact the digest left out is not in the report.
+- **Research limits from a measured run.** Up to 20 sources, 25 searches, 60 steps, 25 minutes of reading, 30 minutes in all. One real run opened 20 sources, used about 650,000 tokens (about $1.60) and 7.5 minutes. Later sources added less, because pages from one site repeated each other. No test has compared 10, 20 and 40 sources, so 20 is a reasoned start. It is one constant in `research.py`.
 
-## Omissions
+## 4. What I left out, and what I would do
 
-Later, and not required by the assignment. One email stays one private account.
+For each item: why it is not built, and the trigger that would make me build it.
 
-- Several named assistants on one account.
-- The assistant naming a new thread by itself.
-- Search across old threads, and editing a message you already sent.
-- The model writing new code and running it.
-- Repeating a form, with code deciding it is the same form, and with an expiry.
-- Connections other than Google Drive. A later one is another row: a connection, a secret, and tools.
-- A full export of the account before deletion.
-- Grouping accounts into an organization.
+| Not built | Why | Trigger and plan |
+| --- | --- | --- |
+| Admin choice of model or provider in settings | One model is simpler and predictable. | Users ask for other models. Store the choice per account and record the model on every usage row (already done). |
+| Website sends with a confirmation card (browser actions that submit forms) | The riskiest feature, and not required. A wrong send cannot be undone. | A real task needs it. Show a card for that exact site and those fields, expire it in 24 hours, mark it used before sending. |
+| OCR for scanned PDFs | A scanned PDF has no text, and Folio says so. OCR adds a service and cost. | Users upload scans often. Run OCR in the worker and record a usage row. |
+| PDFs written by the assistant draw only Latin characters | The built-in fonts cover Latin-1. Other characters become a question mark. | Users write in other scripts. Embed a Unicode font. |
+| JavaScript heavy pages are read thinly by scheduled tasks | The worker has no Chrome, to stay small and cheap. Research uses Chrome and is fine. | Scheduled tasks often hit such pages. Send those pages to the research service. |
+| Full export of an account | Not required. | A privacy request, or before opening to the public. Write one archive of notes, threads and files. |
+| Organizations | One email is one private account. | A team wants to share notes. It needs a new ownership model, so it needs a design first. |
+| Several named bots per account | Not required. | Users want separate roles. |
+| Search across old threads, and editing sent messages | Not required. | Users with long histories ask for it. |
+| Code execution in a sandbox | A large security surface. | A task needs computation that tools cannot do. Use a separate sandbox service with no network. |
+| A staging environment | One person, one pipeline. A merge to `main` deploys to the one live site. | A second developer joins, or a change needs a trial with real data. Add a second Terraform environment and deploy `main` there first. |
+| Alerts, dashboards, an uptime check | Section 6. | Section 6. |
+| Frontend unit and end to end tests | Time. The frontend is a thin layer over the API. | Before the next feature with client logic. Start with a browser test of sign-in and chat. |
+| A warm instance and database failover | Cost, a deliberate choice (Section 1). | Section 1. |
 
-**Narrower than the assignment might sound**
+### Where I was creative
 
-- Drive is one file, imported as a private copy. Folio does not write back to Drive.
-- Voice is dictation. The words land in the composer, you send them as a chat message, and the recording is discarded. The assistant does not speak.
+- I wrote the "not built" list as **triggers, not promises.** Each line says what would make it worth doing. This keeps the product small on purpose.
 
-## Quality assurance
+## 5. Quality assurance and testing
 
-A change reaches the main branch through a pull request. GitHub Actions runs Ruff, pytest, lint, and typecheck. The same checks run before a commit. The main branch is protected: a change needs the backend, frontend, Terraform and container checks to pass. A merge to main deploys by itself. Vercel builds the website, and a workflow builds the API image tagged with the commit, runs the database migration, deploys Cloud Run, and checks that the live site answers. Only the newest commit on main is deployed. The workflow signs in to Google with a short-lived identity tied to this repository, so no key is stored. Terraform describes Google Cloud and is applied by me after I read the plan, so the pipeline never holds infrastructure-admin power.
+### The pipeline
 
-**Release environments**
+- Changes reach `main` only by pull request. `main` is protected.
+- Four checks must pass: **backend** (Ruff lint, then pytest against a real PostgreSQL 18), **frontend** (lint, type check, build), **terraform** (`fmt` and `validate`) and **docker** (builds the API and research images). A fifth job, **browser**, runs the real Chrome tests.
+- A **change detection** job decides which checks have anything to check. A skipped job counts as passed, so a README-only change is still green. If the changed files cannot be listed, every check runs. A change to the workflow runs everything.
+- **Pre-commit hooks** run Ruff, pytest, lint and type check before a commit.
+- Large work is split into **stacked pull requests**, so each one is small enough to read.
+- Each merge **deploys by itself** (`deploy.yml`): build the image, run the database migration, deploy the API, worker and research service, then check that `https://folio.khamseaffan.com/api/ready` answers. Only the newest commit on `main` is deployed. Vercel builds the website.
+- Deploys sign in to Google with workload identity tied to this repository and the `main` branch. No deploy key is stored. I apply Terraform myself after I read the plan, so the pipeline never holds infrastructure admin power.
 
-- Development is a branch and a pull request, checked by CI.
-- Staging will be what a merge to the main branch produces.
-- Production will happen only when a release is made on GitHub.
-- Today there is one pipeline. A merge to the main branch deploys straight to the one live environment. The split into staging and production is a planned step and is not built.
-- Every API image carries a version tag (`v0.1.` and the deploy number) as well as the commit it was built from, so a release can later point at an exact image.
+### How features are tested
 
-**Checks I will not leave to the model**
+- **Tests are written first** for features.
+- **Every outside service has a fake**: the model, search, web pages, Google (Drive), Cloud KMS and the bucket. The suite is fast and free and runs on every pull request.
+- A **real PostgreSQL** runs in CI, so database behaviour (transactions, locks, constraints) is tested for real.
+- Limits are tested as rules, for example: a second delivery does not write a second result, a deleted account removes its files, a missing usage count is stored as missing, a stopped reply counts toward the cap, and a private or metadata address is refused by the proxy.
 
-- A website send matches the site, the fields, and a card inside 24 hours.
-- A file over 50 MB, or one that would pass 5 GB, is refused.
-- Research stops at 20 opened sources and at 30 minutes. The model stops when new pages mostly repeat, and the file says so.
-- The same job delivered twice does not create two reports.
-- A report is ready only when the question, the writing, how the run stopped, and the source list are saved together.
-- A schedule does not start a second copy of itself while the first is still going.
-- Deleting a thread deletes its schedules.
-- Deleting an account deletes that person's threads, files, and reports, and leaves the usage rows and the platform model keys.
-- A call with no usage figure is stored as missing, not as zero.
-- A stopped reply is the one case where Folio counts the tokens itself. The provider sends its counts only at the end of a reply, so a stopped reply has none. Folio counts what it sent and what arrived, and marks the row as estimated. Otherwise a person could stop every reply and never reach the cap.
-- Letting the reply finish unseen would give exact counts, but it spends tokens on text nobody reads, so it was not chosen.
+| Choice | Why | When I would change it |
+| --- | --- | --- |
+| Fakes for outside services | Fast, free, and the same result every time. | Keep them. Add a small live test run on top. |
+| Real Postgres in CI | A mock database hides the bugs that matter here, such as locks. | None. |
+| One pipeline, merge deploys | One developer, small risk. | Add staging when a second developer joins (Section 4). |
+| Required checks plus path filtering | Fast feedback, and no waiting on checks that cannot fail. | None. |
 
-**Known trade-offs of this deployment**
+### Honest limits
 
-- The first request after a quiet period is slow, because the API runs no idle instance and Cloud Run has to start one. I did not keep one warm because that costs money all month for 25 people. With real users I would keep one instance warm.
-- The database is one zone with no failover, for the same cost reason.
+- **Real outside services are not exercised in CI.** The model, Google Drive, Gemini, Cloud KMS and the real bucket are tested with fakes. Appendix A lists what I still have to check by hand on the live site.
+- **The frontend has no unit tests and no end to end tests.** It has lint, a type check and a build. This is the weakest part of the test setup.
+- **No load test has been run.** The sizing in Section 1 comes from settings and one measured research run.
 
-**Before the URL is submitted**
+### Where I was creative
 
-Sign in, hold a conversation, ask for a research report, set a schedule, upload a file, and import one Drive file, on the deployed site.
+- **Path filtered CI that still keeps required checks green.** A skipped job reports as passed, so a required check never blocks a change that has nothing to check. I did this to keep feedback fast without weakening the gate.
+- **The test double for KMS refuses the wrong account.** The fake rejects a secret opened with a different context, so the account binding in Section 7 is exercised in tests, not assumed.
 
-## Monitoring and logging
+## 6. Monitoring and logging
 
-Design for the running service. Not switched on yet.
+### What exists today
 
-**Logs**
+| Part | What it does | State |
+| --- | --- | --- |
+| Application logs | The API, worker and research service write to Cloud Logging. A line names the account, run or operation. | Live |
+| What logs leave out | Message text, notes, file contents, prompts, keys, cookies and magic links. Errors log the type of the error, not its text. | Live |
+| Usage rows | One row for every model call, every search and every transcription: account, time, operation, provider, model, tokens, expected cost. A missing count is stored as missing. | Live (voice: tested only) |
+| Failed-runs record | A run that fails 4 times is marked `dead` in the `run` table with its task and attempt count. The thread shows one line. | Live |
+| Health routes | `/health` (the service is up) and `/ready` (the database answers, else 503). The deploy workflow calls `/api/ready` after each deploy. | Live |
+| Cloud Run's own metrics | Requests, errors, latency and instance counts, from Google. | Live |
+| Alert policies, an uptime check, a dashboard | `infra/` has no monitoring resources. | Not built |
 
-- API and worker logs go to Cloud Logging.
-- A line names the account, the run, and the operation.
-- Built: a failed chat turn, a failed save, a refused tool call, and a request refused by origin each write a line. The person sees a fixed sentence and never the cause.
-- It leaves out the conversation, the transcript, file contents, the prompt, keys, integration secrets, cookies, and magic links.
+Known gap: calls to Cloud KMS have no usage row.
 
-**Alerts**
+### What is not built, and the design
 
-- API errors, worker failures, a run that has given up after three tries, and the database being down.
-- You see one line in the thread when a run fails, and a notice if the database is down.
-- The list of failed runs is for me.
+Today nobody is paged. I find out about a problem by looking, or from a user. For 25 people I accepted this, to keep cost and moving parts down.
 
-**Usage**
+The design I would add in Terraform:
 
-- One row per model call: when, which model, token counts, and the expected cost.
-- That is how I watch the bill and raise one account's limit.
-- No separate analytics product. The request log, the job, and the token row are enough.
+1. An **uptime check** on `https://folio.khamseaffan.com/api/ready`, every minute.
+2. An **alert on error rate**: Cloud Run 5xx responses above a small share over 5 minutes.
+3. An **alert on a dead run**: a log based metric on the log line "is dead after N attempts" written by `scheduled.py` and `research.py`.
+4. A **notification channel**: email to me.
 
-## Security
+| Choice | Why | When I would change it |
+| --- | --- | --- |
+| Logs without message text | A log is read by more people than a thread is, and it lasts longer. | None. |
+| Usage rows instead of an analytics product | The request log, the run row and the usage row answer "who spent what". | Add analytics when I need product questions answered. |
+| No alerts yet | Time and cost for 25 people. | Build the four items when the first outside person depends on the site, or when a failure goes unnoticed for a day. |
 
-**Getting in**
+### Where I was creative
 
-- The email has to be allowed. Sign-in from the public page creates the account.
-- No password. Google, or a one-time link, proves the address.
-- A session ends after 24 hours if you and the assistant are both quiet.
-- At most two sessions.
-- A change is refused when it comes from a page that is not Folio. The API checks the origin before any route runs, on top of the SameSite cookie.
-- The page never receives a session id. Settings names a session by a hash of it, so a script on the page cannot read a sign-in.
-- Deleting the account asks for the account email first.
+- **A failed run is never silent.** Each run type ends in a visible line in the thread and a log line with the run id, so the person and I both see it.
+- **Logs by account and run id, without content.** I can follow one run across services without reading anyone's messages.
 
-**What I can see**
+## 7. Security
 
-- Usage, the token limit, and a stop button.
-- Not another person's threads, files, or notes.
-- A stop says a system admin stopped the account, and shows my email.
+### What the code and infrastructure do
 
-**Where secrets live**
+| Area | Measure |
+| --- | --- |
+| Who gets in | Allowlist (`khamseaffan@gmail.com` and `@sakana.ai`). No passwords. Google or a one-time link proves the address. |
+| Sessions | Ended after 24 hours idle. At most two. The cookie is `HttpOnly` and `SameSite=Lax`. The page never receives a session id. The settings screen names a session by a hash. |
+| Changes from other sites | Every `POST`, `PATCH`, `PUT` and `DELETE` is refused when its origin is not Folio. The check runs before any route. |
+| Isolation | Every query is scoped to the account. Files live in a folder per account. |
+| Spend limits | Token cap per email (10 million by default), a stop switch for me, 50 MB per file, 5 GB per account. |
+| Integration tokens | The Google Drive token is encrypted with Cloud KMS. The account id is bound into the ciphertext, so a token copied to another account will not decrypt. Disconnecting removes the token. |
+| App secrets | In Secret Manager. The Gemini and Drive secrets go only to the API. |
+| Database | Private address only, TLS required, generated password held in Secret Manager. |
+| Files | One private bucket, public access blocked. Upload and download use signed addresses that expire in 30 minutes. |
+| Reading web pages | The research browser goes through a proxy that refuses private addresses and the cloud metadata service. The proxy looks up each name once, checks every answer, and connects to an address it checked. The model can only open addresses it was shown in a search result or on a page it opened. Page text goes only to a call with no tools. Scheduled tasks fetch pages through the same proxy. |
+| Deleting an account | Removes its files, rows, sessions and sign-in. |
+| Service accounts | One per service, with only the roles it needs. The research service can read only the database URL, the model key and the search key. The worker and research services are not public. Only `folio-invoker` can call them. |
+| Deploys | Workload identity, tied to this repository and the `main` branch. No stored key. |
 
-- Model keys and integration secrets are encrypted with Cloud KMS.
-- Browser cookies are encrypted the same way and deleted with the account.
-- The database is on a private IP inside a VPC. Only the API reaches it, over Cloud Run's direct VPC connection, with TLS and a generated password held in Secret Manager. The website never touches the database.
-- I did not buy a static outbound address or Cloud NAT, because nothing outside Google Cloud needs to be allowlisted.
+### Choices and reasons
 
-**What can leave the account**
+| Choice | Why | When I would change it |
+| --- | --- | --- |
+| Allowlist plus Firebase sign-in | I do not store passwords. Only people I invite can join. | Add an admin screen for the allowlist when invitations are frequent. |
+| Proxy that connects to the address it checked | A check made before Chrome connects can be fooled by a name that answers differently the second time, or by a redirect to a private address. The metadata service holds tokens that reach our secrets. | None. |
+| Per-account bound encryption | A leaked row cannot be used under another account. | Add more keys if I add integrations with different risk. |
+| No static outbound address or Cloud NAT | Nothing outside Google Cloud needs to allow our address. | Add one if a partner asks for it. |
 
-- A send on a website, and only for the card you confirmed, for that site and those fields, within 24 hours.
-- Reading a page, reading a file, saving a file in the account, and reading a Drive copy do not ask.
-- A task that would cause physical harm stops and asks you first.
+### Weak points I know about
 
-**Reading pages**
+- **A Drive import holds up to 50 MB in memory.** The download is counted as it streams and stops at the limit, but the bytes sit in memory before they are saved. The API runs on the default instance size, so several imports at once could be a problem.
+- **KMS calls have no usage rows.** They are cheap but not recorded.
+- **Page text can contain instructions.** I reduced the risk (a digest call with no tools, only shown addresses, a proxy), but I cannot prove that a model will never follow a bad instruction. The limits are what keep the damage small.
+- **The model key is given to three services.** The API, the worker and the research service each hold the OpenAI key. A bug in any of them could leak it into a log. Model errors strip known keys from their text (`model.py`), but this is a place to watch.
+- **Alerts are not built.** A slow problem would be noticed by me, not by a system.
+- **The database is on the smallest shared size.** A burst could slow everyone down.
+- **No external security test.** Nobody else has tested the service.
 
-- Chrome reads public pages only. Its only way out is a proxy that refuses private destinations, including the cloud metadata service.
-- The model can open only addresses it was shown, in a search result or on a page it opened.
-- Page text reaches only a model call that has no tools.
+### Where I was creative
 
-**Why**
-
-Sign-in stays in Firebase. The notes stay in Postgres. A yes on one form is not a yes for the next form.
+- **A harness with code gates.** The model picks the words and the tool. Code checks the account, the address, the budget and the schema before a tool runs.
+- **The research source list is a promise**, so a bad page cannot add a fake source.
+- **The proxy connects to the address it checked.**
+- **Account-bound encryption** and **no session id in the page.**
 
 ## Appendix
 
-- Settings shows tokens, not a price. The expected cost is stored so I can compare it with the bill.
-- Postgres holds the account. This version has no separate cache.
-- The record picture is drawn. Each table is created when the work that writes it is built. No table exists yet.
+### A. Live checks
+
+These items are built and tested with fakes, and I have not yet tried them on the live site. I am testing them now. The Result column is for me to fill in.
+
+| What | How to check | Result |
+| --- | --- | --- |
+| Upload a file of each kind (text, CSV, spreadsheet, PDF, image) and ask a question about it | Files page, then ask in chat. Confirm the answer uses the file. | to fill in |
+| Upload a 50 MB file, then a file over the limit | The first works. The second is refused with a clear line. | to fill in |
+| Download a file from the Files page | The signed address works. | to fill in |
+| Ask the assistant to write a Markdown, CSV and PDF file | The file appears in Files and downloads. | to fill in |
+| Voice input | Press the microphone, speak, see text in the composer. Check one usage row for transcription and that no audio is kept. | to fill in |
+| Connect Google Drive | Integrations page, grant access, pick one file in Google's picker, see a read-only copy in Files. | to fill in |
+| Disconnect Google Drive | Disconnect, confirm the token row is gone, and that a later import asks again. | to fill in |
+| Scheduled task that uses the web | Schedule a task such as "every morning, find news on a topic". Confirm the result cites pages and the usage rows show the searches. | to fill in |
+| A schedule that starts a research run | Schedule a task that asks for a report. Confirm one run starts and a second is not started while it works. | to fill in |
+| Research progress banner | Start research and confirm the banner shows what is being read. | to fill in |
+| Delete an account that has files | Create an account, upload a file, delete the account, confirm the bucket folder is empty. | to fill in |
+| The privacy page | Open `/privacy` while signed out. | to fill in |
+
+### B. How to run it
+
+See [README.md](../../README.md), section "Run it locally". It covers the API, the worker, the research service and the website.
+
+### C. Requirements from `Goal.md` and where each is met
+
+| `Goal.md` line | Section | State |
+| --- | --- | --- |
+| Functional: instruct any LLM in conversation and receive responses | 1, 2 | Live. One platform model. The provider changes by configuration and deploy. No picker. |
+| Functional: deep research reports | 1, 3 | Live |
+| Functional: create, log in, log out and delete own account | 1, 7 | Live (delete with files: Appendix A) |
+| Functional: inputs other than text, voice | 1 | Tested only |
+| Functional: inputs other than text, files | 1 | Tested only |
+| Functional: inputs other than text, Google Drive | 1 | Tested only |
+| Functional: two or more original features, long-term memory | 3 | Live |
+| Functional: two or more original features, periodic autonomous execution | 3 | Live |
+| Non-functional: usable as a web application | 1, 2 | Live |
+| Non-functional: access only for specific users | 1, 7 | Live |
+| Non-functional: expected number of users and production-ready design | 1 | Live. About 25 users, room for a few hundred. Failover and alerts not built. |
+| Technical: Python backend | 2 | Live |
+| Technical: React or React-based frontend | 2 | Live (Next.js) |
+| Technical: Google Cloud with IaC | 2 | Live. Only the website runs on Vercel. |
+| Technical: continuous QA with CI | 5 | Live |
+| Technical: automated deployment with CD | 5 | Live |
+| Optional: extra features and UX | 3 | Live or tested only, as listed |
+| Optional: innovation in the development process | 5, Appendix D | Live |
+| Report: service overview | 1 | Done |
+| Report: technology and architecture | 2 | Done |
+| Report: additional features and ingenuity | 3 | Done |
+| Report: parts omitted and the policy to implement them | 4 | Done |
+| Report: quality assurance and testing strategy | 5 | Done |
+| Report: monitoring and logging design | 6 | Done. Alerts not built, design given. |
+| Report: security measures | 7 | Done |
+| Report: creativity and reasons in each section | 1 to 7 | Done |
+| Report: other highlights in an appendix | Appendix D | Done |
+| Deliverable: URL of the web application | Top of this report | https://folio.khamseaffan.com |
+| Deliverable: report | This file | `docs/hand-in/report.md` |
+| Deliverable: source code on GitHub (private is fine) | Not part of this report | The repository is private. **Still to do:** add the reviewers as collaborators after submission. |
+
+### D. Other highlights
+
+- **One author, end to end.** The product, the infrastructure, the pipeline and this report are by one person. The design is written in `docs/decisions.md`, `docs/architecture.md` and `docs/product/`.
+- **Decisions come before code.** `AGENTS.md` requires evidence before a change to records or storage, and a discussion before any new fixed rule. Code limits are the exception, not the habit.
+- **Limits are numbers.** Every limit in this report is a constant or a Terraform setting, so a reviewer can find it and change it.
+- **Cost is measured.** Every billable call writes a usage row. I used one measured research run to set the research limits.
+- **Older documents differ from the code in a few places.** Some design pages still describe a model picker, confirmation cards and a dead letter queue. None of these is built. The code and `infra/` are the truth, and this report follows them.
