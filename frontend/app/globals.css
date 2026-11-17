@@ -465,6 +465,10 @@ a svg {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   height: 100dvh;
+  /* The page never scrolls, only the panes inside it. Visually hidden text is positioned
+     absolutely, and without a containing block here it would stretch the whole document. */
+  position: relative;
+  overflow: hidden;
 }
 
 .rail {
@@ -836,6 +840,7 @@ a svg {
 }
 
 .messages {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
