@@ -22,11 +22,12 @@ The agent is written from scratch for this project: its own loop, tools, memory,
 | Area | State |
 | --- | --- |
 | Accounts, chat, memory, schedules | Live |
-| Deep research and reports | Live |
-| Files: upload, read, download | In progress. The bucket and the upload API are built and in review. |
-| Voice input, Google Drive import | Planned |
-| Web access for scheduled tasks, confirmed website sends | Planned |
-| Choosing the model from settings | Planned |
+| Deep research and reports, with a progress banner | Live |
+| Files: upload, read by the model, written by the assistant, download | Built and tested. Not yet tried live. |
+| Voice input | Built and tested. Not yet tried live. |
+| Google Drive import | Built and tested. Not yet tried live. |
+| Web access for scheduled tasks | Built and tested. Not yet tried live. |
+| Confirmed website sends, choosing the model from settings, alerts | Not built |
 
 The full requirement list is in [docs/product/mvp-mlp.md](docs/product/mvp-mlp.md).
 
