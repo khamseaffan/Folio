@@ -219,18 +219,18 @@ def test_other_account_cannot_list_or_insert(accounts) -> None:
         thread = create_thread(connection, owner_id)
         insert_message(connection, owner_id, thread[0], "person", "chat", "private")
         assert list_messages(connection, allowed_id, thread[0]) is None
+        assert insert_message(connection, allowed_id, thread[0], "person", "chat", "stolen") is None
         assert (
-            insert_message(connection, allowed_id, thread[0], "person", "chat", "stolen")
+            insert_message(
+                connection,
+                owner_id,
+                uuid.uuid4(),
+                "person",
+                "chat",
+                "missing",
+            )
             is None
         )
-        assert insert_message(
-            connection,
-            owner_id,
-            uuid.uuid4(),
-            "person",
-            "chat",
-            "missing",
-        ) is None
         rows = connection.execute(
             "SELECT body FROM message WHERE thread_id = %s",
             (thread[0],),

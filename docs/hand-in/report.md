@@ -134,7 +134,7 @@ flowchart LR
 I want to be exact here.
 
 - The model is reached through LangChain. The OpenAI, Anthropic and Google packages are installed (`backend/pyproject.toml`).
-- The provider and model id are set in one place: `backend/app/model.py` and `backend/app/brain.py`. Today that is OpenAI and `gpt-6.1-sol`. Voice uses a second model, `gemini-3.5-flash`, set in `transcribe.py`.
+- The provider and model id are set in one place: `backend/app/model.py` and `backend/app/brain.py`. Today that is OpenAI and `gpt-6.1-sol`. Voice uses a second model, `gpt-4o-mini-transcribe`, set in `transcribe.py`.
 - Changing the provider is a one-line configuration change plus a deploy. **There is no model picker in the app.** Users cannot choose a model.
 - The agent loop, the tools and the memory do not depend on the provider.
 
@@ -261,7 +261,7 @@ For each item: why it is not built, and the trigger that would make me build it.
 
 ### Honest limits
 
-- **Real outside services are not exercised in CI.** The model, Google Drive, Gemini, Cloud KMS and the real bucket are tested with fakes. Appendix A lists what I still have to check by hand on the live site.
+- **Real outside services are not exercised in CI.** The model, Google Drive, voice transcription, Cloud KMS and the real bucket are tested with fakes. Appendix A lists what I still have to check by hand on the live site.
 - **The frontend has no unit tests and no end to end tests.** It has lint, a type check and a build. This is the weakest part of the test setup.
 - **No load test has been run.** The sizing in Section 1 comes from settings and one measured research run.
 

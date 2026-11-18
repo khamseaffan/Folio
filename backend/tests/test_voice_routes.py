@@ -1,5 +1,6 @@
 import uuid
 from collections.abc import Iterator
+from types import SimpleNamespace
 
 import pytest
 from app.account import ensure_account
@@ -13,12 +14,11 @@ from app.transcribe import (
     NO_AUDIO,
     TOO_LONG,
     FakeTranscriber,
-    GeminiTranscriber,
+    OpenAITranscriber,
     open_transcriber,
 )
 from app.usage import record_usage, tokens_for_email
 from fastapi.testclient import TestClient
-from langchain_core.messages import AIMessage
 
 STOPPED = "A system admin has stopped your account. Contact khamseaffan@gmail.com."
 CAPPED = "You have reached the allowed usage limit."
@@ -79,9 +79,7 @@ def test_it_needs_a_session(monkeypatch) -> None:
     assert fake.heard == []
 
 
-def test_it_returns_the_text_and_writes_one_measured_usage_row(
-    account, monkeypatch
-) -> None:
+def test_it_returns_the_text_and_writes_one_measured_usage_row(account, monkeypatch) -> None:
     account_id, email = account
     fake = _use(monkeypatch, FakeTranscriber("hello there", 40, 3, 43))
     client = _signed_in(monkeypatch, email)
@@ -93,7 +91,7 @@ def test_it_returns_the_text_and_writes_one_measured_usage_row(
     assert fake.heard == [(AUDIO, "audio/webm")]
     rows = _rows(email)
     assert rows == [
-        ("transcription", "google", fake.model_id, 40, 3, 43, False, account_id, None, None)
+        ("transcription", "openai", fake.model_id, 40, 3, 43, False, account_id, None, None)
     ]
     with connect() as connection:
         assert tokens_for_email(connection, email) == 43
@@ -272,27 +270,25 @@ def test_the_audio_is_not_kept(account, monkeypatch, caplog) -> None:
             assert dumped == (0,), table
 
 
-class _Chat:
-    def __init__(self, answer: AIMessage | None = None, error: Exception | None = None) -> None:
+class _Client:
+    def __init__(self, answer=None, error: Exception | None = None) -> None:
         self.sent: list = []
         self._answer = answer
         self._error = error
+        self.audio = SimpleNamespace(transcriptions=SimpleNamespace(create=self._create))
 
-    def invoke(self, messages):
-        self.sent.append(messages)
+    def _create(self, **kwargs):
+        self.sent.append(kwargs)
         if self._error is not None:
             raise self._error
         return self._answer
 
 
-def test_gemini_sends_the_audio_with_a_faithful_prompt_and_reads_usage() -> None:
-    answer = AIMessage(
-        content=[{"type": "text", "text": " hello world \n"}],
-        usage_metadata={"input_tokens": 30, "output_tokens": 4, "total_tokens": 34},
-    )
-    chat = _Chat(answer)
+def test_openai_sends_the_audio_and_reads_usage() -> None:
+    usage = SimpleNamespace(input_tokens=30, output_tokens=4, total_tokens=34)
+    client = _Client(SimpleNamespace(text=" hello world \n", usage=usage))
 
-    heard = GeminiTranscriber(chat).transcribe(b"abc", "audio/mp4")
+    heard = OpenAITranscriber(client).transcribe(b"abc", "audio/mp4")
 
     assert (heard.text, heard.input_tokens, heard.output_tokens, heard.total_tokens) == (
         "hello world",
@@ -300,13 +296,16 @@ def test_gemini_sends_the_audio_with_a_faithful_prompt_and_reads_usage() -> None
         4,
         34,
     )
-    content = chat.sent[0][0].content
-    assert "transcript only" in content[0]["text"]
-    assert content[1] == {"type": "file", "base64": "YWJj", "mime_type": "audio/mp4"}
+    sent = client.sent[0]
+    assert sent["model"] == "gpt-4o-mini-transcribe"
+    assert sent["file"].name == "recording.mp4"
+    assert sent["file"].read() == b"abc"
 
 
-def test_gemini_without_usage_returns_none_counts() -> None:
-    heard = GeminiTranscriber(_Chat(AIMessage(content="hi"))).transcribe(b"a", "audio/webm")
+def test_openai_without_usage_returns_none_counts() -> None:
+    client = _Client(SimpleNamespace(text="hi", usage=None))
+
+    heard = OpenAITranscriber(client).transcribe(b"a", "audio/webm")
 
     assert (heard.text, heard.input_tokens, heard.output_tokens, heard.total_tokens) == (
         "hi",
@@ -316,26 +315,26 @@ def test_gemini_without_usage_returns_none_counts() -> None:
     )
 
 
-def test_gemini_errors_become_model_errors_without_the_key(monkeypatch) -> None:
-    monkeypatch.setenv("GEMINI_API_KEY", "secret-key-123")
-    chat = _Chat(error=RuntimeError("bad request with secret-key-123"))
+def test_openai_errors_become_model_errors_without_the_key(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-key-123")
+    client = _Client(error=RuntimeError("bad request with secret-key-123"))
 
     with pytest.raises(ModelError) as caught:
-        GeminiTranscriber(chat).transcribe(b"a", "audio/webm")
+        OpenAITranscriber(client).transcribe(b"a", "audio/webm")
 
     assert "secret-key-123" not in str(caught.value)
 
 
 def test_without_a_key_a_fake_transcriber_is_used(monkeypatch) -> None:
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     assert isinstance(open_transcriber(), FakeTranscriber)
 
 
-def test_with_a_key_the_gemini_transcriber_is_used(monkeypatch) -> None:
-    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+def test_with_a_key_the_openai_transcriber_is_used(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     opened = open_transcriber()
 
-    assert isinstance(opened, GeminiTranscriber)
-    assert opened.provider == "google"
+    assert isinstance(opened, OpenAITranscriber)
+    assert opened.provider == "openai"

@@ -295,9 +295,7 @@ def _state_run(connection, account_id):
     return row[0]
 
 
-def test_a_second_delivery_while_the_first_works_does_nothing(
-    connection, account, world
-) -> None:
+def test_a_second_delivery_while_the_first_works_does_nothing(connection, account, world) -> None:
     account_id, email = account
     thread_id, run_id = _make(connection, account_id)
     reached, release = threading.Event(), threading.Event()
@@ -552,9 +550,7 @@ def test_a_run_marked_dead_early_stops_calling_the_model(connection, account, wo
     assert _reports(connection, account_id) == []
 
 
-def test_the_loop_can_read_knowledge_files_and_no_other_tool(
-    connection, account, world
-) -> None:
+def test_the_loop_can_read_knowledge_files_and_no_other_tool(connection, account, world) -> None:
     account_id, _ = account
     thread_id, run_id = _make(connection, account_id)
     notes = put_file(connection, account_id, "notes.md", "My own notes about the house.")

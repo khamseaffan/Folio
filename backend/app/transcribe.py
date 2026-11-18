@@ -1,18 +1,17 @@
-import base64
+import io
 import os
 import uuid
 from dataclasses import dataclass
 from typing import Protocol
 
 import psycopg
-from langchain_core.messages import HumanMessage
 
 from app.model import ModelError
 from app.turn import _CAPPED, _STOPPED, _limit
 from app.usage import record_usage, tokens_for_email
 
-PROVIDER = "google"
-MODEL_ID = "gemini-3.5-flash"
+PROVIDER = "openai"
+MODEL_ID = "gpt-4o-mini-transcribe"
 
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
 AUDIO_TYPES = ("audio/webm", "audio/mp4", "audio/ogg", "audio/wav", "audio/mpeg")
@@ -22,12 +21,14 @@ TOO_LONG = "That recording is too large. Record a shorter one."
 BAD_AUDIO_TYPE = "That recording format is not supported."
 FAILED = "The recording could not be turned into text. Try again."
 
-_KEY_ENV = "GEMINI_API_KEY"
-_PROMPT = (
-    "Transcribe the speech in this audio exactly as spoken, in the language spoken. "
-    "Reply with the transcript only, with no commentary, no labels, and no quotation marks. "
-    "If there is no speech, reply with nothing."
-)
+_KEY_ENV = "OPENAI_API_KEY"
+_EXTENSIONS = {
+    "audio/webm": "webm",
+    "audio/mp4": "mp4",
+    "audio/ogg": "ogg",
+    "audio/wav": "wav",
+    "audio/mpeg": "mp3",
+}
 
 
 @dataclass(frozen=True)
@@ -68,58 +69,36 @@ class FakeTranscriber:
         return Transcript(self._text, *self._usage)
 
 
-class GeminiTranscriber:
-    def __init__(self, chat: object) -> None:
-        self._chat = chat
+class OpenAITranscriber:
+    def __init__(self, client: object) -> None:
+        self._client = client
         self.provider = PROVIDER
         self.model_id = MODEL_ID
 
     def transcribe(self, audio: bytes, content_type: str) -> Transcript:
-        message = HumanMessage(
-            content=[
-                {"type": "text", "text": _PROMPT},
-                {
-                    "type": "file",
-                    "base64": base64.b64encode(audio).decode("ascii"),
-                    "mime_type": content_type,
-                },
-            ]
-        )
+        name = f"recording.{_EXTENSIONS.get(content_type, 'webm')}"
+        file = io.BytesIO(audio)
+        file.name = name
         try:
-            answer = self._chat.invoke([message])  # type: ignore[attr-defined]
+            answer = self._client.audio.transcriptions.create(  # type: ignore[attr-defined]
+                model=MODEL_ID, file=file, response_format="json"
+            )
         except ModelError:
             raise
         except Exception as error:
             raise ModelError(str(error)) from None
-        meta = getattr(answer, "usage_metadata", None)
+        text = getattr(answer, "text", "")
+        meta = getattr(answer, "usage", None)
         return Transcript(
-            _text(getattr(answer, "content", "")).strip(),
+            text.strip() if isinstance(text, str) else "",
             _count(meta, "input_tokens"),
             _count(meta, "output_tokens"),
             _count(meta, "total_tokens"),
         )
 
 
-def _text(content: object) -> str:
-    if isinstance(content, str):
-        return content
-    if not isinstance(content, list):
-        return ""
-    parts: list[str] = []
-    for part in content:
-        if isinstance(part, str):
-            parts.append(part)
-        elif isinstance(part, dict) and part.get("type") == "text":
-            value = part.get("text")
-            if isinstance(value, str):
-                parts.append(value)
-    return "".join(parts)
-
-
 def _count(meta: object, name: str) -> int | None:
-    if not isinstance(meta, dict):
-        return None
-    value = meta.get(name)
+    value = meta.get(name) if isinstance(meta, dict) else getattr(meta, name, None)
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value
@@ -133,11 +112,9 @@ def _key() -> str | None:
 def open_transcriber() -> Transcriber:
     if _key() is None:
         return FakeTranscriber(text="This is a test transcript.")
-    from langchain_google_genai import ChatGoogleGenerativeAI
+    from openai import OpenAI
 
-    return GeminiTranscriber(
-        ChatGoogleGenerativeAI(model=MODEL_ID, api_key=_key(), temperature=0)
-    )
+    return OpenAITranscriber(OpenAI(api_key=_key()))
 
 
 def base_type(content_type: str | None) -> str | None:

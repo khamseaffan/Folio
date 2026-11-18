@@ -407,8 +407,9 @@ def test_the_reading_time_ends_the_use_of_the_web(connection, account, monkeypat
 def test_a_task_that_never_uses_the_web_starts_nothing_and_bills_no_search(connection, account):
     account_id, email = account
     thread_id, run_id = _run(connection, account_id, "Write me a haiku.")
-    model = FakeModel(reply="Spring rain on the roof.", input_tokens=4, output_tokens=3,
-                      total_tokens=7)
+    model = FakeModel(
+        reply="Spring rain on the roof.", input_tokens=4, output_tokens=3, total_tokens=7
+    )
 
     # No search and no opener are given, and the fixture makes a real one raise.
     assert execute(run_id, model) == "ready"

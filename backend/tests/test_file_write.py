@@ -165,9 +165,7 @@ def test_the_account_limit_counts_what_is_stored_and_a_refusal_stores_nothing(
     assert byte_count(connection, account_id) == ACCOUNT_LIMIT_BYTES
 
 
-def test_a_file_written_for_one_account_is_invisible_to_another(
-    connection, account, other
-) -> None:
+def test_a_file_written_for_one_account_is_invisible_to_another(connection, account, other) -> None:
     account_id, _ = account
     other_id, _ = other
     storage = FakeStorage()

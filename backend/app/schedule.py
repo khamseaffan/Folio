@@ -10,9 +10,7 @@ from app.thread import apply as apply_thread
 _MIGRATION = Path(__file__).resolve().parent.parent / "migrations" / "schedule.sql"
 
 # id, account_id, thread_id, task, when_text, next_run_at, created_at, updated_at
-ScheduleRow = tuple[
-    uuid.UUID, uuid.UUID, uuid.UUID, str, str, datetime | None, datetime, datetime
-]
+ScheduleRow = tuple[uuid.UUID, uuid.UUID, uuid.UUID, str, str, datetime | None, datetime, datetime]
 
 _COLUMNS = "id, account_id, thread_id, task, when_text, next_run_at, created_at, updated_at"
 

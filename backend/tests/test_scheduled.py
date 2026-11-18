@@ -333,9 +333,7 @@ def test_execute_writes_one_result_and_ignores_a_second_delivery(connection, acc
     assert stored is not None
     assert stored[5] == "ready" and stored[9] is not None and stored[8] == 1
     messages = [m for m in list_messages(connection, account_id, thread_id) or []]
-    assert [(m[3], m[4], m[5], m[6]) for m in messages] == [
-        (run[0], "assistant", "result", RESULT)
-    ]
+    assert [(m[3], m[4], m[5], m[6]) for m in messages] == [(run[0], "assistant", "result", RESULT)]
     assert _usage(connection, email) == [("schedule", run[0], messages[0][0], False)]
     assert "while the person is away" in model.prompts[0]
     assert "The time now is " in model.prompts[0]
@@ -439,9 +437,7 @@ def test_a_failing_model_is_tried_four_times_then_dead(connection, account, capl
     errors = [r for r in caplog.records if r.levelno >= logging.ERROR]
     dead = [r for r in errors if "dead" in r.getMessage()]
     assert len(dead) == 1 and str(run[0]) in dead[0].getMessage()
-    assert all(
-        str(run[0]) in r.getMessage() for r in caplog.records if r.name == LOGGER
-    )
+    assert all(str(run[0]) in r.getMessage() for r in caplog.records if r.name == LOGGER)
     assert TASK not in caplog.text
     assert [(row[0], row[1], row[3]) for row in _usage(connection, email)] == [
         ("schedule", run[0], True)
@@ -539,9 +535,7 @@ def test_no_database_transaction_is_open_while_the_model_runs(connection, accoun
     assert seen == [0, 0]
 
 
-def test_a_stuck_run_is_marked_dead_and_frees_the_schedule(
-    connection, account, enqueued, caplog
-):
+def test_a_stuck_run_is_marked_dead_and_frees_the_schedule(connection, account, enqueued, caplog):
     account_id, _ = account
     thread = create_thread(connection, account_id)
     made = create_schedule(
@@ -724,9 +718,7 @@ def test_a_run_queued_for_too_long_is_dead_and_frees_the_schedule(
     assert len(enqueued) == 1
 
 
-def test_an_enqueue_that_raises_does_not_stop_the_tick(
-    connection, account, monkeypatch, caplog
-):
+def test_an_enqueue_that_raises_does_not_stop_the_tick(connection, account, monkeypatch, caplog):
     account_id, _ = account
     first_thread, first = _due_schedule(connection, account_id)
     second_thread, second = _due_schedule(connection, account_id)

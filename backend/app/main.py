@@ -1173,9 +1173,7 @@ def drive_connect(request: Request) -> Response:
 
 
 @app.get("/integrations/drive/callback")
-def drive_callback(
-    request: Request, code: str = "", state: str = "", error: str = ""
-) -> Response:
+def drive_callback(request: Request, code: str = "", state: str = "", error: str = "") -> Response:
     # Google sends the browser here, so the person is known by the session cookie alone.
     expected = request.cookies.get(_DRIVE_STATE, "")
     session_id = _session_id(request)

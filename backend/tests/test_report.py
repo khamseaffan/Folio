@@ -124,9 +124,7 @@ def test_a_second_report_for_the_same_run_is_not_stored(connection, account):
     account_id, _ = account
     thread_id, run_id, report = _report(connection, account_id)
 
-    again = create_report(
-        connection, account_id, run_id, thread_id, "Other", "q", "b", "n", [PAGE]
-    )
+    again = create_report(connection, account_id, run_id, thread_id, "Other", "q", "b", "n", [PAGE])
 
     assert again is None
     assert [row[0] for row in list_reports(connection, account_id)] == [report[0]]
