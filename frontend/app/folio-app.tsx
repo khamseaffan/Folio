@@ -348,6 +348,7 @@ function ActivityText({ line }: { line: ActivityLine }) {
   );
 }
 
+const TITLE_WAIT_MS = 3000;
 const ACTIVITY_POLL_MS = 5000;
 
 function WorkBanner({
@@ -1061,6 +1062,11 @@ export function FolioApp() {
         setToolLine(null);
       }
       void refreshThreads(threadId, generation);
+      // A new thread is titled just after its first reply, so look once more shortly after.
+      const shown = threadsRef.current.find((thread) => thread.id === threadId);
+      if (shown === undefined || shown.name === "New thread") {
+        window.setTimeout(() => void refreshThreads(threadId, generation), TITLE_WAIT_MS);
+      }
       setReloadKey((key) => key + 1);
     }
   }

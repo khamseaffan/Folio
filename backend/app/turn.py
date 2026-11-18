@@ -22,7 +22,7 @@ from app.message import (
 )
 from app.model import CONTEXT_TOKENS, MODEL_ID, Block, Model, Reply, ToolCall, ToolOutput
 from app.session import set_last_active_at
-from app.thread import ThreadRow, get_thread, set_summary
+from app.thread import ThreadRow, get_thread, rename_if_default, set_summary
 from app.usage import record_usage, tokens_for_email
 
 _PROVIDER = "openai"
@@ -64,6 +64,14 @@ RESEARCH = (
     "will appear in Reports when it is ready. Do not do the research yourself in the chat."
 )
 _FOLD = "Summarize the earlier messages so the next reply can continue."
+DEFAULT_THREAD_NAME = "New thread"
+_TITLE_PROMPT = (
+    "Write a title for this conversation in 2 to 6 words, in the language the person used. "
+    "Reply with the title only, with no quotes and no full stop."
+)
+_TITLE_CHARS = 60
+# Enough of each side for the model to see what the conversation is about.
+_TITLE_SAMPLE_CHARS = 1500
 _KEPT = 10
 
 
@@ -386,6 +394,57 @@ def _fail(
     return TurnResult(body=_FAILED, kind="failure", omitted=tuple(omitted))
 
 
+def _tidy_title(raw: str) -> str:
+    title = " ".join(raw.split()).strip("\"'\u201c\u201d\u2018\u2019 ").rstrip(".").strip()
+    return title[:_TITLE_CHARS].rstrip()
+
+
+def name_thread(
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    email: str,
+    model: Model,
+    said: str,
+    reply: str,
+) -> None:
+    """Give a new thread a short title from its first exchange. Never raises: a missing title is
+    only a name left as it was."""
+    try:
+        with connect() as connection:
+            row = get_thread(connection, account_id, thread_id)
+            if row is None or row[2] != DEFAULT_THREAD_NAME:
+                return
+        sample = f"Person: {said[:_TITLE_SAMPLE_CHARS]}\n\nFolio: {reply[:_TITLE_SAMPLE_CHARS]}"
+        titled = ask(model, _TITLE_PROMPT, [Block(role="person", text=sample)])
+    except Exception:
+        _log.warning("a title for thread %s could not be written", thread_id)
+        return
+    try:
+        with connect() as connection:
+            # The account can be deleted meanwhile. The row is kept for the email without it.
+            present = connection.execute(
+                "SELECT id FROM account WHERE id = %s", (account_id,)
+            ).fetchone()
+            record_usage(
+                connection,
+                account_id if present is not None else None,
+                email,
+                "chat",
+                *_who(model),
+                titled.input_tokens,
+                titled.output_tokens,
+                titled.total_tokens,
+                None,
+                None,
+                titled.estimated,
+            )
+            title = _tidy_title(titled.text)
+            if title != "":
+                rename_if_default(connection, account_id, thread_id, title, DEFAULT_THREAD_NAME)
+    except Exception:
+        _log.warning("the title for thread %s was not saved", thread_id)
+
+
 def run_turn(
     connection: psycopg.Connection,
     session_id: uuid.UUID,
@@ -684,6 +743,7 @@ def _write_reply(
     model: Model,
     prepared: _Prepared,
     persist: Callable[[str, list[Reply], bool, bool], None],
+    after: Callable[[str], None] | None = None,
 ) -> None:
     parts: list[str] = []
     failed = False
@@ -756,6 +816,13 @@ def _write_reply(
         live.publish({"failed": True})
     else:
         live.publish({"done": True})
+        if after is not None and not stopped and parts:
+            # The person already has the whole reply. The request stays open a moment longer so
+            # this small extra call runs while the service still has its processor.
+            try:
+                after("".join(parts))
+            except Exception:
+                _log.exception("work after the reply failed in thread %s", prepared.thread_id)
     live.finish()
     unregister(prepared.account_id, prepared.thread_id, live)
 
@@ -765,6 +832,7 @@ def _start(
     prepared: _Prepared,
     model: Model,
     persist: Callable[[str, list[Reply], bool, bool], None],
+    after: Callable[[str], None] | None = None,
 ) -> LiveReply:
     # The reply thread can emit a chunk before this request transaction closes.
     connection.commit()
@@ -773,7 +841,7 @@ def _start(
     try:
         threading.Thread(
             target=_write_reply,
-            args=(live, model, prepared, persist),
+            args=(live, model, prepared, persist, after),
             name="folio-reply",
         ).start()
     except Exception:
@@ -798,7 +866,10 @@ def start_reply(
     def persist(text: str, replies: list[Reply], failed: bool, stopped: bool) -> None:
         _save(prepared, text, replies, failed, stopped)
 
-    return _start(connection, prepared, model, persist)
+    def after(reply: str) -> None:
+        name_thread(prepared.account_id, prepared.thread_id, prepared.email, model, text, reply)
+
+    return _start(connection, prepared, model, persist, after)
 
 
 def start_retry(
