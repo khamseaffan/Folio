@@ -61,6 +61,29 @@ def rename_thread(
     ).fetchone()
 
 
+def rename_if_default(
+    connection: psycopg.Connection,
+    account_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    name: str,
+    default: str,
+) -> bool:
+    """Name a thread only while it still has the default name, so a name someone chose wins."""
+    apply(connection)
+    row = connection.execute(
+        """
+        UPDATE thread
+        SET name = %s
+        WHERE id = %s
+          AND account_id = %s
+          AND name = %s
+        RETURNING id
+        """,
+        (name, thread_id, account_id, default),
+    ).fetchone()
+    return row is not None
+
+
 def delete_thread(
     connection: psycopg.Connection,
     account_id: uuid.UUID,

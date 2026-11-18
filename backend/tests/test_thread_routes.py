@@ -17,6 +17,7 @@ from app.session import apply as apply_session
 from app.session import end_session
 from app.sign_in_proof import VerifiedSignIn
 from app.turn import MEMORY, RESEARCH
+from app.turn import name_thread as real_name_thread
 from fastapi.testclient import TestClient
 
 ALLOWED = "khamseaffan@gmail.com"
@@ -185,6 +186,12 @@ def _sign_in(monkeypatch: pytest.MonkeyPatch, email: str) -> TestClient:
     signed_in = client.post("/sign-in", json={"id_token": "token"})
     assert signed_in.status_code == 200
     return client
+
+
+@pytest.fixture(autouse=True)
+def _no_titles(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Titles cost one extra model call; the tests here count calls, so they opt in explicitly.
+    monkeypatch.setattr("app.turn.name_thread", lambda *args, **kwargs: None)
 
 
 def _use_model(monkeypatch: pytest.MonkeyPatch, model: FakeModel) -> None:
@@ -1043,15 +1050,14 @@ def test_mid_stream_model_error_keeps_the_arrived_text_and_hides_the_cause(
 
 NOW = datetime(2026, 11, 14, 9, 30, 41, tzinfo=UTC)
 TIME_LINE = "The time now is 2026-11-14T09:30+00:00. The person's time zone is UTC."
-HARM = (
-    f"A task that would cause physical harm stops and asks.\n{MEMORY}\n{RESEARCH}\n{TIME_LINE}"
-)
+HARM = f"A task that would cause physical harm stops and asks.\n{MEMORY}\n{RESEARCH}\n{TIME_LINE}"
 
 
 @pytest.fixture(autouse=True)
 def _fixed_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     # The prompt carries the time, so the exact-prompt checks need a clock that does not move.
     monkeypatch.setattr("app.turn._now", lambda: NOW)
+
 
 NO_FAILURE = "There is no failed reply."
 
@@ -1259,8 +1265,7 @@ def test_retry_failure_keeps_one_of_each_row_and_hides_the_cause(
         rows = _usage_rows(email)
         assert len(rows) == 2
         assert all(
-            row == ("chat", "openai", "gpt-6.1-sol", None, None, None, partial_id)
-            for row in rows
+            row == ("chat", "openai", "gpt-6.1-sol", None, None, None, partial_id) for row in rows
         )
         assert not _cause_stored(thread_id, email, CAUSE)
         assert retry.calls == 1
@@ -2630,9 +2635,7 @@ def _make_no_next_time_line(email: str, thread_id: str, monkeypatch: pytest.Monk
 
 
 @pytest.mark.parametrize("line", ["dead", "no_next_time"])
-def test_a_schedule_line_does_not_offer_a_retry(
-    monkeypatch: pytest.MonkeyPatch, line: str
-) -> None:
+def test_a_schedule_line_does_not_offer_a_retry(monkeypatch: pytest.MonkeyPatch, line: str) -> None:
     from app.scheduled import FAILED_LINE, NO_NEXT_LINE
 
     email = _email("LineRetry")
@@ -2779,5 +2782,29 @@ def test_the_agent_list_threads_result_is_unchanged(monkeypatch: pytest.MonkeyPa
         assert result["ok"] is True
         assert [set(item) for item in result["threads"]] == [{"id", "name", "created_at"}]
         assert result["threads"][0]["id"] == thread_id
+    finally:
+        _remove(email)
+
+
+def test_a_new_thread_gets_a_title_after_its_first_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    email = _email("Title")
+    _remove(email)
+    try:
+        client = _sign_in(monkeypatch, email)
+        thread_id = client.post("/threads").json()["id"]
+        monkeypatch.setattr("app.turn.name_thread", real_name_thread)
+        _use_model(
+            monkeypatch, FakeModel(reply=Reply("Heat pumps", 1, 1, 2), chunks=("Heat pumps",))
+        )
+        posted = client.post(f"/threads/{thread_id}/messages", json={"text": "hello"})
+        assert posted.status_code == 200
+        deadline = time.monotonic() + 5
+        name = "New thread"
+        while name == "New thread" and time.monotonic() < deadline:
+            name = client.get(f"/threads/{thread_id}").json()["name"]
+            time.sleep(0.05)
+        assert name == "Heat pumps"
     finally:
         _remove(email)
