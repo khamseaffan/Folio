@@ -54,6 +54,7 @@ import { Files } from "./files";
 import { Reports } from "./reports";
 import { Settings } from "./settings";
 import { ThreadList } from "./thread-list";
+import { AttachButton, AttachmentChips, plainBody, referenceLine, useAttachments } from "./attach";
 import { VoiceButton } from "./voice-button";
 
 function GoogleMark() {
@@ -514,6 +515,7 @@ export function FolioApp() {
     [endSession],
   );
   const settingsDown = useCallback(() => setDown(true), []);
+  const attach = useAttachments({ onSignedOut: settingsSignedOut, onDown: settingsDown }, openId);
   const named = view === "ready" && displayName !== null && displayName !== "";
 
   useEffect(() => {
@@ -960,8 +962,15 @@ export function FolioApp() {
 
   async function sendDraft(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    const text = draft;
-    if (text.trim() === "" || openId === null || acting.current || pending || streaming) return;
+    const typed = draft;
+    const sentFiles = attach.ready;
+    if (typed.trim() === "" && sentFiles.length === 0) return;
+    if (openId === null || acting.current || pending || streaming || attach.busy) return;
+    // The message names each attached file, so the assistant knows which stored file is meant.
+    const text =
+      sentFiles.length === 0
+        ? typed
+        : `${typed.trim() === "" ? "" : `${typed.trimEnd()}\n\n`}${referenceLine(sentFiles)}`;
     const threadId = openId;
     acting.current = true;
     const generation = ++requestGeneration.current;
@@ -973,6 +982,7 @@ export function FolioApp() {
     let opened = false;
     // Show the message and the working dots now. They are undone if the server refuses the send.
     setDraft("");
+    attach.clear();
     setMessages((current) => [
       ...current,
       {
@@ -1047,7 +1057,8 @@ export function FolioApp() {
       if (!opened) {
         // The server refused the send, so nothing was stored. Take the message back out.
         setMessages((current) => current.filter((message) => message.id !== personId));
-        setDraft((current) => (current === "" ? text : current));
+        setDraft((current) => (current === "" ? typed : current));
+        attach.restore(sentFiles);
       }
       setWorking(false);
       setToolLine(null);
@@ -1460,7 +1471,7 @@ export function FolioApp() {
                               className={message.role === "person" ? "message person" : "message reply"}
                             >
                               <span className="speaker">{message.role === "person" ? "You" : "Folio"}</span>
-                              {message.body}
+                              {plainBody(message.body)}
                             </p>
                           ) : (
                             <div key={message.id} className="message reply">
@@ -1490,7 +1501,9 @@ export function FolioApp() {
                         kind={openThread.working_kind}
                       />
                     ) : null}
+                    <AttachmentChips items={attach.items} notice={attach.notice} onRemove={attach.remove} />
                     <form className="composer" onSubmit={(event) => void sendDraft(event)}>
+                      <AttachButton disabled={pending || streaming} onFiles={attach.add} />
                       <textarea
                         rows={1}
                         value={draft}
@@ -1512,7 +1525,9 @@ export function FolioApp() {
                         <button
                           type="submit"
                           className="primary send"
-                          disabled={pending || draft.trim() === ""}
+                          disabled={
+                            pending || attach.busy || (draft.trim() === "" && attach.ready.length === 0)
+                          }
                         >
                           <PaperAirplaneIcon aria-hidden="true" />
                           Send

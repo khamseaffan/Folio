@@ -4,7 +4,7 @@ The site opens on one public page. The person signs in from that page.
 
 Day one has chat, reports, files, a profile panel, integrations, and settings. The sidebar lists Chat, Reports, Files, Profile, Integrations, and Settings.
 
-Chat is the thread list and the open thread. The thread name shows a status mark while a run is working or waiting. A waiting question appears in that thread. Inside the thread the person sees the assistant's messages. While research runs, a banner above the message box shows the status and the current step.
+Chat is the thread list and the open thread. The thread name shows a status mark while a run is working or waiting. A waiting question appears in that thread. Inside the thread the person sees the assistant's messages. While research runs, a banner above the message box shows the status and the current step. The message box has a paperclip. A file attached there is uploaded to Files, and the message names it so the assistant can open exactly that file. At most 5 files go with one message.
 
 Reports opens from the account block beside Settings and takes the place of the chat. It lists the account's reports, newest first, each with its name, question, and time, and shows the newest one at first. A report shows its name, its question, its text, how the research stopped, and its numbered sources. A web source is a link that opens in a new tab, and each source has a line on what it was used for. A Download link saves the report as a Markdown file. The list updates when a chat turn ends or the open thread gets a new message, so a finished report appears without a reload. Naming, renaming, and deleting stay in the chat.
 
