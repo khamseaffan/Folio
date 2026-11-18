@@ -131,9 +131,7 @@ class LangChainBrain:
                     )
                 )
             elif block.role == "tool":
-                messages.append(
-                    ToolMessage(content=block.text, tool_call_id=block.call_id or "")
-                )
+                messages.append(ToolMessage(content=block.text, tool_call_id=block.call_id or ""))
                 pending.extend(block.images)
             else:
                 raise ValueError("block role is not allowed")

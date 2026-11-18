@@ -44,6 +44,8 @@ def _who(model: Model) -> tuple[str, str]:
     if not isinstance(model_id, str) or model_id == "":
         model_id = MODEL_ID
     return provider, model_id
+
+
 _STOPPED = "A system admin has stopped your account. Contact khamseaffan@gmail.com."
 _CAPPED = "You have reached the allowed usage limit."
 _FAILED = "That didn't go through."
@@ -635,11 +637,7 @@ def _prepare_retry(
     if failed is None:
         return NO_FAILURE
     failure_id, partial_id = failed
-    context = [
-        message
-        for message in messages
-        if partial_id is None or message[0] != partial_id
-    ]
+    context = [message for message in messages if partial_id is None or message[0] != partial_id]
     prompt, blocks, omitted = _cover(
         connection,
         account_id,

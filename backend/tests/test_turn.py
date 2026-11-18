@@ -537,9 +537,7 @@ def test_full_window_keeps_the_latest_ten_and_omits_an_older_message(accounts) -
             (summary, thread_id),
         )
         for index in range(11):
-            person = insert_message(
-                connection, owner_id, thread_id, "person", "chat", f"p{index}"
-            )
+            person = insert_message(connection, owner_id, thread_id, "person", "chat", f"p{index}")
             assert person is not None
             _stamp(connection, person[0], base + timedelta(seconds=index))
         for index in range(10):
@@ -620,9 +618,7 @@ def test_a_second_omission_is_summarized_before_the_reply(accounts) -> None:
             (prior, thread_id),
         )
         for index in range(11):
-            person = insert_message(
-                connection, owner_id, thread_id, "person", "chat", f"p{index}"
-            )
+            person = insert_message(connection, owner_id, thread_id, "person", "chat", f"p{index}")
             assert person is not None
             _stamp(connection, person[0], base + timedelta(seconds=index))
         for index in range(10):

@@ -709,9 +709,7 @@ def _delete_stored_file(
 
 def encode(result: Result) -> ToolOutput:
     # Images cannot be written as JSON, so they travel beside the text the model reads.
-    images = tuple(
-        image for image in result.get("images", []) if isinstance(image, Image)
-    )
+    images = tuple(image for image in result.get("images", []) if isinstance(image, Image))
     text = {key: value for key, value in result.items() if key != "images"}
     return ToolOutput(json.dumps(text), images)
 

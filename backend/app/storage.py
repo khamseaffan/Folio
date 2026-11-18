@@ -111,7 +111,7 @@ class GcsStorage:
             raise FileNotFoundError(path) from None
 
     def move(self, source: str, target: str) -> None:
-        blob =self._bucket.blob(source)
+        blob = self._bucket.blob(source)
         self._bucket.copy_blob(blob, self._bucket, target)
         blob.delete()
 

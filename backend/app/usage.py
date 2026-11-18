@@ -65,15 +65,9 @@ def record_usage(
     estimated: bool = False,
 ) -> UsageRow:
     apply(connection)
-    usage_missing = (
-        input_tokens is None or output_tokens is None or total_tokens is None
-    )
+    usage_missing = input_tokens is None or output_tokens is None or total_tokens is None
     expected_cost: Decimal | None = None
-    if (
-        input_tokens is not None
-        and output_tokens is not None
-        and total_tokens is not None
-    ):
+    if input_tokens is not None and output_tokens is not None and total_tokens is not None:
         price = _PRICES.get((provider, model))
         if price is not None:
             input_price, output_price = price

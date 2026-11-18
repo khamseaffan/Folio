@@ -142,9 +142,7 @@ def test_read_file_reads_a_long_file_in_successive_parts(connection, account, st
     assert "2 parts" in beyond["error"]
 
 
-def test_read_file_of_an_image_carries_the_image_out_of_band(
-    connection, account, storage
-) -> None:
+def test_read_file_of_an_image_carries_the_image_out_of_band(connection, account, storage) -> None:
     import io
 
     from PIL import Image as PilImage
@@ -185,9 +183,12 @@ def test_a_bad_file_id_is_invalid_input(connection, account, storage) -> None:
     account_id, _ = account
     result = _call(connection, account_id, "read_file", {"file_id": "nope"})
     assert result["code"] == "invalid"
-    assert _call(connection, account_id, "read_file", {"file_id": str(uuid.uuid4()), "part": 0})[
-        "code"
-    ] == "invalid"
+    assert (
+        _call(connection, account_id, "read_file", {"file_id": str(uuid.uuid4()), "part": 0})[
+            "code"
+        ]
+        == "invalid"
+    )
 
 
 def test_a_file_that_cannot_be_opened_is_a_plain_refusal(connection, account, storage) -> None:

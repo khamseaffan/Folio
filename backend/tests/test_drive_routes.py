@@ -167,9 +167,7 @@ def test_the_consent_page_asks_for_files_the_person_picks_and_nothing_else() -> 
     assert query["state"] == ["abc"] and "the-secret" not in url.consent_url("abc")
 
 
-def test_a_connection_stores_the_refresh_token_encrypted(
-    account, monkeypatch, drive, kms
-) -> None:
+def test_a_connection_stores_the_refresh_token_encrypted(account, monkeypatch, drive, kms) -> None:
     account_id, email = account
     client = _signed_in(monkeypatch, email)
 

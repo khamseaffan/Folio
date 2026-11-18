@@ -38,9 +38,7 @@ def _call(name, arguments, call_id="c1"):
 
 
 def _calls(*pairs):
-    return Reply(
-        "", 100, 20, 120, tuple(ToolCall(f"c{i}", n, a) for i, (n, a) in enumerate(pairs))
-    )
+    return Reply("", 100, 20, 120, tuple(ToolCall(f"c{i}", n, a) for i, (n, a) in enumerate(pairs)))
 
 
 def _say(text):
@@ -226,9 +224,7 @@ def test_the_model_cannot_set_a_title_or_an_address() -> None:
                     "name": "R",
                     "body": "B",
                     "stop_note": "",
-                    "sources": [
-                        {"number": 1, "used_for": "x", "title": "Invented", "url": ATTACK}
-                    ],
+                    "sources": [{"number": 1, "used_for": "x", "title": "Invented", "url": ATTACK}],
                 },
             ),
         )
@@ -322,9 +318,7 @@ def test_the_same_address_in_another_form_counts_once_and_returns_the_first_dige
         )
     )
 
-    outcome, opener, recorder = _run(
-        model, search=FakeSearch(_results(URL_A)), pages=_two_pages()
-    )
+    outcome, opener, recorder = _run(model, search=FakeSearch(_results(URL_A)), pages=_two_pages())
 
     assert opener.opened == [URL_A]
     assert len(outcome.sources) == 1
@@ -336,9 +330,7 @@ def test_the_same_address_in_another_form_counts_once_and_returns_the_first_dige
 def test_twenty_sources_end_the_reading_and_the_twenty_first_is_refused() -> None:
     urls = [f"https://site{i}.example/page" for i in range(21)]
     pages = {url: _page(url, f"Title {i}") for i, url in enumerate(urls)}
-    listing = [
-        _call("search_web", {"query": f"q{i}"}, f"s{i}") for i in range(3)
-    ]
+    listing = [_call("search_web", {"query": f"q{i}"}, f"s{i}") for i in range(3)]
     model = FakeModel(
         script=(
             listing[0],
@@ -436,9 +428,7 @@ def test_reading_stops_at_25_minutes_and_one_last_call_writes_the_report() -> No
     )
 
     assert outcome.status == "ready" and outcome.reason == "time"
-    assert outcome.stop_note.endswith(
-        "Stopped because the reading time of 25 minutes was reached."
-    )
+    assert outcome.stop_note.endswith("Stopped because the reading time of 25 minutes was reached.")
     assert [tool.name for tool in model.seen[-1][1]] == ["submit_report"]
 
 
@@ -485,9 +475,7 @@ def test_at_30_minutes_no_call_is_made_and_code_writes_the_fallback() -> None:
     assert "Title A" in outcome.body and "Digest A about boilers" in outcome.body
     assert outcome.name == QUESTION[:80]
     assert "did not write" in outcome.stop_note
-    assert outcome.stop_note.endswith(
-        "Stopped because the reading time of 25 minutes was reached."
-    )
+    assert outcome.stop_note.endswith("Stopped because the reading time of 25 minutes was reached.")
     assert outcome.sources == (NewSource("page", "Title A", URL_A, DEFAULT_USED_FOR),)
 
 
@@ -645,13 +633,9 @@ def test_a_run_that_opened_nothing_fails_without_a_report_and_without_a_last_cal
 
 def test_a_page_that_cannot_be_opened_is_told_to_the_model_and_counts_nothing() -> None:
     pages = {URL_A: PageError("That page is a PDF."), URL_B: _page(URL_B, "Title B")}
-    model = FakeModel(
-        script=(_search(), _open(URL_A), _open(URL_B), _say("Digest B"), _submit())
-    )
+    model = FakeModel(script=(_search(), _open(URL_A), _open(URL_B), _say("Digest B"), _submit()))
 
-    outcome, _, recorder = _run(
-        model, search=FakeSearch(_results(URL_A, URL_B)), pages=pages
-    )
+    outcome, _, recorder = _run(model, search=FakeSearch(_results(URL_A, URL_B)), pages=pages)
 
     assert _tool_results(model, 2)[-1] == {"ok": False, "error": "That page is a PDF."}
     assert [source.title for source in outcome.sources] == ["Title B"]
@@ -796,9 +780,7 @@ def test_each_search_and_each_page_read_is_reported_as_it_happens() -> None:
 def test_a_page_that_cannot_be_opened_is_reported_as_skipped() -> None:
     activity = _Activity()
     pages = {URL_A: PageError("That page is a PDF."), URL_B: _page(URL_B, "Title B")}
-    model = FakeModel(
-        script=(_search(), _open(URL_A), _open(URL_B), _say("Digest B"), _submit())
-    )
+    model = FakeModel(script=(_search(), _open(URL_A), _open(URL_B), _say("Digest B"), _submit()))
 
     _run(model, search=FakeSearch(_results(URL_A, URL_B)), pages=pages, activity=activity)
 

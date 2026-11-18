@@ -25,7 +25,7 @@
 21. The assistant writes the file the task needs, as Markdown, PDF, or another type, and the person can download it.
 22. A Drive import is one file the person picks, stored as a private read-only copy.
 23. Chrome on the worker reads pages, and a send on a website runs only after the person confirms that exact send. The card expires 24 hours after it appears.
-24. Speech is transcribed into the composer by the provider and model selected for that call. The starting model is Gemini. The audio is discarded.
+24. Speech is transcribed into the composer by the provider and model selected for that call. The starting model is OpenAI gpt-4o-mini-transcribe. The audio is discarded.
 25. The person sees token totals and the file byte count. The email stops at 10 million recorded tokens unless that cap is raised. The cap and the stop stay with the email.
 26. The site opens on one public page. Sign-in opens chat, reports, files, a profile panel, and settings. The interface is English.
 27. A working or waiting run shows on the thread name, a question or a failed run appears in that thread, and two runs may write in that thread at the same time.

@@ -124,9 +124,7 @@ def _tools_node(state: _State, config: RunnableConfig) -> dict[str, object]:
         output = call_tool(call)
         if isinstance(output, str):
             output = ToolOutput(output)
-        blocks.append(
-            Block(role="tool", text=output.text, call_id=call.id, images=output.images)
-        )
+        blocks.append(Block(role="tool", text=output.text, call_id=call.id, images=output.images))
     if stop is not None and stop.is_set():
         halted = True
     return {

@@ -64,7 +64,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/few":
             links = '<a href="mailto:a@b.c">Mail</a>'
             links += '<a href="http://other.test/x">Other <b>site</b></a>'
-            links +='<a href="https://c.example/y">Mail  me</a><a href="javascript:void(0)">J</a>'
+            links += '<a href="https://c.example/y">Mail  me</a><a href="javascript:void(0)">J</a>'
             self.send(200, PAGE.format(title="Few", head="", body=f"<p>{LONG_TEXT}</p>{links}"))
         elif path == "/robots.txt":
             self.send(200, "User-agent: *\nDisallow: /blocked\n", "text/plain")
